@@ -130,6 +130,16 @@ bool subjective_c_has_interpreter_thread(void);
 bool subjective_c_is_main_thread(void);
 /** @brief Return true when the current thread is the registered interpreter thread. */
 bool subjective_c_is_interpreter_thread(void);
+/** @brief Set a human-readable name for the current thread (thread-local, max 31 chars). */
+void subjective_c_set_thread_name(const char *name);
+/** @brief Get the current thread's name, or "unknown" if not set. */
+const char *subjective_c_get_thread_name(void);
+/** @brief Create a pthread with a human-readable name set as thread-local on entry. */
+int subjective_c_pthread_create_named(pthread_t *thread,
+                                       const pthread_attr_t *attr,
+                                       void *(*start_routine)(void *),
+                                       void *arg,
+                                       const char *name);
 
 // ============================================================================
 // TRY/CATCH MACROS (Objective-C style, efficient by design)

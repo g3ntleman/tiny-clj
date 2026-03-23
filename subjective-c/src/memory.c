@@ -1072,7 +1072,8 @@ void throw_oom(void) {
   clj_oom_exception->line = __LINE__;
   clj_oom_exception->col = 0;
   if (subjective_c_has_main_thread() && !subjective_c_is_main_thread()) {
-    fputs("OOM on non-main thread; suppressing exception longjmp.\n", stderr);
+    fprintf(stderr, "OOM on thread '%s'; suppressing exception longjmp.\n",
+            subjective_c_get_thread_name());
     fputs("OOM throw-site backtrace:\n", stderr);
     exception_print_native_backtrace();
     return;

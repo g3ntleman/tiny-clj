@@ -665,7 +665,11 @@ TEST(test_ns_resolve_symbol_cache) {
 
 // Global resolve-cache no longer exists; callsite caches handle hot paths.
 // This test verifies function calls still resolve correctly with callsite caching.
+// Callsite caching is disabled when MEMORY_PROFILING_ENABLED to avoid measurement distortion.
 TEST(test_resolve_list_operator_uses_cache) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Ensure clojure.core is loaded
@@ -723,6 +727,9 @@ TEST(test_callsite_cache_epoch_is_16bit) {
 }
 
 TEST(test_resolve_cache_first_definition_does_not_invalidate) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     evalstate_set_ns(g_test_eval_state, "user");
     CljNamespace *ns = g_test_eval_state->current_ns;
@@ -747,6 +754,9 @@ TEST(test_resolve_cache_first_definition_does_not_invalidate) {
 }
 
 TEST(test_resolve_cache_batch_coalesces_invalidations) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     evalstate_set_ns(g_test_eval_state, "user");
     CljNamespace *ns = g_test_eval_state->current_ns;
@@ -782,32 +792,8 @@ TEST(test_resolve_cache_batch_coalesces_invalidations) {
     RELEASE(sym_b);
 }
 
-TEST(test_keyword_callsite_cache_populates_after_lookup) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    evalstate_set_ns(g_test_eval_state, "user");
-
-    ID parsed = parse_canonicalized("(:x {:x 1})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE_MESSAGE(is_ast_call(parsed), "expected AST call for keyword invocation");
-    CljASTCall *call = as_ast_call(parsed);
-    TEST_ASSERT_NOT_NULL(call);
-
-    ID cache_before = ast_call_get_callsite_cache(call);
-    TEST_ASSERT_NULL_MESSAGE(cache_before, "callsite cache should be empty before first evaluation");
-
-    ID first = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
-    TEST_ASSERT_NOT_NULL(first);
-    TEST_ASSERT_TRUE(is_fixnum(first));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(first));
-
-    ID cache_after_first = ast_call_get_callsite_cache(call);
-    TEST_ASSERT_NOT_NULL_MESSAGE(cache_after_first, "keyword call should populate callsite cache");
-
-    ID second = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
-    TEST_ASSERT_NOT_NULL(second);
-    TEST_ASSERT_TRUE(is_fixnum(second));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(second));
-}
+// Keyword callsite cache removed — interned pointer equality makes linear scan
+// in small maps/records fast enough; the per-callsite heap object wasn't worth it.
 
 // Ensure redefinition in current namespace is visible to ns_resolve (no stale cache).
 TEST(test_resolve_cache_invalidation_on_redefinition) {

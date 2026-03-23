@@ -19,6 +19,7 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
+#if MEMORY_PROFILING_ENABLED
 static ID parse_from_reader_once(const char *input, EvalState *st) {
   Reader reader;
   reader_init(&reader, input);
@@ -60,6 +61,7 @@ static void build_wilhelm_tell_like_vector(char *buffer, size_t buffer_size, uns
   buffer[written++] = ']';
   buffer[written] = '\0';
 }
+#endif
 
 TEST(test_parse_basic_types) {
   EvalState *eval_state = evalstate_new(false);

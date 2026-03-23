@@ -14,6 +14,19 @@
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
 (def ^:private segment-watch-opts {:slot :game :entity-id 1003 :field :x})
 (def ^:private segment-watch-active* (atom false))
+(def ^:private segment-watch-segment-id* (atom nil))
+(def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
+;; Coalesced timeline-kick timer: avoid schedule-0 burst buildup under heavy publish-state! churn.
+;; Use a named non-zero-delay timer so repeated schedules upsert/cancel instead of queueing unbounded tasks.
+(def ^:private timeline-kick-timer-id :tiny-breakout/timeline-kick)
+
+(defn- kick-timeline-watchers-task
+  []
+  (event/kick-timeline-watchers!)
+  nil)
+
+(def ^:private timeline-kick-timer-spec {:id timeline-kick-timer-id
+                                         :fn kick-timeline-watchers-task})
 
 (defn- button-down-event?
   [event]
@@ -97,11 +110,32 @@
     (audio/play-events! events))
   nil)
 
+(defn- on-segment-fallback-timer!
+  []
+  (let [now-ms (current-time-ms)
+        current @state*
+        segment (:ball-segment current)
+        segment-id (if (map? segment) (:id segment) nil)
+        end-ms (if (map? segment) (:end-ms segment) nil)]
+    (if (and (map? segment)
+             (number? segment-id)
+             (number? end-ms))
+      (if (<= end-ms now-ms)
+        (publish-state! (core/apply-segment-end-at-ms current segment-id end-ms))
+        (schedule (max 1 (- end-ms now-ms))
+                  {:id tiny-breakout.runtime/segment-fallback-timer-id
+                   :fn tiny-breakout.runtime/on-segment-fallback-timer!}))
+      (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)))
+  nil)
+
 (defn publish-state!
   [state]
   (let [state (scene/with-expanded-collision-rules state)
         events (:events state)
-        state-without-events (assoc state :events [])]
+        state-without-events (assoc state :events [])
+        segment (:ball-segment state-without-events)
+        segment-id (if (map? segment) (:id segment) nil)
+        end-ms (if (map? segment) (:end-ms segment) nil)]
     (when (and (map? (:ball-segment state-without-events))
                (not @tiny-breakout.runtime/segment-watch-active*)
                @event/gfx-timeline-loaded?)
@@ -109,6 +143,19 @@
                 tiny-breakout.runtime/on-segment-timeline-event!
                 tiny-breakout.runtime/segment-watch-opts)
       (reset! tiny-breakout.runtime/segment-watch-active* true))
+    (if (and @tiny-breakout.runtime/segment-watch-active*
+             (number? segment-id))
+      (do
+        (when (not= segment-id @tiny-breakout.runtime/segment-watch-segment-id*)
+          (event/rearm-timeline-watch-edge! tiny-breakout.runtime/segment-watch-id))
+        (reset! tiny-breakout.runtime/segment-watch-segment-id* segment-id))
+      (reset! tiny-breakout.runtime/segment-watch-segment-id* nil))
+    (if (and (number? segment-id)
+             (number? end-ms))
+      (let [delay-ms (max 1 (- end-ms (current-time-ms)))]
+        (schedule delay-ms {:id tiny-breakout.runtime/segment-fallback-timer-id
+                            :fn tiny-breakout.runtime/on-segment-fallback-timer!}))
+      (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id))
     (reset! state* state-without-events)
     (reset! scene* (scene-record state-without-events))
     (if (and (map? (:ball-segment state-without-events))
@@ -116,7 +163,8 @@
       (do
         ;; Defer kick: synchronous kick from inside a timeline poll/callback can
         ;; re-enter poll-watchers! on the same C stack and overflow (runloop test).
-        (schedule 0 (fn publish-state-kick-timeline [] (event/kick-timeline-watchers!))))
+        ;; Keep this coalesced via named timer to prevent task-queue growth under collision bursts.
+        (schedule 1 tiny-breakout.runtime/timeline-kick-timer-spec))
       nil)
     (play-events! events))
   nil)
@@ -328,6 +376,9 @@
 (defn reset-runtime!
   []
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
+  (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
+  (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))
@@ -351,6 +402,9 @@
     (catch Exception _
       nil))
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
+  (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
+  (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))

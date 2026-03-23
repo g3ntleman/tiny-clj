@@ -101,6 +101,41 @@ TEST(test_event_loop_ingress_enqueue_executes_on_run_next) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
 }
 
+TEST(test_event_loop_ingress_drain_budget_keeps_excess_work_pending_for_next_tick) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-budget-marker (atom [])) "
+        "  (fn event-loop-ingress-budget-task [x] "
+        "    (swap! event-loop-ingress-budget-marker conj x) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, intern_symbol_global(":a")),
+                             "first ingress enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, intern_symbol_global(":b")),
+                             "second ingress enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_ingress_has_pending(), "ingress should report pending work");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "first run_next should execute one ingress callback");
+    ID first_marker_ok = eval_string("(= @event-loop-ingress-budget-marker [:a])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, first_marker_ok);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_ingress_has_pending(),
+                             "one ingress callback should remain pending for next tick");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "second run_next should execute remaining ingress callback");
+    ID second_marker_ok = eval_string("(= @event-loop-ingress-budget-marker [:a :b])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, second_marker_ok);
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
+                              "ingress queue should be empty after second tick");
+}
+
 TEST(test_event_loop_ingress_close_rejects_new_enqueue_but_drains_pending) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
@@ -272,6 +307,88 @@ TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
     ID marker = eval_string("@event-loop-ingress-nil-arg-marker", g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR_MESSAGE(clj_true, marker,
                                   "ingress callback should receive nil payload as one argument");
+}
+
+TEST(test_event_loop_ingress_call_coalesces_duplicate_kind_and_key_payloads) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-coalesce-marker (atom [])) "
+        "  (fn event-loop-ingress-coalesce-task [event] "
+        "    (swap! event-loop-ingress-coalesce-marker conj [(:kind event) (:key event)]) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+                               g_test_eval_state);
+    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+                               g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first ingress call should enqueue");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "duplicate ingress call should be coalesced");
+
+    EventLoopIngressStats stats = {0};
+    TEST_ASSERT_TRUE(event_loop_ingress_stats(&stats));
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.accepted_count);
+    TEST_ASSERT_EQUAL_UINT32(0u, stats.rejected_count);
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.pending_count);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "run_next should execute one coalesced ingress callback");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
+                              "ingress queue should be empty after one coalesced callback");
+
+    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-marker [[:collision :brick-2001]])",
+                               g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
+TEST(test_event_loop_ingress_call_does_not_coalesce_when_key_differs) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-coalesce-key-marker (atom [])) "
+        "  (fn event-loop-ingress-coalesce-key-task [event] "
+        "    (swap! event-loop-ingress-coalesce-key-marker conj [(:kind event) (:key event)]) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+                               g_test_eval_state);
+    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2002 :self 1003 :other 2002}",
+                               g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first ingress call should enqueue");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "different key should enqueue independently");
+
+    EventLoopIngressStats stats = {0};
+    TEST_ASSERT_TRUE(event_loop_ingress_stats(&stats));
+    TEST_ASSERT_EQUAL_UINT32(2u, stats.accepted_count);
+    TEST_ASSERT_EQUAL_UINT32(0u, stats.rejected_count);
+    TEST_ASSERT_EQUAL_UINT32(2u, stats.pending_count);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "first run_next should execute first ingress callback");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "second run_next should execute second ingress callback");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
+                              "ingress queue should be empty after both callbacks");
+
+    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-key-marker [[:collision :brick-2001] [:collision :brick-2002]])",
+                               g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
 
 /* Target: 64 (raised to 1024); TODO: tearDown heap / run_next preface — lower toward 64 when possible. */

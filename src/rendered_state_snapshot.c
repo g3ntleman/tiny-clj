@@ -273,7 +273,9 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
                                                   clip_rect);
         }
         if (!contributed) {
-            return false;
+            /* Entity changed but has no AABB — dirty the entire clip rect. */
+            *out_dirty_rect = clip_rect;
+            return true;
         }
     }
 
@@ -283,7 +285,9 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
             continue;
         }
         if (!prev_row->has_world_aabb) {
-            return false;
+            /* Removed entity without AABB — dirty the entire clip rect. */
+            *out_dirty_rect = clip_rect;
+            return true;
         }
         (void)append_dirty_aabb_rect(&dirty_rect,
                                      &have_dirty_rect,
@@ -337,6 +341,13 @@ bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
             continue;
         }
 
+        bool has_any_aabb = (prev_row && prev_row->has_world_aabb) || curr_row->has_world_aabb;
+        if (!has_any_aabb) {
+            /* Changed entity without AABB — fall back to full clip rect. */
+            out_rects[0] = clip_rect;
+            *out_count = 1u;
+            return true;
+        }
         if (prev_row && prev_row->has_world_aabb) {
             if (!append_dirty_aabb_rect_leaf(out_rects,
                                              out_capacity,
@@ -365,7 +376,10 @@ bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
             continue;
         }
         if (!prev_row->has_world_aabb) {
-            return false;
+            /* Removed entity without AABB — fall back to full clip rect. */
+            out_rects[0] = clip_rect;
+            *out_count = 1u;
+            return true;
         }
         if (!append_dirty_aabb_rect_leaf(out_rects,
                                          out_capacity,

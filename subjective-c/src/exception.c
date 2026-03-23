@@ -56,6 +56,24 @@ struct CljString* stacktrace(void);
 
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
+
+#include "thread_local.h"
+#define THREAD_NAME_MAX 32
+static THREAD_LOCAL char g_thread_name[THREAD_NAME_MAX] = {0};
+
+void subjective_c_set_thread_name(const char *name) {
+    if (name) {
+        strncpy(g_thread_name, name, THREAD_NAME_MAX - 1);
+        g_thread_name[THREAD_NAME_MAX - 1] = '\0';
+    } else {
+        g_thread_name[0] = '\0';
+    }
+}
+
+const char *subjective_c_get_thread_name(void) {
+    return g_thread_name[0] ? g_thread_name : "unknown";
+}
+
 static SubjectiveCThreadState subjective_c_main_thread_storage = {0};
 static SubjectiveCThreadState subjective_c_interpreter_thread_storage = {0};
 const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_main_thread_storage;
@@ -69,6 +87,7 @@ void subjective_c_register_main_thread(void) {
     if (!subjective_c_main_thread_storage.initialized) {
         subjective_c_main_thread_storage.value = pthread_self();
         subjective_c_main_thread_storage.initialized = true;
+        subjective_c_set_thread_name("main");
     }
 }
 
@@ -79,6 +98,39 @@ void subjective_c_register_interpreter_thread(void) {
 
 void subjective_c_clear_interpreter_thread(void) {
     memset(&subjective_c_interpreter_thread_storage, 0, sizeof(subjective_c_interpreter_thread_storage));
+}
+
+typedef struct {
+    void *(*start_routine)(void *);
+    void *arg;
+    char name[THREAD_NAME_MAX];
+} SubjectiveCNamedThreadArgs;
+
+static void *subjective_c_named_thread_entry(void *raw_args) {
+    SubjectiveCNamedThreadArgs args = *(SubjectiveCNamedThreadArgs *)raw_args;
+    free(raw_args);
+    subjective_c_set_thread_name(args.name);
+    return args.start_routine(args.arg);
+}
+
+int subjective_c_pthread_create_named(pthread_t *thread,
+                                       const pthread_attr_t *attr,
+                                       void *(*start_routine)(void *),
+                                       void *arg,
+                                       const char *name) {
+    SubjectiveCNamedThreadArgs *args = malloc(sizeof(SubjectiveCNamedThreadArgs));
+    if (!args) {
+        return -1;
+    }
+    args->start_routine = start_routine;
+    args->arg = arg;
+    strncpy(args->name, name ? name : "unnamed", THREAD_NAME_MAX - 1);
+    args->name[THREAD_NAME_MAX - 1] = '\0';
+    int rc = pthread_create(thread, attr, subjective_c_named_thread_entry, args);
+    if (rc != 0) {
+        free(args);
+    }
+    return rc;
 }
 
 bool subjective_c_has_main_thread(void) {

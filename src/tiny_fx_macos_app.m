@@ -9,7 +9,7 @@ struct TinyFxMacosWindow {
     id controller;
     NSWindow *window;
     NSView *view;
-    uint8_t key_buffer[KB_KEY_LAST + 1];
+    uint8_t key_buffer[MFB_KB_KEY_LAST + 1];
     uint32_t *present_buffer;
     size_t present_capacity;
     unsigned present_width;
@@ -18,7 +18,7 @@ struct TinyFxMacosWindow {
 };
 
 static void tinyfx_macos_window_set_key(TinyFxMacosWindow *window, mfb_key key, bool down) {
-    if (!window || key < 0 || key > KB_KEY_LAST) {
+    if (!window || key < 0 || key > MFB_KB_KEY_LAST) {
         return;
     }
     window->key_buffer[key] = down ? 1u : 0u;
@@ -26,60 +26,60 @@ static void tinyfx_macos_window_set_key(TinyFxMacosWindow *window, mfb_key key, 
 
 mfb_key tinyfx_macos_key_from_virtual_key(unsigned short key_code) {
     switch (key_code) {
-        case 0x12: return KB_KEY_1;
-        case 0x13: return KB_KEY_2;
-        case 0x14: return KB_KEY_3;
-        case 0x15: return KB_KEY_4;
-        case 0x17: return KB_KEY_5;
-        case 0x16: return KB_KEY_6;
-        case 0x1A: return KB_KEY_7;
-        case 0x1C: return KB_KEY_8;
-        case 0x19: return KB_KEY_9;
-        case 0x1D: return KB_KEY_0;
-        case 0x00: return KB_KEY_A;
-        case 0x0B: return KB_KEY_B;
-        case 0x08: return KB_KEY_C;
-        case 0x02: return KB_KEY_D;
-        case 0x0E: return KB_KEY_E;
-        case 0x03: return KB_KEY_F;
-        case 0x05: return KB_KEY_G;
-        case 0x04: return KB_KEY_H;
-        case 0x22: return KB_KEY_I;
-        case 0x26: return KB_KEY_J;
-        case 0x28: return KB_KEY_K;
-        case 0x25: return KB_KEY_L;
-        case 0x2E: return KB_KEY_M;
-        case 0x2D: return KB_KEY_N;
-        case 0x1F: return KB_KEY_O;
-        case 0x23: return KB_KEY_P;
-        case 0x0C: return KB_KEY_Q;
-        case 0x0F: return KB_KEY_R;
-        case 0x01: return KB_KEY_S;
-        case 0x11: return KB_KEY_T;
-        case 0x20: return KB_KEY_U;
-        case 0x09: return KB_KEY_V;
-        case 0x0D: return KB_KEY_W;
-        case 0x07: return KB_KEY_X;
-        case 0x10: return KB_KEY_Y;
-        case 0x06: return KB_KEY_Z;
-        case 0x24: return KB_KEY_ENTER;
-        case 0x30: return KB_KEY_TAB;
-        case 0x31: return KB_KEY_SPACE;
-        case 0x33: return KB_KEY_BACKSPACE;
-        case 0x35: return KB_KEY_ESCAPE;
-        case 0x7B: return KB_KEY_LEFT;
-        case 0x7C: return KB_KEY_RIGHT;
-        case 0x7D: return KB_KEY_DOWN;
-        case 0x7E: return KB_KEY_UP;
-        case 0x37: return KB_KEY_LEFT_SUPER;
-        case 0x36: return KB_KEY_RIGHT_SUPER;
-        case 0x38: return KB_KEY_LEFT_SHIFT;
-        case 0x3C: return KB_KEY_RIGHT_SHIFT;
-        case 0x3B: return KB_KEY_LEFT_CONTROL;
-        case 0x3E: return KB_KEY_RIGHT_CONTROL;
-        case 0x3A: return KB_KEY_LEFT_ALT;
-        case 0x3D: return KB_KEY_RIGHT_ALT;
-        default: return KB_KEY_UNKNOWN;
+        case 0x12: return MFB_KB_KEY_1;
+        case 0x13: return MFB_KB_KEY_2;
+        case 0x14: return MFB_KB_KEY_3;
+        case 0x15: return MFB_KB_KEY_4;
+        case 0x17: return MFB_KB_KEY_5;
+        case 0x16: return MFB_KB_KEY_6;
+        case 0x1A: return MFB_KB_KEY_7;
+        case 0x1C: return MFB_KB_KEY_8;
+        case 0x19: return MFB_KB_KEY_9;
+        case 0x1D: return MFB_KB_KEY_0;
+        case 0x00: return MFB_KB_KEY_A;
+        case 0x0B: return MFB_KB_KEY_B;
+        case 0x08: return MFB_KB_KEY_C;
+        case 0x02: return MFB_KB_KEY_D;
+        case 0x0E: return MFB_KB_KEY_E;
+        case 0x03: return MFB_KB_KEY_F;
+        case 0x05: return MFB_KB_KEY_G;
+        case 0x04: return MFB_KB_KEY_H;
+        case 0x22: return MFB_KB_KEY_I;
+        case 0x26: return MFB_KB_KEY_J;
+        case 0x28: return MFB_KB_KEY_K;
+        case 0x25: return MFB_KB_KEY_L;
+        case 0x2E: return MFB_KB_KEY_M;
+        case 0x2D: return MFB_KB_KEY_N;
+        case 0x1F: return MFB_KB_KEY_O;
+        case 0x23: return MFB_KB_KEY_P;
+        case 0x0C: return MFB_KB_KEY_Q;
+        case 0x0F: return MFB_KB_KEY_R;
+        case 0x01: return MFB_KB_KEY_S;
+        case 0x11: return MFB_KB_KEY_T;
+        case 0x20: return MFB_KB_KEY_U;
+        case 0x09: return MFB_KB_KEY_V;
+        case 0x0D: return MFB_KB_KEY_W;
+        case 0x07: return MFB_KB_KEY_X;
+        case 0x10: return MFB_KB_KEY_Y;
+        case 0x06: return MFB_KB_KEY_Z;
+        case 0x24: return MFB_KB_KEY_ENTER;
+        case 0x30: return MFB_KB_KEY_TAB;
+        case 0x31: return MFB_KB_KEY_SPACE;
+        case 0x33: return MFB_KB_KEY_BACKSPACE;
+        case 0x35: return MFB_KB_KEY_ESCAPE;
+        case 0x7B: return MFB_KB_KEY_LEFT;
+        case 0x7C: return MFB_KB_KEY_RIGHT;
+        case 0x7D: return MFB_KB_KEY_DOWN;
+        case 0x7E: return MFB_KB_KEY_UP;
+        case 0x37: return MFB_KB_KEY_LEFT_SUPER;
+        case 0x36: return MFB_KB_KEY_RIGHT_SUPER;
+        case 0x38: return MFB_KB_KEY_LEFT_SHIFT;
+        case 0x3C: return MFB_KB_KEY_RIGHT_SHIFT;
+        case 0x3B: return MFB_KB_KEY_LEFT_CONTROL;
+        case 0x3E: return MFB_KB_KEY_RIGHT_CONTROL;
+        case 0x3A: return MFB_KB_KEY_LEFT_ALT;
+        case 0x3D: return MFB_KB_KEY_RIGHT_ALT;
+        default: return MFB_KB_KEY_UNKNOWN;
     }
 }
 
@@ -191,14 +191,14 @@ mfb_key tinyfx_macos_key_from_virtual_key(unsigned short key_code) {
         return;
     }
     NSEventModifierFlags flags = [event modifierFlags];
-    tinyfx_macos_window_set_key(host, KB_KEY_LEFT_SHIFT, (flags & NSEventModifierFlagShift) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_RIGHT_SHIFT, (flags & NSEventModifierFlagShift) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_LEFT_CONTROL, (flags & NSEventModifierFlagControl) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_RIGHT_CONTROL, (flags & NSEventModifierFlagControl) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_LEFT_ALT, (flags & NSEventModifierFlagOption) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_RIGHT_ALT, (flags & NSEventModifierFlagOption) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_LEFT_SUPER, (flags & NSEventModifierFlagCommand) != 0);
-    tinyfx_macos_window_set_key(host, KB_KEY_RIGHT_SUPER, (flags & NSEventModifierFlagCommand) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_LEFT_SHIFT, (flags & NSEventModifierFlagShift) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_RIGHT_SHIFT, (flags & NSEventModifierFlagShift) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_LEFT_CONTROL, (flags & NSEventModifierFlagControl) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_RIGHT_CONTROL, (flags & NSEventModifierFlagControl) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_LEFT_ALT, (flags & NSEventModifierFlagOption) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_RIGHT_ALT, (flags & NSEventModifierFlagOption) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_LEFT_SUPER, (flags & NSEventModifierFlagCommand) != 0);
+    tinyfx_macos_window_set_key(host, MFB_KB_KEY_RIGHT_SUPER, (flags & NSEventModifierFlagCommand) != 0);
 }
 
 @end
@@ -355,19 +355,19 @@ mfb_update_state tinyfx_macos_window_update(TinyFxMacosWindow *window,
                                             unsigned width,
                                             unsigned height) {
     if (!window) {
-        return STATE_INVALID_WINDOW;
+        return MFB_STATE_INVALID_WINDOW;
     }
     if (window->close_requested) {
-        return STATE_EXIT;
+        return MFB_STATE_EXIT;
     }
     if (!buffer || width == 0u || height == 0u) {
-        return STATE_INVALID_BUFFER;
+        return MFB_STATE_INVALID_BUFFER;
     }
     @autoreleasepool {
         [(TinyFxView *)window->view presentPixels:buffer width:width height:height];
         tinyfx_macos_window_pump_once(window);
     }
-    return window->close_requested ? STATE_EXIT : STATE_OK;
+    return window->close_requested ? MFB_STATE_EXIT : MFB_STATE_OK;
 }
 
 bool tinyfx_macos_window_pump_events(TinyFxMacosWindow *window) {

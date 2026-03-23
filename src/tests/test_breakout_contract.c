@@ -170,6 +170,33 @@ static void breakout_print_fixnum_vector(const char *label, ID value) {
     fputc('\n', stderr);
 }
 
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+static void breakout_print_memory_type_deltas(const MemoryStats *before,
+                                              const MemoryStats *after,
+                                              const char *label) {
+    if (!before || !after || !label) {
+        return;
+    }
+    fprintf(stderr, "\n[%s] per-type deltas:\n", label);
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        long long bytes_diff = (long long)after->bytes_current_by_type[i] -
+                               (long long)before->bytes_current_by_type[i];
+        long long alloc_diff = (long long)after->allocations_by_type[i] -
+                               (long long)before->allocations_by_type[i];
+        long long dealloc_diff = (long long)after->deallocations_by_type[i] -
+                                 (long long)before->deallocations_by_type[i];
+        if (bytes_diff == 0 && alloc_diff == 0 && dealloc_diff == 0) {
+            continue;
+        }
+        fprintf(stderr, "  %s: bytes %+lld alloc %+lld dealloc %+lld\n",
+                clj_type_name((CljType)i),
+                bytes_diff,
+                alloc_diff,
+                dealloc_diff);
+    }
+}
+#endif
+
 TEST(test_breakout_contract_heap_probe_runtime_reload_persistence) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
@@ -242,6 +269,105 @@ TEST(test_breakout_contract_heap_probe_audio_reload_baseline) {
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
     breakout_print_fixnum_vector("heap totals audio :reload", out);
+}
+
+TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate_persistent_heap) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    MemoryStats before = memory_profiler_get_stats();
+#endif
+
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (loop [i 0 out []] "
+        "    (if (< i 6) "
+        "      (recur (+ i 1) "
+        "             (conj out "
+        "               (:total "
+        "                 (heap "
+        "                   (do "
+        "                     (tiny-breakout.runtime/reset-runtime!) "
+        "                     (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "                     (dotimes [_ 8] (run-next-task)) "
+        "                     (loop [step 0] "
+        "                       (if (< step 24) "
+        "                         (let [s @tiny-breakout.runtime/state* "
+        "                               b (first (:bricks s)) "
+        "                               bx (if b (:x b) 0) "
+        "                               by (if b (:y b) 0) "
+        "                               bw (if b (:w b) 20) "
+        "                               bh (if b (:h b) 10) "
+        "                               event (if b "
+        "                                       {:source :spatial "
+        "                                        :id :ball-vs-brick "
+        "                                        :rule {:id :ball-vs-brick} "
+        "                                        :phase :enter "
+        "                                        :other (:id b) "
+        "                                        :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "                                        :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}} "
+        "                                       nil) "
+        "                               _ (if event (tiny-breakout.runtime/on-spatial-event! event) nil) "
+        "                               seg (:ball-segment @tiny-breakout.runtime/state*) "
+        "                               sid (:id seg) "
+        "                               end-ms (:end-ms seg) "
+        "                               _ (if (number? sid) "
+        "                                     (tiny-breakout.runtime/publish-state! "
+        "                                       (tiny-breakout.core/apply-segment-end-at-ms "
+        "                                         @tiny-breakout.runtime/state* "
+        "                                         sid "
+        "                                         end-ms)) "
+        "                                     nil) "
+        "                               _ (dotimes [_ 8] (run-next-task))] "
+        "                           (recur (+ step 1))) "
+        "                         (:segment-id-seq @tiny-breakout.runtime/state*)))))))) "
+        "      out)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(6u, vector_count(v));
+    breakout_print_fixnum_vector("heap totals brick->wall cycle", out);
+
+    int first_total = 0;
+    int max_followup_total = 0;
+    for (size_t i = 0; i < vector_count(v); i++) {
+        ID elem = vector_nth(v, i);
+        TEST_ASSERT_TRUE_MESSAGE(elem && is_fixnum(elem),
+                                 "brick->wall heap probe must return fixnum totals");
+        int total = as_fixnum(elem);
+        if (i == 0u) {
+            first_total = total;
+        } else if (total > max_followup_total) {
+            max_followup_total = total;
+        }
+    }
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    MemoryStats after = memory_profiler_get_stats();
+    long long total_diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+    long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+    fprintf(stderr,
+            "\nbrick->wall cycle profile: total %+lld bytes, raw %+lld bytes, first heap(total) %d bytes, "
+            "follow-up max heap(total) %d bytes\n",
+            total_diff,
+            raw_diff,
+            first_total,
+            max_followup_total);
+    breakout_print_memory_type_deltas(&before, &after, "brick->wall cycle");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, first_total,
+                                          "first brick->wall cycle heap(total) unexpectedly high");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024, max_followup_total,
+                                          "follow-up brick->wall cycles should not accumulate persistent heap");
+#else
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, first_total,
+                                          "first brick->wall cycle heap(total) unexpectedly high");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024, max_followup_total,
+                                          "follow-up brick->wall cycles should not accumulate persistent heap");
+#endif
 }
 
 TEST(test_breakout_contract_namespaces_load) {
@@ -1031,6 +1157,44 @@ TEST(test_breakout_contract_segment_timeline_deferred_callback_does_not_overwrit
         "        final @tiny-breakout.runtime/state*] "
         "    (and (fn? callback) "
         "         (= 250 (:paddle-x final)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_segment_timeline_new_segment_rearms_watcher_edge_state) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (let [now-ms (current-time-ms) "
+        "        watch-id :tiny-breakout/segment-end "
+        "        seeded (-> @tiny-breakout.runtime/state* "
+        "                   (assoc :phase :play) "
+        "                   (assoc :ball-x 160) "
+        "                   (assoc :ball-y 120) "
+        "                   (assoc :ball-vx 2) "
+        "                   (assoc :ball-vy -2) "
+        "                   (assoc :events []) "
+        "                   (assoc :ball-segment {:id 7 :start-ms (- now-ms 1000) :end-ms now-ms :to-x 316 :to-y 60 :wall :right})) "
+        "        _ (tiny-breakout.runtime/publish-state! seeded) "
+        "        watcher (get @tiny-fx.gfx-timeline/timeline-watchers* watch-id) "
+        "        callback (:callback watcher) "
+        "        _ (swap! tiny-fx.gfx-timeline/timeline-watchers* "
+        "                 (fn [m] "
+        "                   (assoc m watch-id "
+        "                          (assoc (get m watch-id) :last-at-end true)))) "
+        "        _ (callback {:source :timeline "
+        "                     :id watch-id "
+        "                     :progress {:end-event true :at-end true :phase-ms 1 :period-ms 1}}) "
+        "        after @tiny-breakout.runtime/state* "
+        "        after-seg (:ball-segment after) "
+        "        watcher2 (get @tiny-fx.gfx-timeline/timeline-watchers* watch-id)] "
+        "    (and (fn? callback) "
+        "         (map? after-seg) "
+        "         (not= 7 (:id after-seg)) "
+        "         (= true (:last-at-end watcher2)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }

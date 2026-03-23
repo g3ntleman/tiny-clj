@@ -841,11 +841,15 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_falls_bac
     vg_rendered_state_capture_begin(4u, 2u, 16u);
     vg_rendered_state_capture_record_entity(entity, t1);
 
+    VgClipRect clip = {0, 0, TEST_W, TEST_H};
     VgClipRect dirty = {0};
-    TEST_ASSERT_FALSE(vg_rendered_state_capture_compute_dirty_rect(4u,
-                                                                   (VgClipRect){0, 0, TEST_W, TEST_H},
-                                                                   1u,
-                                                                   &dirty));
+    TEST_ASSERT_TRUE_MESSAGE(
+        vg_rendered_state_capture_compute_dirty_rect(4u, clip, 1u, &dirty),
+        "entity without AABB should fall back to full clip rect");
+    TEST_ASSERT_EQUAL_INT(clip.x, dirty.x);
+    TEST_ASSERT_EQUAL_INT(clip.y, dirty.y);
+    TEST_ASSERT_EQUAL_INT(clip.w, dirty.w);
+    TEST_ASSERT_EQUAL_INT(clip.h, dirty.h);
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();

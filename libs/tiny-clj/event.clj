@@ -71,3 +71,9 @@ Options are forwarded to the underlying source-specific runtime."
   (when @gfx-timeline-loaded?
     (tiny-fx.gfx-timeline/kick-watchers!))
   nil)
+
+(defn rearm-timeline-watch-edge!
+  [watch-id]
+  (when (and watch-id @gfx-timeline-loaded?)
+    (tiny-fx.gfx-timeline/reset-watch-edge! watch-id))
+  nil)

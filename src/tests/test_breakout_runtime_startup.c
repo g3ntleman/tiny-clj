@@ -796,12 +796,11 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     vg_rendered_state_capture_commit();
 
     size_t prev_limit = memory_get_heap_limit_bytes();
-    size_t baseline = memory_current_usage_bytes();
     bool caught = false;
     bool triggered = false;
     bool drained = false;
     TRY {
-        memory_set_heap_limit_bytes(baseline + 16u);
+        memory_set_heap_limit_bytes(0u);
         triggered = viewer_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
         drained = viewer_collision_poll_drain();
     } CATCH(ex) {
@@ -820,13 +819,13 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
 
 #if defined(__APPLE__)
 TEST(test_breakout_runtime_startup_maps_macos_virtual_keys_to_runtime_keys) {
-    TEST_ASSERT_EQUAL_INT(KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
 }
 #endif
 
@@ -1106,7 +1105,7 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
         "     :rule {:id :ball-vs-brick} "
         "     :phase :enter "
         "     :other (:id b) "
-        "     :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "     :self-aabb {:min-x (+ bx bw) :min-y (+ by 2) :max-x (+ bx bw 4) :max-y (+ by 6)} "
         "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
         ctx.st);
     TEST_ASSERT_NOT_NULL(brick_event);
@@ -1138,4 +1137,262 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
 
     TEST_ASSERT_TRUE_MESSAGE(saw_brick_score,
                              "expected at least one brick-hit score update while runloop + collision dispatch are active");
+}
+
+TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_until_new_frame) {
+    BreakoutViewerTestContext ctx = {0};
+    uint16_t pixels[320u * 240u] = {0};
+    VgFrameBuffer fb = {0};
+    VgRenderSlotState render_state = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
+
+    ID state_atom_id = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  tiny-breakout.runtime/state*)",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+    CljAtom *state_atom = as_atom(state_atom_id);
+    TEST_ASSERT_NOT_NULL(state_atom);
+
+    ID seeded_old = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (let [now-ms (current-time-ms) "
+        "        s1 (-> @tiny-breakout.runtime/state* "
+        "               (assoc :phase :play) "
+        "               (assoc :levels [{:id :l1 :bricks []}]) "
+        "               (assoc :bricks []) "
+        "               (assoc :events []) "
+        "               (assoc :ball-x 10 :ball-y 100) "
+        "               (assoc :ball-vx 2 :ball-vy -2) "
+        "               (assoc :segment-id-seq 1) "
+        "               (assoc :ball-segment {:id 1 :start-ms (- now-ms 200) :end-ms now-ms :to-x 316 :to-y 75 :wall :right}))] "
+        "    (tiny-breakout.runtime/publish-state! s1) "
+        "    true))",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, seeded_old);
+
+    ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
+    TEST_ASSERT_NOT_NULL(snapshot);
+    uint32_t t0 = (uint32_t)platform_current_time_ms();
+    vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, 1u, t0);
+    VgRenderFrameSlotResult slot_result0 = {0};
+    bool rendered0 = vg_render_frame_slot_record_result_at_ms(snapshot,
+                                                               &render_state,
+                                                               &fb,
+                                                               1u,
+                                                               t0,
+                                                               false,
+                                                               &slot_result0);
+    if (rendered0) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
+    }
+    RELEASE(snapshot);
+    TEST_ASSERT_TRUE(rendered0);
+
+    ID seeded_new = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (let [now-ms (current-time-ms) "
+        "        s2 (-> @tiny-breakout.runtime/state* "
+        "               (assoc :phase :play) "
+        "               (assoc :levels [{:id :l1 :bricks []}]) "
+        "               (assoc :bricks []) "
+        "               (assoc :events []) "
+        "               (assoc :ball-x 316 :ball-y 75) "
+        "               (assoc :ball-vx -2 :ball-vy -2) "
+        "               (assoc :segment-id-seq 2) "
+        "               (assoc :ball-segment {:id 2 :start-ms now-ms :end-ms (+ now-ms 500) :to-x 0 :to-y 13 :wall :left}))] "
+        "    (tiny-breakout.runtime/publish-state! s2) "
+        "    true))",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, seeded_new);
+
+    ID segment_seq_kw = intern_symbol_global(":segment-id-seq");
+    ID phase_kw = intern_symbol_global(":phase");
+    ID play_kw = intern_symbol_global(":play");
+    TEST_ASSERT_NOT_NULL(segment_seq_kw);
+    TEST_ASSERT_NOT_NULL(phase_kw);
+    TEST_ASSERT_NOT_NULL(play_kw);
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+
+    int seq_before_new_frames = -1;
+    for (int i = 0; i < 25; i++) {
+        usleep(10000);
+        ID state = atom_deref_owned(state_atom);
+        if (state && is_map(state)) {
+            ID seq = map_get_sentinel(state, segment_seq_kw, NULL);
+            if (seq && is_fixnum(seq)) {
+                seq_before_new_frames = as_fixnum(seq);
+            }
+        }
+        RELEASE(state);
+    }
+
+    int seq_after_frames = seq_before_new_frames;
+    bool phase_after_frames_is_play = false;
+    for (int i = 0; i < 120; i++) {
+        usleep(10000);
+        ID snap = atom_deref_owned(ctx.bundle.game_scene_atom);
+        if (snap) {
+            uint32_t frame_serial = (uint32_t)(i + 2);
+            uint32_t now_ms = (uint32_t)platform_current_time_ms();
+            vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, frame_serial, now_ms);
+            VgRenderFrameSlotResult slot_result = {0};
+            if (vg_render_frame_slot_record_result_at_ms(snap,
+                                                         &render_state,
+                                                         &fb,
+                                                         frame_serial,
+                                                         now_ms,
+                                                         render_state.has_animation,
+                                                         &slot_result)) {
+                vg_rendered_state_capture_commit();
+            } else {
+                vg_rendered_state_capture_discard();
+            }
+            RELEASE(snap);
+        }
+
+        ID state = atom_deref_owned(state_atom);
+        if (state && is_map(state)) {
+            ID seq = map_get_sentinel(state, segment_seq_kw, NULL);
+            ID phase = map_get_sentinel(state, phase_kw, NULL);
+            if (seq && is_fixnum(seq)) {
+                seq_after_frames = as_fixnum(seq);
+            }
+            phase_after_frames_is_play = (phase == play_kw);
+        }
+        RELEASE(state);
+    }
+
+    stop_runloop_thread();
+    breakout_viewer_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(seq_before_new_frames == 2,
+                             "stale at-end snapshot must not advance to a newer segment before renderer publishes a fresh frame");
+    TEST_ASSERT_TRUE_MESSAGE(seq_after_frames > 2,
+                             "after fresh frames arrive, segment progression should resume");
+    TEST_ASSERT_TRUE(phase_after_frames_is_play);
+}
+
+TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segment_progressing) {
+    BreakoutViewerTestContext ctx = {0};
+    uint16_t pixels[320u * 240u] = {0};
+    VgFrameBuffer fb = {0};
+    VgRenderSlotState render_state = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
+    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
+
+    ID state_atom_id = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  tiny-breakout.runtime/state*)",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+    CljAtom *state_atom = as_atom(state_atom_id);
+    TEST_ASSERT_NOT_NULL(state_atom);
+
+    ID score_kw = intern_symbol_global(":score");
+    ID segment_seq_kw = intern_symbol_global(":segment-id-seq");
+    ID phase_kw = intern_symbol_global(":phase");
+    ID serve_kw = intern_symbol_global(":serve");
+    ID game_over_kw = intern_symbol_global(":game-over");
+    TEST_ASSERT_NOT_NULL(score_kw);
+    TEST_ASSERT_NOT_NULL(segment_seq_kw);
+    TEST_ASSERT_NOT_NULL(phase_kw);
+    TEST_ASSERT_NOT_NULL(serve_kw);
+    TEST_ASSERT_NOT_NULL(game_over_kw);
+
+    ID brick_event = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "    {:source :spatial "
+        "     :id :ball-vs-brick "
+        "     :rule {:id :ball-vs-brick} "
+        "     :phase :enter "
+        "     :other (:id b) "
+        "     :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(brick_event);
+    TEST_ASSERT_TRUE(is_map(brick_event));
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+
+    ID retained_event = RETAIN(brick_event);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
+    RELEASE(retained_event);
+
+    bool saw_brick_score = false;
+    bool saw_segment_advance_after_brick = false;
+    bool reached_serve_or_game_over_after_brick = false;
+    int brick_segment_seq = -1;
+
+    for (int i = 0; i < 450; i++) {
+        usleep(10000);
+
+        ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
+        if (snapshot) {
+            uint32_t frame_serial = (uint32_t)(i + 1);
+            uint32_t now_ms = (uint32_t)platform_current_time_ms();
+            vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, frame_serial, now_ms);
+            VgRenderFrameSlotResult slot_result = {0};
+            if (vg_render_frame_slot_record_result_at_ms(snapshot,
+                                                         &render_state,
+                                                         &fb,
+                                                         frame_serial,
+                                                         now_ms,
+                                                         render_state.has_animation,
+                                                         &slot_result)) {
+                vg_rendered_state_capture_commit();
+            } else {
+                vg_rendered_state_capture_discard();
+            }
+            RELEASE(snapshot);
+        }
+
+        ID state = atom_deref_owned(state_atom);
+        if (state && is_map(state)) {
+            ID score = map_get_sentinel(state, score_kw, NULL);
+            ID segment_seq = map_get_sentinel(state, segment_seq_kw, NULL);
+            ID phase = map_get_sentinel(state, phase_kw, NULL);
+            if (!saw_brick_score && score && is_fixnum(score) && as_fixnum(score) > 0) {
+                saw_brick_score = true;
+                if (segment_seq && is_fixnum(segment_seq)) {
+                    brick_segment_seq = as_fixnum(segment_seq);
+                }
+            } else if (saw_brick_score && segment_seq && is_fixnum(segment_seq) &&
+                       brick_segment_seq >= 0 && as_fixnum(segment_seq) > brick_segment_seq) {
+                saw_segment_advance_after_brick = true;
+            } else if (saw_brick_score && (phase == serve_kw || phase == game_over_kw)) {
+                reached_serve_or_game_over_after_brick = true;
+            }
+        }
+        RELEASE(state);
+
+        if (saw_segment_advance_after_brick || reached_serve_or_game_over_after_brick) {
+            break;
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_viewer_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(saw_brick_score,
+                             "expected to observe at least one scored brick hit");
+    TEST_ASSERT_TRUE_MESSAGE(saw_segment_advance_after_brick || reached_serve_or_game_over_after_brick,
+                             "after first brick hit, expected either further segment-id-seq advance or a clean serve/game-over transition");
 }

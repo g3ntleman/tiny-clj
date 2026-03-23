@@ -64,11 +64,11 @@ typedef struct {
 } ViewerGpioKeyBinding;
 
 static const ViewerGpioKeyBinding g_viewer_gpio_key_bindings[] = {
-    {KB_KEY_1, 1, false}, {KB_KEY_2, 2, false}, {KB_KEY_3, 3, false}, {KB_KEY_4, 4, false},
-    {KB_KEY_5, 5, false}, {KB_KEY_6, 6, false}, {KB_KEY_7, 7, false}, {KB_KEY_8, 8, false},
-    {KB_KEY_9, 9, false}, {KB_KEY_0, 0, false},
-    {KB_KEY_SPACE, 13, true}, {KB_KEY_ENTER, 13, true},
-    {KB_KEY_LEFT, 14, true}, {KB_KEY_RIGHT, 12, true}, {KB_KEY_UP, 26, true}, {KB_KEY_DOWN, 27, true},
+    {MFB_KB_KEY_1, 1, false}, {MFB_KB_KEY_2, 2, false}, {MFB_KB_KEY_3, 3, false}, {MFB_KB_KEY_4, 4, false},
+    {MFB_KB_KEY_5, 5, false}, {MFB_KB_KEY_6, 6, false}, {MFB_KB_KEY_7, 7, false}, {MFB_KB_KEY_8, 8, false},
+    {MFB_KB_KEY_9, 9, false}, {MFB_KB_KEY_0, 0, false},
+    {MFB_KB_KEY_SPACE, 13, true}, {MFB_KB_KEY_ENTER, 13, true},
+    {MFB_KB_KEY_LEFT, 14, true}, {MFB_KB_KEY_RIGHT, 12, true}, {MFB_KB_KEY_UP, 26, true}, {MFB_KB_KEY_DOWN, 27, true},
 };
 
 enum {
@@ -81,9 +81,9 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
         return false;
     }
-    bool esc = keys[KB_KEY_ESCAPE] != 0;
-    bool cmd_q = (keys[KB_KEY_Q] != 0) &&
-                 ((keys[KB_KEY_LEFT_SUPER] != 0) || (keys[KB_KEY_RIGHT_SUPER] != 0));
+    bool esc = keys[MFB_KB_KEY_ESCAPE] != 0;
+    bool cmd_q = (keys[MFB_KB_KEY_Q] != 0) &&
+                 ((keys[MFB_KB_KEY_LEFT_SUPER] != 0) || (keys[MFB_KB_KEY_RIGHT_SUPER] != 0));
     return esc || cmd_q;
 }
 
@@ -140,7 +140,7 @@ static void viewer_update_runtime_flags(const uint8_t *keys,
     if (!flags || !next_frame_deadline_ns) {
         return;
     }
-    if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
+    if (viewer_key_pressed_once(keys, MFB_KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
         *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     }
@@ -301,7 +301,7 @@ static bool viewer_host_window_pump_events(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_pump_events(window);
 #else
-    return mfb_update_events(window) == STATE_OK;
+    return mfb_update_events(window) == MFB_STATE_OK;
 #endif
 }
 
@@ -1054,7 +1054,7 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     }
     g_render_thread.last_transfer_clip_rect_count = 0u;
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
-    if (pthread_create(&g_render_thread.thread, NULL, viewer_render_thread_main, fb) != 0) {
+    if (subjective_c_pthread_create_named(&g_render_thread.thread, NULL, viewer_render_thread_main, fb, "render") != 0) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
         (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
@@ -1184,7 +1184,7 @@ static void viewer_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRunti
     if (!flags) {
         return;
     }
-    if (viewer_key_pressed_once(keys, KB_KEY_R, &flags->r_key_was_down)) {
+    if (viewer_key_pressed_once(keys, MFB_KB_KEY_R, &flags->r_key_was_down)) {
         flags->redraw_overlay_enabled = !flags->redraw_overlay_enabled;
     }
 }
@@ -1353,8 +1353,8 @@ int tinyclj_tiny_fx_host_app_run(void) {
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
         viewer_update_redraw_overlay_toggle(keys, &runtime_flags);
         viewer_simulate_gpio_keys(keys, &runtime_flags);
-        runtime_flags.fire_key_was_down = keys && ((keys[KB_KEY_SPACE] != 0) || (keys[KB_KEY_ENTER] != 0));
-        runtime_flags.pause_key_was_down = keys && (keys[KB_KEY_Y] != 0);
+        runtime_flags.fire_key_was_down = keys && ((keys[MFB_KB_KEY_SPACE] != 0) || (keys[MFB_KB_KEY_ENTER] != 0));
+        runtime_flags.pause_key_was_down = keys && (keys[MFB_KB_KEY_Y] != 0);
         viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
@@ -1478,7 +1478,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
                                  ? (update_end_ns - update_begin_ns)
                                  : 0u;
         timing_accumulator_add(&update_stats, update_ns);
-        if (state != STATE_OK) {
+        if (state != MFB_STATE_OK) {
             break;
         }
     }

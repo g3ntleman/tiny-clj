@@ -60,7 +60,7 @@ bool tinyfx_macos_window_wait_sync(TinyFxMacosWindow *window);
 /**
  * @brief Return the current keyboard state buffer.
  *
- * The buffer layout matches MiniFB's KB_KEY_* enum values.
+ * The buffer layout matches MiniFB's MFB_KB_KEY_* enum values.
  *
  * @param window Window handle.
  * @return Pointer to key-state buffer, or NULL.
@@ -98,7 +98,7 @@ bool tinyfx_macos_window_set_viewport(TinyFxMacosWindow *window,
  * @brief Translate a macOS virtual key code into the MiniFB key enum.
  *
  * @param key_code macOS virtual key code from NSEvent.
- * @return Matching MiniFB key, or KB_KEY_UNKNOWN.
+ * @return Matching MiniFB key, or MFB_KB_KEY_UNKNOWN.
  */
 mfb_key tinyfx_macos_key_from_virtual_key(unsigned short key_code);
 

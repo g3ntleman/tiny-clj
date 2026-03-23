@@ -124,7 +124,7 @@ bool start_runloop_thread(EvalState *st) {
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, VIEWER_RUNLOOP_STACK_SIZE);
-    int rc = pthread_create(&g_runloop_thread.thread, &attr, viewer_runloop_thread_main, st);
+    int rc = subjective_c_pthread_create_named(&g_runloop_thread.thread, &attr, viewer_runloop_thread_main, st, "interpreter");
     pthread_attr_destroy(&attr);
     if (rc != 0) {
         atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);

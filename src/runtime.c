@@ -51,6 +51,7 @@ static uint32_t g_resolve_cache_epoch_counter = 1;
 // Lightweight lifecycle generation for runtime_init activation epochs.
 static uint8_t g_resolve_cache_lifecycle_generation = 0;
 
+#if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_lifecycle_generation(void) {
     uint8_t next = (uint8_t)(g_resolve_cache_lifecycle_generation + 1u);
     // Keep 0 reserved for "disabled".
@@ -58,6 +59,7 @@ static inline uint8_t runtime_next_lifecycle_generation(void) {
     g_resolve_cache_lifecycle_generation = next;
     return next;
 }
+#endif
 
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
 static void zombie_log_fn(CljObject *v, bool is_double_free) {
@@ -122,8 +124,12 @@ void runtime_init(TinyClJRuntime *runtime) {
     
     // Activate callsite caching for this runtime lifecycle without attributing
     // setup churn to invalidation counters.
+    // When memory profiling is enabled, leave caching disabled so that
+    // CallsiteCache allocations do not distort heap measurements.
+#if !MEMORY_PROFILING_ENABLED
     runtime->resolve_cache_epoch = 1;
     runtime->resolve_cache_generation = runtime_next_lifecycle_generation();
+#endif
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -131,7 +137,10 @@ void runtime_init(TinyClJRuntime *runtime) {
         if (task_vec) {
             CljTransientVector* transient_task = make_vector_transient(task_vec);
             RELEASE(task_vec); // vector_transient() retains the result
+            // make_vector_transient returns owned; ASSIGN retains again.
+            // Drop the local owned ref to avoid leaking one ref per runtime_init().
             ASSIGN(runtime->task_queue, transient_task);
+            RELEASE(transient_task);
         }
     }
     // Timer queue is a static C array in event_loop.c – no heap init needed.

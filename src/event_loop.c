@@ -1,6 +1,7 @@
 #include "event_loop.h"
 #include "eval.h"
 #include "symbol.h"
+#include "callbacks.h"
 #include "memory.h"
 #include "exception.h"
 #include "channel.h"
@@ -8,10 +9,14 @@
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
+#include "strings.h"
+#include "record.h"
 #include "value.h"
 #include "gpio.h"
 #include "viewer_collision_bridge.h"
+#include "mini_format.h"
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +30,8 @@ static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
 static CljSymbol *KW_ARG;
 static CljSymbol *KW_HAS_ARG;
+static CljSymbol *KW_EVENT_KIND;
+static CljSymbol *KW_EVENT_KEY;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -51,6 +58,12 @@ static TimerEntry g_timer_queue[TIMER_QUEUE_CAP];
 static int        g_timer_count = 0;
 
 #define EVENT_LOOP_INGRESS_CAP 64
+/*
+ * Drain budget from ingress -> regular task queue per event-loop tick.
+ * Keep this bounded so collision bursts cannot bypass ingress backpressure
+ * by dumping unbounded work into the regular task queue in one tick.
+ */
+#define EVENT_LOOP_INGRESS_DRAIN_BUDGET 1u
 static ID g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
 static uint16_t g_event_loop_ingress_head = 0u;
 static uint16_t g_event_loop_ingress_count = 0u;
@@ -63,6 +76,15 @@ static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
+
+static inline void event_loop_mini_fprintf(FILE *stream, const char *fmt, ...) {
+    char buf[256];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    fputs(buf, stream ? stream : stderr);
+}
 
 static uint64_t event_loop_monotonic_now_ns(void) {
     struct timespec ts;
@@ -81,10 +103,10 @@ static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
     if (!should_warn) {
         return;
     }
-    unsigned long long elapsed_ms = (unsigned long long)(elapsed_ns / 1000000ull);
-    fprintf(stderr,
-            "[runloop] warning: runloop tick took %llums (threshold: 1000ms)\n",
-            elapsed_ms);
+    unsigned long elapsed_ms = (unsigned long)(elapsed_ns / 1000000ull);
+    event_loop_mini_fprintf(stderr,
+                            "[runloop] warning: runloop tick took %lums (threshold: 1000ms)\n",
+                            elapsed_ms);
     g_runloop_last_warn_ns = end_ns;
 }
 
@@ -97,24 +119,143 @@ static inline void event_loop_ingress_lock_release(void) {
     atomic_flag_clear_explicit(&g_event_loop_ingress_lock, memory_order_release);
 }
 
-static bool event_loop_ingress_push(ID fn_zero_arity) {
-    if (!fn_zero_arity) return false;
+static inline bool event_loop_value_equals(ID a, ID b) {
+    return (a == b) || (a && b && clj_equal(a, b));
+}
+
+static ID event_loop_value_get_sentinel(ID value, ID key, ID not_found) {
+    if (!value || !key) return not_found;
+    if (is_map(value)) {
+        return map_get_sentinel(value, key, not_found);
+    }
+    if (TAG(value) == CLJ_RECORD) {
+        return record_get_sentinel(value, key, not_found);
+    }
+    return not_found;
+}
+
+static bool event_loop_extract_event_kind_and_key(ID payload, ID *out_kind, ID *out_key) {
+    if (out_kind) *out_kind = NULL;
+    if (out_key) *out_key = NULL;
+    if (!payload || !KW_EVENT_KIND || !KW_EVENT_KEY) {
+        return false;
+    }
+    ID kind = event_loop_value_get_sentinel(payload, KW_EVENT_KIND, NOT_FOUND);
+    ID key = event_loop_value_get_sentinel(payload, KW_EVENT_KEY, NOT_FOUND);
+    if (kind == NOT_FOUND || key == NOT_FOUND || !kind || !key) {
+        return false;
+    }
+    if (out_kind) *out_kind = kind;
+    if (out_key) *out_key = key;
+    return true;
+}
+
+#ifdef DEBUG
+static const char *event_loop_debug_value_cstr(ID value, CljString **owned_string) {
+    if (owned_string) {
+        *owned_string = NULL;
+    }
+    if (!value) {
+        return "nil";
+    }
+    CljString *rendered = clj_to_string(value);
+    if (!rendered) {
+        return "<to_string failed>";
+    }
+    // clj_to_string returns an autoreleased string in tiny-clj integration.
+    // Do not RELEASE here; just keep pointer valid for immediate logging.
+    (void)owned_string;
+    return string_data((ID)rendered);
+}
+
+static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
+                                                         ID payload,
+                                                         ID kind,
+                                                         ID key) {
+    const char *fn_cstr = event_loop_debug_value_cstr(fn_one_arity, NULL);
+    const char *kind_cstr = event_loop_debug_value_cstr(kind, NULL);
+    const char *key_cstr = event_loop_debug_value_cstr(key, NULL);
+    const char *payload_cstr = event_loop_debug_value_cstr(payload, NULL);
+
+    event_loop_mini_fprintf(stderr,
+                            "[runloop][ingress][coalesce] fn=%s kind=%s key=%s payload=%s\n",
+                            fn_cstr,
+                            kind_cstr,
+                            key_cstr,
+                            payload_cstr);
+}
+#endif
+
+static bool event_loop_ingress_entry_matches_kind_key(ID entry,
+                                                      ID fn_one_arity,
+                                                      ID kind,
+                                                      ID key) {
+    if (!entry || !fn_one_arity || !kind || !key || TAG(entry) != CLJ_MAP_PERSISTENT) {
+        return false;
+    }
+    ID queued_fn = map_get_sentinel(entry, KW_FN, NULL);
+    if (!event_loop_value_equals(queued_fn, fn_one_arity)) {
+        return false;
+    }
+    if (!map_get_sentinel(entry, KW_HAS_ARG, NULL)) {
+        return false;
+    }
+    ID queued_arg = map_get_sentinel(entry, KW_ARG, NOT_FOUND);
+    if (queued_arg == NOT_FOUND || !queued_arg) {
+        return false;
+    }
+    ID queued_kind = NULL;
+    ID queued_key = NULL;
+    if (!event_loop_extract_event_kind_and_key(queued_arg, &queued_kind, &queued_key)) {
+        return false;
+    }
+    return event_loop_value_equals(queued_kind, kind) &&
+           event_loop_value_equals(queued_key, key);
+}
+
+typedef enum {
+    EVENT_LOOP_INGRESS_PUSH_REJECTED = 0,
+    EVENT_LOOP_INGRESS_PUSH_ENQUEUED = 1,
+    EVENT_LOOP_INGRESS_PUSH_COALESCED = 2
+} EventLoopIngressPushResult;
+
+static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID entry,
+                                                                           ID coalesce_fn,
+                                                                           ID coalesce_kind,
+                                                                           ID coalesce_key) {
+    if (!entry) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
+    bool coalescing_enabled = coalesce_fn && coalesce_kind && coalesce_key;
+
     event_loop_ingress_lock_acquire();
-    bool ok = false;
-    if (!g_event_loop_ingress_closed && g_event_loop_ingress_count < EVENT_LOOP_INGRESS_CAP) {
-        uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
-        g_event_loop_ingress_queue[tail] = fn_zero_arity;
-        g_event_loop_ingress_count++;
-        g_event_loop_ingress_accepted_count++;
-        if ((uint32_t)g_event_loop_ingress_count > g_event_loop_ingress_high_watermark) {
-            g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
-        }
-        ok = true;
-    } else {
+    if (g_event_loop_ingress_closed || g_event_loop_ingress_count >= EVENT_LOOP_INGRESS_CAP) {
         g_event_loop_ingress_rejected_count++;
+        event_loop_ingress_lock_release();
+        return EVENT_LOOP_INGRESS_PUSH_REJECTED;
+    }
+
+    if (coalescing_enabled) {
+        for (uint16_t i = 0u; i < g_event_loop_ingress_count; i++) {
+            uint16_t idx = (uint16_t)((g_event_loop_ingress_head + i) % EVENT_LOOP_INGRESS_CAP);
+            ID queued = g_event_loop_ingress_queue[idx];
+            if (event_loop_ingress_entry_matches_kind_key(queued,
+                                                          coalesce_fn,
+                                                          coalesce_kind,
+                                                          coalesce_key)) {
+                event_loop_ingress_lock_release();
+                return EVENT_LOOP_INGRESS_PUSH_COALESCED;
+            }
+        }
+    }
+
+    uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
+    g_event_loop_ingress_queue[tail] = entry;
+    g_event_loop_ingress_count++;
+    g_event_loop_ingress_accepted_count++;
+    if ((uint32_t)g_event_loop_ingress_count > g_event_loop_ingress_high_watermark) {
+        g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
     }
     event_loop_ingress_lock_release();
-    return ok;
+    return EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
 }
 
 static ID event_loop_ingress_pop(void) {
@@ -132,13 +273,15 @@ static ID event_loop_ingress_pop(void) {
 }
 
 static void event_loop_ingress_drain(void) {
-    while (true) {
+    uint32_t drained = 0u;
+    while (drained < EVENT_LOOP_INGRESS_DRAIN_BUDGET) {
         ID fn = event_loop_ingress_pop();
         if (!fn) {
             return;
         }
         event_loop_enqueue(fn, NULL);
         RELEASE(fn);
+        drained++;
     }
 }
 
@@ -362,6 +505,8 @@ void event_loop_init(void) {
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
     KW_ARG = intern_symbol_global(":arg");
     KW_HAS_ARG = intern_symbol_global(":has-arg");
+    KW_EVENT_KIND = intern_symbol_global(":kind");
+    KW_EVENT_KEY = intern_symbol_global(":key");
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;
@@ -426,7 +571,9 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     if (!fn_zero_arity) return false;
     ID retained = RETAIN(fn_zero_arity);
-    if (event_loop_ingress_push(retained)) {
+    EventLoopIngressPushResult push_result =
+        event_loop_ingress_push_with_coalescing(retained, NULL, NULL, NULL);
+    if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
         return true;
     }
     RELEASE(retained);
@@ -435,11 +582,29 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
+    ID event_kind = NULL;
+    ID event_key = NULL;
+    bool can_coalesce = event_loop_extract_event_kind_and_key(arg, &event_kind, &event_key);
+
     CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg, true);
     if (!task_map) {
         return false;
     }
-    if (event_loop_ingress_push(task_map)) {
+    EventLoopIngressPushResult push_result =
+        event_loop_ingress_push_with_coalescing(task_map,
+                                                can_coalesce ? fn_one_arity : NULL,
+                                                can_coalesce ? event_kind : NULL,
+                                                can_coalesce ? event_key : NULL);
+    if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
+        return true;
+    }
+    if (push_result == EVENT_LOOP_INGRESS_PUSH_COALESCED) {
+#ifdef DEBUG
+        if (can_coalesce) {
+            event_loop_debug_log_coalesced_ingress_event(fn_one_arity, arg, event_kind, event_key);
+        }
+#endif
+        RELEASE(task_map);
         return true;
     }
     RELEASE(task_map);
@@ -589,7 +754,8 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     } CATCH(ex) {
         ok = false;
         if (ex) {
-            fprintf(stderr, "[runloop] task exception while executing deferred callback/task\n");
+            event_loop_mini_fprintf(stderr,
+                                    "[runloop] task exception while executing deferred callback/task\n");
             print_exception(ex);
             fflush(stderr);
         }

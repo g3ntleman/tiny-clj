@@ -124,6 +124,20 @@ renderer has not published a fresh snapshot yet."
       (cancel-timer poll-timer-id)))
   nil)
 
+(defn reset-watch-edge!
+  "Re-arms one watcher edge by priming :last-at-end to true.
+This intentionally suppresses one stale :at-end=true sample from the previous
+segment; the watcher re-arms itself once it sees :at-end=false on the new
+segment and then emits the next real false->true end edge."
+  [watch-id]
+  (when watch-id
+    (swap! timeline-watchers*
+           (fn [watchers]
+             (if (contains? watchers watch-id)
+               (assoc watchers watch-id (assoc (get watchers watch-id) :last-at-end true))
+               watchers))))
+  nil)
+
 (defn watch
   "Registers or removes one timeline end watcher.
 

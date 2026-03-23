@@ -377,6 +377,50 @@ TEST(test_runtime_stats_bytes_peak_rounded_target_no_core) {
   snprintf(msg, sizeof(msg), "bytes-peak delta must be <= %zu", target_bytes_peak);
   TEST_ASSERT_TRUE_MESSAGE(delta_peak <= target_bytes_peak, msg);
 }
+
+TEST(test_runtime_stats_runtime_init_reset_does_not_accumulate_task_queue_vectors) {
+  runtime_reset(&g_runtime);
+
+  /* Warm-up once so one-time global init allocations do not pollute the delta. */
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+    runtime_reset(&g_runtime);
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 64;
+  for (int i = 0; i < cycles; i++) {
+    WITH_AUTORELEASE_POOL({
+      runtime_init(&g_runtime);
+      runtime_reset(&g_runtime);
+    });
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long transient_vector_bytes_diff =
+      (long long)after.bytes_current_by_type[CLJ_VECTOR_TRANSIENT] -
+      (long long)before.bytes_current_by_type[CLJ_VECTOR_TRANSIENT];
+  long long vector_bytes_diff =
+      (long long)after.bytes_current_by_type[CLJ_VECTOR_PERSISTENT] -
+      (long long)before.bytes_current_by_type[CLJ_VECTOR_PERSISTENT];
+
+  fprintf(stderr,
+          "[runtime-init-reset] cycles=%d transient-vector-bytes=%+lld vector-bytes=%+lld\n",
+          cycles,
+          transient_vector_bytes_diff,
+          vector_bytes_diff);
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      256,
+      (int)transient_vector_bytes_diff,
+      "runtime_init/runtime_reset must not leak transient task_queue vectors");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      256,
+      (int)vector_bytes_diff,
+      "runtime_init/runtime_reset must not leak persistent task_queue backings");
+}
 #endif
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED

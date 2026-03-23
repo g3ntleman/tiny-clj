@@ -690,7 +690,7 @@ void sound_backend_init(int voice_count) {
     }
 
     atomic_store_explicit(&g_tick_thread_running, true, memory_order_release);
-    if (pthread_create(&g_tick_thread, NULL, host_tick_thread_main, NULL) != 0) {
+    if (subjective_c_pthread_create_named(&g_tick_thread, NULL, host_tick_thread_main, NULL, "sound-tick") != 0) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
         host_sound_throw_init_failure("tick-thread", -1);

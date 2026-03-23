@@ -734,7 +734,9 @@ void ns_end_resolve_cache_batch(void) {
     g_resolve_cache_batch_depth--;
     if (g_resolve_cache_batch_depth == 0 && g_resolve_cache_batch_dirty) {
         g_resolve_cache_batch_dirty = false;
+#if !MEMORY_PROFILING_ENABLED
         g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
+#endif
     }
 }
 
@@ -746,8 +748,10 @@ void ns_invalidate_resolve_cache(void) {
         g_resolve_cache_batch_dirty = true;
         return;
     }
+#if !MEMORY_PROFILING_ENABLED
     // Invalidate callsite caches by bumping the global epoch counter.
     g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
+#endif
 }
 
 /**
