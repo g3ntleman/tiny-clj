@@ -322,6 +322,12 @@ bool sound_engine_tick_is_running(void);
 void sound_tick_start(void);
 void sound_tick_stop(void);
 void sound_tick_kick(void);
+void sound_tick_sleep(void);
+
+/* Host scheduler helper: advance logical engine time by all due and skipped
+ * ticks so SFX gate timing stays aligned with wall-clock time after late
+ * wakeups. */
+void sound_backend_host_process_due_ticks(uint32_t due, uint32_t skipped_ticks);
 
 /* Host backend status helper (debug).
  * On unsupported platforms returns false. */

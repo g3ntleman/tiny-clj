@@ -465,6 +465,27 @@ TEST(test_breakout_contract_serve_keeps_ball_attached_to_paddle) {
     TEST_ASSERT_TRUE(vector_nth(v, 3) == NULL);
 }
 
+TEST(test_breakout_contract_launch_from_serve_starts_straight_up) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [s0 (assoc (tiny-breakout.core/init-state) :phase :serve :paddle-x 140) "
+        "        s1 (tiny-breakout.core/apply-input s0 {:launch true} 1000 nil) "
+        "        seg (:ball-segment s1)] "
+        "    [(:phase s1) (:ball-x s1) (:ball-vx s1) (:ball-vy s1) (:to-x seg) (:wall seg)]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 0));
+    TEST_ASSERT_EQUAL_INT(160, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_EQUAL_INT(-2, as_fixnum(vector_nth(v, 3)));
+    TEST_ASSERT_EQUAL_INT(160, as_fixnum(vector_nth(v, 4)));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":top"), vector_nth(v, 5));
+}
+
 TEST(test_breakout_contract_segment_end_bottom_out_decrements_life_and_enters_serve) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(

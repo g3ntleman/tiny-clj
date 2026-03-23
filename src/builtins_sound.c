@@ -11,6 +11,8 @@
  */
 
 #include <string.h>
+#include <stdio.h>
+#include <time.h>
 
 #include "sound_engine.h"
 #include "builtins_sound.h"
@@ -28,6 +30,48 @@
 
 #define TINYCLJ_SOUND_NATIVE_NS "tiny-fx.sound-native"
 #define TINYCLJ_SOUND_DEBUG_NS "tiny-fx.sound-debug"
+
+// #region agent log
+static long long tinyclj_debug_log_now_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
+        return 0;
+    }
+    return ((long long)ts.tv_sec * 1000ll) + ((long long)ts.tv_nsec / 1000000ll);
+}
+
+static const char *tinyclj_debug_track_name(ID track_id) {
+    if (!track_id || TAG(track_id) != CLJ_SYMBOL) {
+        return "<non-symbol>";
+    }
+    CljSymbol *sym = as_symbol(track_id);
+    if (!sym || !sym->cname) {
+        return "<unnamed-symbol>";
+    }
+    return sym->cname;
+}
+
+static void tinyclj_debug_log_native_sound_play_sfx(ID track_id, bool ok) {
+    FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
+    if (!f) {
+        return;
+    }
+    SoundHostStatus st = {0};
+    (void)sound_backend_host_get_status(&st);
+    fprintf(f,
+            "{\"sessionId\":\"c994fc\",\"runId\":\"initial\",\"hypothesisId\":\"H1\",\"location\":\"src/builtins_sound.c:native_sound_play_sfx\",\"message\":\"native sound play sfx result\",\"data\":{\"trackId\":\"%s\",\"ok\":%s,\"backendAvailable\":%s,\"soundRunning\":%s,\"tickEnabled\":%s,\"tickThreadRunning\":%s,\"tickRunning\":%s,\"voiceCount\":%d},\"timestamp\":%lld}\n",
+            tinyclj_debug_track_name(track_id),
+            ok ? "true" : "false",
+            st.backend_available ? "true" : "false",
+            st.sound_running ? "true" : "false",
+            st.tick_enabled ? "true" : "false",
+            st.tick_thread_running ? "true" : "false",
+            g_sound_engine.tick_running ? "true" : "false",
+            st.voice_count,
+            tinyclj_debug_log_now_ms());
+    fclose(f);
+}
+// #endregion
 
 /* ========================================================================= */
 /* Native function implementations                                           */
@@ -179,6 +223,9 @@ ID native_sound_play_sfx(ID *args, unsigned int argc) {
     }
 
     bool ok = sound_engine_play_sfx(sfx_id);
+    // #region agent log
+    tinyclj_debug_log_native_sound_play_sfx(sfx_id, ok);
+    // #endregion
     return ok ? clj_true : clj_false;
 }
 

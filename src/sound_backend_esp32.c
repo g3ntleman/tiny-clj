@@ -205,6 +205,9 @@ void sound_tick_stop(void) {
     sound_backend_silence_pwm_voices();
 }
 
+void sound_tick_sleep(void) {
+}
+
 void sound_tick_kick(void) {
     if (!sound_engine_tick_is_running()) {
         sound_tick_start();

@@ -474,27 +474,6 @@ if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
     message(STATUS "🎯 Binary Size Target: minimized")
 endif()
 
-# Profiling Build - Optimized but with visible functions for profiling
-add_executable(tiny-clj-profile
-    src/repl.c
-    src/platform_macos.c
-    src/line_editor.c
-    ${SOURCES}
-)
-target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
-target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
-tinyclj_link_apple_base(tiny-clj-profile)
-tinyclj_target_configure_tiny_fx(tiny-clj-profile HOST OFF)
-target_include_directories(tiny-clj-profile PRIVATE
-    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
-)
-tinyclj_target_use_generated_embedded_clojure(tiny-clj-profile)
-target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=${META_ENABLED_VALUE} MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} DEBUG)
-set_target_properties(tiny-clj-profile PROPERTIES
-    COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-)
-
 # ============================================================================
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================

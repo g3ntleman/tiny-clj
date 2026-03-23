@@ -9,7 +9,7 @@
 (def paddle-speed 4)
 (def ball-size 4)
 (def default-lives 3)
-(def launch-speed-x 2)
+(def launch-speed-x 0)
 (def launch-speed-y -2)
 (def segment-step-ms 16)
 
