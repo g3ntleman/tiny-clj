@@ -55,9 +55,8 @@ struct CljString* stacktrace(void);
 #endif
 
 // Global exception stack (independent of EvalState)
-GlobalExceptionStack global_exception_stack = {0};
+THREAD_LOCAL GlobalExceptionStack global_exception_stack = {0};
 
-#include "thread_local.h"
 #define THREAD_NAME_MAX 32
 static THREAD_LOCAL char g_thread_name[THREAD_NAME_MAX] = {0};
 
@@ -73,7 +72,6 @@ void subjective_c_set_thread_name(const char *name) {
 const char *subjective_c_get_thread_name(void) {
     return g_thread_name[0] ? g_thread_name : "unknown";
 }
-
 static SubjectiveCThreadState subjective_c_main_thread_storage = {0};
 static SubjectiveCThreadState subjective_c_interpreter_thread_storage = {0};
 const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_main_thread_storage;

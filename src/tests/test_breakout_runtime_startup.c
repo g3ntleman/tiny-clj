@@ -232,6 +232,55 @@ TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
     TEST_ASSERT_EQUAL_PTR(clj_true, launched);
 }
 
+TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {
+    BreakoutViewerTestContext ctx = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    ID stats = NULL;
+    ID k_total = NULL;
+    ID k_peak = NULL;
+    ID total = NULL;
+    ID peak = NULL;
+
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+
+    stats = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (heap "
+        "    (do "
+        "      (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "      (:phase @tiny-breakout.runtime/state*))))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    k_total = intern_symbol_global(":total");
+    k_peak = intern_symbol_global(":peak");
+    TEST_ASSERT_NOT_NULL(k_total);
+    TEST_ASSERT_NOT_NULL(k_peak);
+
+    total = map_get_sentinel((CljPersistentMap *)stats, k_total, NOT_FOUND);
+    peak = map_get_sentinel((CljPersistentMap *)stats, k_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, total);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, peak);
+    TEST_ASSERT_TRUE(is_fixnum(total));
+    TEST_ASSERT_TRUE(is_fixnum(peak));
+
+    fprintf(stderr,
+            "[first-launch-heap] total=%d peak=%d current=%zu limit=%zu\n",
+            as_fixnum(total),
+            as_fixnum(peak),
+            memory_current_usage_bytes(),
+            memory_get_heap_limit_bytes());
+
+    TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 96 * 1024,
+                             "direct first-launch apply-input path should stay below 96KB local peak");
+
+    memory_set_heap_limit_bytes(previous_limit);
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
 TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit_before_clojure_bootstrap) {
     size_t previous_limit = memory_get_heap_limit_bytes();
     size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
@@ -508,6 +557,7 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
 
 TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
     BreakoutViewerTestContext ctx = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
     TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
 
     ID stats = eval_string(
@@ -516,9 +566,9 @@ TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
         "  (require 'tiny-breakout.runtime) "
         "  (require 'tiny-clj.event) "
         "  (require 'tiny-fx.gfx-timeline) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (heap "
         "    (do "
-        "      (tiny-breakout.runtime/start-runtime! nil) "
         "      (tiny-clj.gpio/simulate! 13 0) "
         "      (Thread/sleep 30) "
         "      (dotimes [_ 8] (run-next-task)) "
@@ -545,6 +595,7 @@ TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
     TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 128 * 1024,
                              "fire button path should stay below 128KB local peak");
 
+    memory_set_heap_limit_bytes(previous_limit);
     breakout_viewer_test_context_destroy(&ctx);
 }
 
@@ -819,13 +870,13 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
 
 #if defined(__APPLE__)
 TEST(test_breakout_runtime_startup_maps_macos_virtual_keys_to_runtime_keys) {
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
-    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
 }
 #endif
 
@@ -895,6 +946,37 @@ TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) 
 
     TEST_ASSERT_TRUE(viewer_should_run_collision_step(2u, &last_collision_frame_serial));
     TEST_ASSERT_EQUAL_UINT64(2u, (uint64_t)last_collision_frame_serial);
+}
+
+TEST(test_breakout_runtime_startup_redraw_overlay_keeps_last_non_empty_transfer_until_presented) {
+    memset(&g_render_thread, 0, sizeof(g_render_thread));
+    TEST_ASSERT_EQUAL_INT(0, pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL));
+
+    VgClipRect transfer_rect = {.x = 10, .y = 20, .w = 30, .h = 40};
+    viewer_store_last_transfer_result(5u, &transfer_rect, 1u, 123u);
+    viewer_store_last_transfer_result(0u, NULL, 0u, 0u);
+
+    VgClipRect overlay_rects[4] = {0};
+    uint_fast32_t last_presented_overlay_frame_serial = 0u;
+    uint_fast32_t overlay_frame_serial = 0u;
+    size_t overlay_count = viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+                                                             overlay_rects,
+                                                             4u,
+                                                             &overlay_frame_serial);
+
+    TEST_ASSERT_EQUAL_UINT(1u, overlay_count);
+    TEST_ASSERT_EQUAL_UINT64(5u, (uint64_t)overlay_frame_serial);
+    TEST_ASSERT_EQUAL_UINT64(5u, (uint64_t)last_presented_overlay_frame_serial);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(transfer_rect, overlay_rects[0]));
+    TEST_ASSERT_EQUAL_UINT(0u, viewer_copy_last_transfer_rects(overlay_rects, 4u));
+    TEST_ASSERT_EQUAL_UINT(0u,
+                           viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+                                                             overlay_rects,
+                                                             4u,
+                                                             &overlay_frame_serial));
+
+    (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
+    memset(&g_render_thread, 0, sizeof(g_render_thread));
 }
 
 TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_driven_scene_updates) {
@@ -1395,4 +1477,94 @@ TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segm
                              "expected to observe at least one scored brick hit");
     TEST_ASSERT_TRUE_MESSAGE(saw_segment_advance_after_brick || reached_serve_or_game_over_after_brick,
                              "after first brick hit, expected either further segment-id-seq advance or a clean serve/game-over transition");
+}
+
+TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_heap_limit) {
+    BreakoutViewerTestContext ctx = {0};
+    VgSlotChangeTracker slot_change_tracker = {0};
+    VgFrameBuffer fb = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    bool caught = false;
+    ID caught_ex = NULL;
+    uint_fast32_t last_collision_frame_serial = 0u;
+    ID startup_fn = NULL;
+    ID launch_fn = NULL;
+    ID launch_arg = NULL;
+    ID state_atom_id = NULL;
+    ID play_phase = intern_symbol_global(":play");
+    ID k_phase = intern_symbol_global(":phase");
+    ID final_state = NULL;
+    ID final_phase = NULL;
+
+    TRY {
+        TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+        TEST_ASSERT_TRUE(viewer_init_slot_runtime_buffers(&ctx.bundle));
+        TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
+        memset(g_render_buffer, 0, sizeof(g_render_buffer));
+        TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, VIEW_W, VIEW_H, g_render_buffer, VIEW_W * VIEW_H));
+        startup_fn = RETAIN(eval_string(
+            "(do "
+            "  (require 'tiny-breakout.runtime) "
+            "  tiny-breakout.runtime/start-runtime!)",
+            ctx.st));
+        launch_fn = RETAIN(eval_string("tiny-breakout.runtime/apply-input!", ctx.st));
+        launch_arg = RETAIN(eval_string("{:launch true}", ctx.st));
+        state_atom_id = RETAIN(eval_string("tiny-breakout.runtime/state*", ctx.st));
+        TEST_ASSERT_NOT_NULL(startup_fn);
+        TEST_ASSERT_NOT_NULL(launch_fn);
+        TEST_ASSERT_NOT_NULL(launch_arg);
+        TEST_ASSERT_NOT_NULL(state_atom_id);
+        TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+        tiny_renderer_lifecycle_set_callbacks(viewer_renderer_start_callback,
+                                              viewer_renderer_stop_callback,
+                                              &fb);
+        TEST_ASSERT_TRUE(tiny_renderer_lifecycle_start(NULL));
+        TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+        TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)startup_fn, NULL));
+        TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)launch_fn, launch_arg));
+
+        for (int i = 0; i < 90; i++) {
+            usleep(16000);
+            viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+            ViewerFrameRenderResult render_result = viewer_poll_render_frame();
+            if (viewer_should_run_collision_step(render_result.frame_serial,
+                                                 &last_collision_frame_serial)) {
+                (void)viewer_collision_detect_step(&ctx.bundle,
+                                                   &ctx.spatial_rules,
+                                                   (uint32_t)platform_current_time_ms(),
+                                                   NULL,
+                                                   0u);
+            }
+        }
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+
+    memory_set_heap_limit_bytes(previous_limit);
+    stop_runloop_thread();
+    if (state_atom_id && TAG(state_atom_id) == CLJ_ATOM) {
+        final_state = atom_deref((CljAtom *)state_atom_id);
+        if (is_map(final_state) && k_phase) {
+            final_phase = map_get_sentinel((CljPersistentMap *)final_state, k_phase, NULL);
+        }
+    }
+    (void)tiny_renderer_lifecycle_stop();
+    tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
+    vg_slot_change_tracker_destroy(&slot_change_tracker);
+    viewer_destroy_slot_runtime_buffers();
+    RELEASE(startup_fn);
+    RELEASE(launch_fn);
+    RELEASE(launch_arg);
+    RELEASE(state_atom_id);
+    breakout_viewer_test_context_destroy(&ctx);
+
+    if (caught_ex) {
+        print_exception(caught_ex);
+    }
+
+    TEST_ASSERT_FALSE_MESSAGE(caught,
+                              caught_ex ? "first launch with render thread should fit inside the 640KB debug heap budget"
+                                        : "");
+    TEST_ASSERT_EQUAL_PTR(play_phase, final_phase);
 }

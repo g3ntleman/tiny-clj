@@ -201,6 +201,7 @@ static ID gpio_runtime_input_tick_native(ID *args, unsigned int argc);
 static ID gpio_runtime_button_tick_native(ID *args, unsigned int argc);
 static void gpio_runtime_sensor_timer_refresh(void);
 static void gpio_runtime_button_timer_refresh(void);
+static void gpio_runtime_enqueue_button_tick(void);
 static ID gpio_runtime_make_button_event(GpioButtonWatch *watch, ID kind, int32_t pressed_ms, int32_t held_ms);
 static ID gpio_runtime_make_sensor_event(GpioSensorWatch *watch, ID kind, int32_t value, int32_t delta, bool has_active, bool active_value);
 static void gpio_runtime_emit_button_event(GpioButtonWatch *watch, ID kind, int32_t pressed_ms, int32_t held_ms);
@@ -671,6 +672,17 @@ static void gpio_runtime_button_timer_refresh(void) {
                              0);
 }
 
+static void gpio_runtime_enqueue_button_tick(void) {
+    gpio_runtime_ensure_initialized();
+    if (!g_gpio_button_timer_fn) {
+        g_gpio_button_timer_fn = make_named_func(gpio_runtime_button_tick_native,
+                                                 SYM_GPIO_BUTTON_RUNTIME_TICK);
+    }
+    if (g_gpio_button_timer_fn) {
+        (void)event_loop_enqueue_ingress((CljObject *)g_gpio_button_timer_fn);
+    }
+}
+
 static ID gpio_runtime_make_button_event(GpioButtonWatch *watch, ID kind, int32_t pressed_ms, int32_t held_ms) {
     if (!watch || !watch->control_id || !kind) {
         return NULL;
@@ -760,7 +772,7 @@ static void gpio_button_raw_callback(int32_t pin, int32_t level, void *ctx) {
     watch->last_change_ms = platform_current_time_ms();
     watch->debounce_due_ms = watch->last_change_ms + watch->debounce_ms;
     watch->debounce_pending = true;
-    gpio_runtime_button_timer_refresh();
+    gpio_runtime_enqueue_button_tick();
 }
 
 static bool gpio_runtime_process_button_watch_due(GpioButtonWatch *watch, uint32_t now_ms) {

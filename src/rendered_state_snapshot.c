@@ -8,6 +8,7 @@ typedef struct {
     VgTransformFixed world_t;
     bool has_world_aabb;
     VgAabb world_aabb;
+    uint32_t content_signature;
 } RenderedEntityRow;
 
 typedef struct {
@@ -199,6 +200,21 @@ void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAa
     row->world_aabb = world_aabb;
 }
 
+void vg_rendered_state_capture_record_entity_content_signature(uintptr_t entity_id_bits, uint32_t content_signature) {
+    if (!entity_id_bits) {
+        return;
+    }
+    RenderedSlotSnapshot *snapshot = capture_write_snapshot();
+    if (!snapshot) {
+        return;
+    }
+    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+    if (!row) {
+        return;
+    }
+    row->content_signature = content_signature;
+}
+
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
                                                VgRenderedField field,
                                                VgRenderedTimelineSample sample) {
@@ -251,6 +267,7 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
         bool changed = !prev_row ||
                        memcmp(&curr_row->world_t, &prev_row->world_t, sizeof(curr_row->world_t)) != 0 ||
                        curr_row->has_world_aabb != prev_row->has_world_aabb ||
+                       curr_row->content_signature != prev_row->content_signature ||
                        (curr_row->has_world_aabb && prev_row->has_world_aabb &&
                         !aabb_equal(curr_row->world_aabb, prev_row->world_aabb));
         if (!changed) {
@@ -335,6 +352,7 @@ bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
         bool changed = !prev_row ||
                        memcmp(&curr_row->world_t, &prev_row->world_t, sizeof(curr_row->world_t)) != 0 ||
                        curr_row->has_world_aabb != prev_row->has_world_aabb ||
+                       curr_row->content_signature != prev_row->content_signature ||
                        (curr_row->has_world_aabb && prev_row->has_world_aabb &&
                         !aabb_equal(curr_row->world_aabb, prev_row->world_aabb));
         if (!changed) {

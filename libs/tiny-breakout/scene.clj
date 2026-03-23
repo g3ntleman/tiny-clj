@@ -2,19 +2,19 @@
   (:require [tiny-breakout.core :as core]
             [tiny-fx.gfx-scene :refer [->Group ->Rect ->VText normalize-spatial-rule]]))
 
-(defn- paddle-prototype
+(defn paddle-prototype
   []
   (->Rect :breakout/paddle nil nil true 0 0 40 4 nil))
 
-(defn- ball-prototype
+(defn ball-prototype
   []
   (->Rect :breakout/ball nil nil true 0 0 4 4 nil))
 
-(defn- brick-prototype
+(defn brick-prototype
   []
   (->Rect :breakout/brick nil nil true 0 0 20 10 nil))
 
-(defn- concrete-spatial-rule
+(defn concrete-spatial-rule
   [rule-id self-id other-id]
   (record-from-map 'SpatialRule
                    (normalize-spatial-rule {:id rule-id
@@ -23,17 +23,17 @@
                                             :self self-id
                                             :other other-id})))
 
-(defn- paddle-rule
+(defn paddle-rule
   []
   (concrete-spatial-rule :ball-vs-paddle 1003 1002))
 
-(defn- paddle-rule?
+(defn paddle-rule?
   [rule]
   (and (= :ball-vs-paddle (:id rule))
        (= 1003 (:self rule))
        (= 1002 (:other rule))))
 
-(defn- brick-rule-target-id
+(defn brick-rule-target-id
   [rule]
   (if (and (= :ball-vs-brick (:id rule))
            (= 1003 (:self rule))
@@ -41,15 +41,15 @@
     (:other rule)
     nil))
 
-(defn- rule-targets
+(defn rule-targets
   [rules]
-  (loop [remaining rules
+  (loop [i 0
          known {}]
-    (if (empty? remaining)
+    (if (>= i (count rules))
       known
-      (let [rule (first remaining)
+      (let [rule (nth rules i)
             brick-id (brick-rule-target-id rule)]
-        (recur (rest remaining)
+        (recur (inc i)
                (if brick-id
                  (assoc known brick-id true)
                  known))))))
@@ -71,7 +71,11 @@
   (let [bricks (visible-bricks state)
         existing-rules (let [rules (:collision-rules state)]
                          (if (vector? rules) rules []))
-        base-rules (if (some paddle-rule? existing-rules)
+        base-rules (if (some (fn [rule]
+                               (and (= :ball-vs-paddle (:id rule))
+                                    (= 1003 (:self rule))
+                                    (= 1002 (:other rule))))
+                             existing-rules)
                      existing-rules
                      (into [(paddle-rule)] existing-rules))
         has-target-cache? (rule-target-cache-valid? state base-rules)
@@ -103,7 +107,7 @@
                           (concrete-spatial-rule :ball-vs-brick 1003 brick-id))
                    true)))))))
 
-(defn- overlay-text
+(defn overlay-text
   [phase]
   (cond
     (= phase :game-over) "Game Over"
@@ -113,7 +117,7 @@
     (= phase :level-clear) "Level Clear"
     :else ""))
 
-(defn- brick->entity
+(defn brick->entity
   [brick prototype]
   (->Rect (:id brick)
           nil
@@ -125,7 +129,7 @@
           (:h brick)
           prototype))
 
-(defn- maybe-field-timeline
+(defn maybe-field-timeline
   [motion from-value axis-key end-event?]
   (if (and (map? motion)
            (number? (:start-ms motion))
@@ -140,7 +144,7 @@
                     end-event?])
     from-value))
 
-(defn- attached-ball-motion
+(defn attached-ball-motion
   [state]
   (let [phase (get state :phase)
         motion (get state :paddle-motion)
@@ -157,7 +161,7 @@
                       false])
       nil)))
 
-(defn- visible-bricks
+(defn visible-bricks
   [state]
   (let [active-bricks (get state :bricks)
         levels (get state :levels)
@@ -207,13 +211,14 @@
                          1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
                          1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
                          1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)
-                         1006 (->VText 1006 nil nil true 236 12 1 0 "Lifes:" nil)
-                         1007 (->VText 1007 nil nil true 296 12 1 0 lives-text nil)}]
-      (loop [remaining bricks
+                         1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
+                         1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
+      (loop [i 0
              entities base-entities
-             child-ids [1001 1002 1003 1004 1005 1006 1007]]
-        (if (empty? remaining)
-          (let [root-node (->Group 'root nil nil true child-ids nil)]
+             child-ids (transient [1001 1002 1003 1004 1005 1006 1007])]
+        (if (>= i (count bricks))
+          (let [child-ids (persistent! child-ids)
+                root-node (->Group 'root nil nil true child-ids nil)]
             {:type :FrameScene
              :root 'root
              :index (assoc entities 'root root-node)
@@ -224,8 +229,8 @@
              :erase-color 0
              :guard-px 1
              :collision-rules (:collision-rules state)})
-          (let [brick (first remaining)
+          (let [brick (nth bricks i)
                 brick-id (:id brick)]
-            (recur (rest remaining)
+            (recur (inc i)
                    (assoc entities brick-id (brick->entity brick brick-shape))
-                   (conj child-ids brick-id))))))))
+                   (conj! child-ids brick-id))))))))

@@ -93,12 +93,16 @@ static bool clip_rects_overlap(VgClipRect a, VgClipRect b) {
 static bool dirty_union_area_within_merge_factor(uint32_t union_area, uint32_t separate_area) {
     /*
      * Keep this comparison division-free and overflow-safe:
-     *   union_area / separate_area <= 4 / 3
+     *   union_area / separate_area <= 5 / 4
      * becomes
-     *   union_area * 3 <= separate_area * 4
+     *   union_area * 4 <= separate_area * 5
+     *
+     * A slightly stricter threshold keeps skinny overlap clusters split when
+     * the merged union would introduce too much redraw padding around the
+     * actual dirty leaves.
      */
-    const uint64_t lhs = (uint64_t)union_area * 3u;
-    const uint64_t rhs = (uint64_t)separate_area * 4u;
+    const uint64_t lhs = (uint64_t)union_area * 4u;
+    const uint64_t rhs = (uint64_t)separate_area * 5u;
     return lhs <= rhs;
 }
 
@@ -738,6 +742,72 @@ static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFix
         fill_polygon_scanline(fb, vx, vy, 3, style.fill_color);
     }
     draw_stroke_polyline_xy(fb, vx, vy, 3, true, style);
+}
+
+static int vg_text_glyph_advance(char c) {
+    switch (c) {
+        case ' ': return 5;
+        case '.':
+        case ',':
+        case ':':
+        case ';':
+        case '!':
+        case '(':
+        case ')':
+            return 4;
+        case '?':
+            return 6;
+        case '%':
+            return 7;
+        default:
+            return 8;
+    }
+}
+
+bool vg_text_local_bounds(const VgTextData *txt, VgRectData *out_bounds) {
+    if (!txt || !out_bounds || !txt->text || txt->text[0] == '\0') {
+        return false;
+    }
+    int pen_x = 0;
+    bool have_visible_glyph = false;
+    int min_x = 0;
+    int max_x = 0;
+    size_t len = strlen(txt->text);
+    for (size_t i = 0; i < len; i++) {
+        unsigned char uc = (unsigned char)txt->text[i];
+        char c = (char)toupper((int)uc);
+        bool is_hv_mono_alnum = ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
+        int adv = is_hv_mono_alnum ? 10 : vg_text_glyph_advance(c);
+        bool visible_glyph = (c != ' ');
+        if (visible_glyph) {
+            int glyph_min_x = pen_x + (is_hv_mono_alnum ? 1 : 0);
+            int glyph_max_x = pen_x + adv - 1;
+            if (!have_visible_glyph) {
+                min_x = glyph_min_x;
+                max_x = glyph_max_x;
+                have_visible_glyph = true;
+            } else {
+                if (glyph_min_x < min_x) {
+                    min_x = glyph_min_x;
+                }
+                if (glyph_max_x > max_x) {
+                    max_x = glyph_max_x;
+                }
+            }
+        }
+        pen_x += adv;
+        if (pen_x < 0) {
+            pen_x = 0;
+        }
+    }
+    if (!have_visible_glyph || max_x < min_x) {
+        return false;
+    }
+    out_bounds->x = (int16_t)min_x;
+    out_bounds->y = 0;
+    out_bounds->w = (int16_t)((max_x - min_x) + 1);
+    out_bounds->h = 11;
+    return true;
 }
 
 static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransformFixed parent_t, VgStyle style) {

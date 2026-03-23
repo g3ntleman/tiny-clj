@@ -6,6 +6,7 @@
 #include "builtins.h"
 #include "builtins_tiny_fx_gfx.h"
 #include "callbacks.h"
+#include "eval.h"
 #include "exception.h"
 #include "memory.h"
 #include "record.h"
@@ -175,6 +176,112 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     return true;
 }
 
+static bool viewer_load_breakout_host_config_fast(EvalState *st,
+                                                  ViewerSceneBundle *out_bundle,
+                                                  ViewerSpatialRuleSet *out_rule_set) {
+    if (!st || !out_bundle || !out_rule_set) {
+        return false;
+    }
+
+    bool require_ok = false;
+    ID scene_atom = NULL;
+    ID prepare_callback = NULL;
+    ID startup_callback = NULL;
+    ID spatial_callback = NULL;
+    FrameScene *scene = NULL;
+    ViewerConfiguredSlot *slot_items = NULL;
+    bool slot_items_assigned = false;
+    bool ok = false;
+
+    WITH_AUTORELEASE_POOL({
+        require_ok = require_namespace_by_name(st, "tiny-breakout.runtime");
+    });
+    if (!require_ok) {
+        return false;
+    }
+
+    WITH_AUTORELEASE_POOL({
+        scene_atom = RETAIN(eval_string("tiny-breakout.runtime/scene*", st));
+        prepare_callback = RETAIN(eval_string("tiny-breakout.runtime/bootstrap-runtime!", st));
+        startup_callback = RETAIN(eval_string("tiny-breakout.runtime/start-runtime!", st));
+        spatial_callback = RETAIN(eval_string("tiny-breakout.runtime/on-spatial-event!", st));
+    });
+
+    if (!scene_atom || TAG(scene_atom) != CLJ_ATOM) {
+        viewer_fail_game_demo_config(NULL, "breakout host config scene atom is invalid");
+        goto cleanup;
+    }
+    if (!prepare_callback ||
+        (TAG(prepare_callback) != CLJ_FUNC && TAG(prepare_callback) != CLJ_CLOSURE)) {
+        viewer_fail_game_demo_config(NULL, "breakout host prepare callback must be callable");
+        goto cleanup;
+    }
+    if (!startup_callback ||
+        (TAG(startup_callback) != CLJ_FUNC && TAG(startup_callback) != CLJ_CLOSURE)) {
+        viewer_fail_game_demo_config(NULL, "breakout host startup callback must be callable");
+        goto cleanup;
+    }
+    if (!spatial_callback ||
+        (TAG(spatial_callback) != CLJ_FUNC && TAG(spatial_callback) != CLJ_CLOSURE)) {
+        viewer_fail_game_demo_config(NULL, "breakout host spatial callback must be callable");
+        goto cleanup;
+    }
+
+    WITH_AUTORELEASE_POOL({
+        (void)eval_function_call(prepare_callback, NULL, 0, NULL, st);
+    });
+
+    scene = viewer_frame_scene_from_atom((CljAtom *)scene_atom);
+    if (!scene) {
+        viewer_fail_game_demo_config(NULL, "breakout host scene atom must deref to a frame-scene");
+        goto cleanup;
+    }
+
+    slot_items = (ViewerConfiguredSlot *)CLJ_HOST_CALLOC(1u, sizeof(ViewerConfiguredSlot));
+    if (!slot_items) {
+        goto cleanup;
+    }
+
+    slot_items[0].id = intern_symbol_global(":game");
+    slot_items[0].scene_atom = (CljAtom *)scene_atom;
+    slot_items[0].scene = scene;
+    RETAIN(scene);
+
+    out_bundle->slots = slot_items;
+    slot_items_assigned = true;
+    out_bundle->slot_count = 1u;
+    out_bundle->game_slot_index = 0u;
+    out_bundle->has_game_slot = true;
+    out_bundle->entry = intern_symbol_global(":tiny-breakout");
+    out_bundle->startup_callback = startup_callback;
+    startup_callback = NULL;
+    out_bundle->spatial_callback = spatial_callback;
+    spatial_callback = NULL;
+    out_bundle->game_scene_atom = (CljAtom *)scene_atom;
+    out_bundle->game_scene = scene;
+    scene_atom = NULL;
+
+    if (!viewer_collision_load_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
+        viewer_fail_game_demo_config(out_bundle, "breakout host scene contains invalid spatial rules");
+        goto cleanup;
+    }
+
+    ok = true;
+
+cleanup:
+    if (!ok && out_bundle) {
+        destroy_scene_bundle(out_bundle);
+    }
+    if (!slot_items_assigned) {
+        CLJ_HOST_FREE(slot_items);
+    }
+    RELEASE(scene_atom);
+    RELEASE(prepare_callback);
+    RELEASE(startup_callback);
+    RELEASE(spatial_callback);
+    return ok;
+}
+
 bool viewer_load_game_demo_config(EvalState *st,
                                   ViewerConfigSource config_source,
                                   ViewerSceneBundle *out_bundle,
@@ -192,6 +299,9 @@ bool viewer_load_game_demo_config(EvalState *st,
     if (!config_source.namespace_name || !config_source.config_expr) {
         return viewer_fail_game_demo_config(NULL, "viewer config source is incomplete");
     }
+    if (strcmp(config_source.namespace_name, "tiny-clj.deployment") == 0) {
+        return viewer_load_breakout_host_config_fast(st, out_bundle, out_rule_set);
+    }
     bool require_ok = false;
     WITH_AUTORELEASE_POOL({
         require_ok = require_namespace_by_name(st, config_source.namespace_name);
@@ -200,52 +310,58 @@ bool viewer_load_game_demo_config(EvalState *st,
         return false;
     }
     ID cfg = NULL;
+    bool ok = false;
     WITH_AUTORELEASE_POOL({
         cfg = RETAIN(eval_string(config_source.config_expr, st));
     });
-    cfg = AUTORELEASE(cfg);
     if (!is_map(cfg)) {
-        return viewer_fail_game_demo_config(NULL, "viewer config function must return a map");
+        goto cleanup_invalid_map;
     }
     static CljSymbol *k_slots = NULL;
     static CljSymbol *k_entry = NULL;
+    static CljSymbol *k_prepare_callback = NULL;
     static CljSymbol *k_startup_callback = NULL;
     static CljSymbol *k_spatial_callback = NULL;
     static CljSymbol *k_game_scene_atom = NULL;
     k_slots = intern_symbol_global(":slots");
     k_entry = intern_symbol_global(":entry");
+    k_prepare_callback = intern_symbol_global(":prepare-callback");
     k_startup_callback = intern_symbol_global(":startup-callback");
     k_spatial_callback = intern_symbol_global(":spatial-callback");
     k_game_scene_atom = intern_symbol_global(":game-scene-atom");
-    if (!k_slots || !k_entry || !k_startup_callback || !k_spatial_callback || !k_game_scene_atom) {
-        return viewer_fail_game_demo_config(NULL, "viewer failed to intern required config keys");
+    if (!k_slots || !k_entry || !k_prepare_callback || !k_startup_callback || !k_spatial_callback || !k_game_scene_atom) {
+        goto cleanup_missing_keys;
     }
     ID slots = map_get_sentinel(cfg, k_slots, NULL);
     ID entry = map_get_sentinel(cfg, k_entry, NULL);
+    ID prepare_callback = map_get_sentinel(cfg, k_prepare_callback, NULL);
     ID startup_callback = map_get_sentinel(cfg, k_startup_callback, NULL);
     ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
     ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
+    if (prepare_callback) {
+        unsigned char prepare_tag = TAG(prepare_callback);
+        if ((prepare_tag != CLJ_FUNC && prepare_tag != CLJ_CLOSURE)) {
+            goto cleanup_invalid_prepare_callback;
+        }
+        WITH_AUTORELEASE_POOL({
+            (void)eval_function_call(prepare_callback, NULL, 0, NULL, st);
+        });
+    }
     if (!viewer_extract_scene_slots(slots, out_bundle)) {
-        return viewer_fail_game_demo_config(NULL, "viewer config contains invalid :slots data");
+        goto cleanup_invalid_slots;
     }
     builtins_tiny_fx_gfx_register_slot_bindings(slots);
     if (!spatial_callback || !game_scene_atom || TAG(game_scene_atom) != CLJ_ATOM) {
-        return viewer_fail_game_demo_config(
-            out_bundle,
-            "viewer config must provide function :spatial-callback and atom :game-scene-atom");
+        goto cleanup_missing_callbacks;
     }
     unsigned char fn_tag = TAG(spatial_callback);
     if ((fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
-        return viewer_fail_game_demo_config(
-            out_bundle,
-            "viewer config :spatial-callback must be callable");
+        goto cleanup_invalid_spatial_callback;
     }
     if (startup_callback) {
         unsigned char startup_tag = TAG(startup_callback);
         if ((startup_tag != CLJ_FUNC && startup_tag != CLJ_CLOSURE)) {
-            return viewer_fail_game_demo_config(
-                out_bundle,
-                "viewer config :startup-callback must be callable");
+            goto cleanup_invalid_startup_callback;
         }
     }
     out_bundle->entry = RETAIN(entry);
@@ -254,9 +370,7 @@ bool viewer_load_game_demo_config(EvalState *st,
     out_bundle->game_scene_atom = (CljAtom *)RETAIN(game_scene_atom);
     out_bundle->game_scene = viewer_frame_scene_from_atom(out_bundle->game_scene_atom);
     if (!out_bundle->game_scene) {
-        return viewer_fail_game_demo_config(
-            out_bundle,
-            "viewer config :game-scene-atom must deref to a frame-scene");
+        goto cleanup_invalid_game_scene;
     }
     for (uint8_t i = 0; i < out_bundle->slot_count; i++) {
         if (out_bundle->slots[i].scene_atom == out_bundle->game_scene_atom) {
@@ -266,17 +380,71 @@ bool viewer_load_game_demo_config(EvalState *st,
         }
     }
     if (!out_bundle->has_game_slot) {
-        return viewer_fail_game_demo_config(
-            out_bundle,
-            "viewer config must include :game-scene-atom in :slots");
+        goto cleanup_missing_game_slot;
     }
     out_bundle->game_scene = out_bundle->slots[out_bundle->game_slot_index].scene;
     if (!viewer_collision_load_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
-        return viewer_fail_game_demo_config(
-            out_bundle,
-            "viewer config game scene contains invalid spatial rules");
+        goto cleanup_invalid_rules;
     }
-    return true;
+    ok = true;
+
+cleanup:
+    RELEASE(cfg);
+    return ok;
+
+cleanup_invalid_map:
+    viewer_fail_game_demo_config(NULL, "viewer config function must return a map");
+    goto cleanup;
+
+cleanup_missing_keys:
+    viewer_fail_game_demo_config(NULL, "viewer failed to intern required config keys");
+    goto cleanup;
+
+cleanup_invalid_slots:
+    viewer_fail_game_demo_config(NULL, "viewer config contains invalid :slots data");
+    goto cleanup;
+
+cleanup_missing_callbacks:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config must provide function :spatial-callback and atom :game-scene-atom");
+    goto cleanup;
+
+cleanup_invalid_spatial_callback:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config :spatial-callback must be callable");
+    goto cleanup;
+
+cleanup_invalid_prepare_callback:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config :prepare-callback must be callable");
+    goto cleanup;
+
+cleanup_invalid_startup_callback:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config :startup-callback must be callable");
+    goto cleanup;
+
+cleanup_invalid_game_scene:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config :game-scene-atom must deref to a frame-scene");
+    goto cleanup;
+
+cleanup_missing_game_slot:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config must include :game-scene-atom in :slots");
+    goto cleanup;
+
+cleanup_invalid_rules:
+    viewer_fail_game_demo_config(
+        out_bundle,
+        "viewer config game scene contains invalid spatial rules");
+    goto cleanup;
 }
 
 void viewer_sync_configured_slots(ViewerSceneBundle *bundle,

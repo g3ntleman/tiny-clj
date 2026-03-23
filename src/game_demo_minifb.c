@@ -32,7 +32,10 @@
 #include "gpio.h"
 #include "atom.h"
 #include "memory.h"
+#include "tiny_clj.h"
+#if !defined(__APPLE__)
 #include "MiniFB.h"
+#endif
 #if defined(__APPLE__)
 #include "game_demo_macos_menu.h"
 #include "tiny_fx_macos_app.h"
@@ -64,11 +67,11 @@ typedef struct {
 } ViewerGpioKeyBinding;
 
 static const ViewerGpioKeyBinding g_viewer_gpio_key_bindings[] = {
-    {MFB_KB_KEY_1, 1, false}, {MFB_KB_KEY_2, 2, false}, {MFB_KB_KEY_3, 3, false}, {MFB_KB_KEY_4, 4, false},
-    {MFB_KB_KEY_5, 5, false}, {MFB_KB_KEY_6, 6, false}, {MFB_KB_KEY_7, 7, false}, {MFB_KB_KEY_8, 8, false},
-    {MFB_KB_KEY_9, 9, false}, {MFB_KB_KEY_0, 0, false},
-    {MFB_KB_KEY_SPACE, 13, true}, {MFB_KB_KEY_ENTER, 13, true},
-    {MFB_KB_KEY_LEFT, 14, true}, {MFB_KB_KEY_RIGHT, 12, true}, {MFB_KB_KEY_UP, 26, true}, {MFB_KB_KEY_DOWN, 27, true},
+    {KB_KEY_1, 1, false}, {KB_KEY_2, 2, false}, {KB_KEY_3, 3, false}, {KB_KEY_4, 4, false},
+    {KB_KEY_5, 5, false}, {KB_KEY_6, 6, false}, {KB_KEY_7, 7, false}, {KB_KEY_8, 8, false},
+    {KB_KEY_9, 9, false}, {KB_KEY_0, 0, false},
+    {KB_KEY_SPACE, 13, true}, {KB_KEY_ENTER, 13, true},
+    {KB_KEY_LEFT, 14, true}, {KB_KEY_RIGHT, 12, true}, {KB_KEY_UP, 26, true}, {KB_KEY_DOWN, 27, true},
 };
 
 enum {
@@ -81,9 +84,9 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
         return false;
     }
-    bool esc = keys[MFB_KB_KEY_ESCAPE] != 0;
-    bool cmd_q = (keys[MFB_KB_KEY_Q] != 0) &&
-                 ((keys[MFB_KB_KEY_LEFT_SUPER] != 0) || (keys[MFB_KB_KEY_RIGHT_SUPER] != 0));
+    bool esc = keys[KB_KEY_ESCAPE] != 0;
+    bool cmd_q = (keys[KB_KEY_Q] != 0) &&
+                 ((keys[KB_KEY_LEFT_SUPER] != 0) || (keys[KB_KEY_RIGHT_SUPER] != 0));
     return esc || cmd_q;
 }
 
@@ -116,6 +119,30 @@ static bool viewer_key_pressed_once(const uint8_t *keys, int key, bool *was_down
     return pressed;
 }
 
+static bool viewer_any_key_down(const uint8_t *keys, int key_a, int key_b) {
+    return keys && ((keys[key_a] != 0) || (keys[key_b] != 0));
+}
+
+static bool viewer_key_group_pressed_once(const uint8_t *keys, int key_a, int key_b, bool *was_down) {
+    if (!was_down) {
+        return false;
+    }
+    bool down = viewer_any_key_down(keys, key_a, key_b);
+    bool pressed = down && !(*was_down);
+    *was_down = down;
+    return pressed;
+}
+
+static bool viewer_enqueue_direct_input_action(bool pressed_once, CljObject *input_fn, ID input_arg) {
+    if (!pressed_once) {
+        return true;
+    }
+    if (!input_fn || !input_arg) {
+        return false;
+    }
+    return event_loop_enqueue_ingress_call(input_fn, input_arg);
+}
+
 static int32_t viewer_gpio_level_for_binding(const ViewerGpioKeyBinding *binding, bool down) {
     if (!binding) {
         return down ? 1 : 0;
@@ -140,7 +167,7 @@ static void viewer_update_runtime_flags(const uint8_t *keys,
     if (!flags || !next_frame_deadline_ns) {
         return;
     }
-    if (viewer_key_pressed_once(keys, MFB_KB_KEY_W, &flags->w_key_was_down)) {
+    if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
         *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     }
@@ -153,6 +180,9 @@ static void viewer_simulate_gpio_keys(const uint8_t *keys, ViewerRuntimeFlags *f
 
     for (size_t i = 0; i < (sizeof(g_viewer_gpio_key_bindings) / sizeof(g_viewer_gpio_key_bindings[0])); i++) {
         const ViewerGpioKeyBinding *binding = &g_viewer_gpio_key_bindings[i];
+        if (binding->key == KB_KEY_SPACE || binding->key == KB_KEY_ENTER || binding->key == KB_KEY_Y) {
+            continue;
+        }
         bool down = keys && keys[binding->key] != 0;
         if (down == flags->gpio_key_was_down[i]) {
             continue;
@@ -301,7 +331,7 @@ static bool viewer_host_window_pump_events(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_pump_events(window);
 #else
-    return mfb_update_events(window) == MFB_STATE_OK;
+    return mfb_update_events(window) == STATE_OK;
 #endif
 }
 
@@ -661,6 +691,9 @@ typedef struct {
     atomic_uint_fast64_t last_transfer_ns;
     VgClipRect last_transfer_clip_rects[VIEWER_MAX_DIRTY_PLAN_RECTS];
     uint16_t last_transfer_clip_rect_count;
+    VgClipRect last_overlay_clip_rects[VIEWER_MAX_DIRTY_PLAN_RECTS];
+    uint16_t last_overlay_clip_rect_count;
+    uint_fast32_t last_overlay_frame_serial;
     pthread_mutex_t transfer_rects_mutex;
     atomic_uint_fast32_t animated_slots_mask;
 } ViewerRenderThread;
@@ -795,6 +828,62 @@ static size_t viewer_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_
         memcpy(out_rects, g_render_thread.last_transfer_clip_rects, count * sizeof(VgClipRect));
     }
     (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    return count;
+}
+
+static void viewer_store_last_transfer_result(uint_fast32_t frame_serial,
+                                              const VgClipRect *rects,
+                                              size_t rect_count,
+                                              uint64_t transfer_ns) {
+    size_t stored_count = rect_count;
+    if (stored_count > VIEWER_MAX_DIRTY_PLAN_RECTS) {
+        stored_count = VIEWER_MAX_DIRTY_PLAN_RECTS;
+    }
+    atomic_store_explicit(&g_render_thread.last_transfer_rects, (uint32_t)stored_count, memory_order_relaxed);
+    atomic_store_explicit(&g_render_thread.last_transfer_ns, transfer_ns, memory_order_relaxed);
+    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+        return;
+    }
+    g_render_thread.last_transfer_clip_rect_count = (uint16_t)stored_count;
+    if (stored_count > 0u && rects) {
+        memcpy(g_render_thread.last_transfer_clip_rects, rects, stored_count * sizeof(VgClipRect));
+        g_render_thread.last_overlay_clip_rect_count = (uint16_t)stored_count;
+        memcpy(g_render_thread.last_overlay_clip_rects, rects, stored_count * sizeof(VgClipRect));
+        g_render_thread.last_overlay_frame_serial = frame_serial;
+    }
+    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+}
+
+static size_t viewer_take_pending_overlay_rects(uint_fast32_t *io_last_presented_overlay_frame_serial,
+                                                VgClipRect *out_rects,
+                                                size_t out_capacity,
+                                                uint_fast32_t *out_frame_serial) {
+    if (!io_last_presented_overlay_frame_serial || !out_rects || out_capacity == 0u) {
+        return 0u;
+    }
+    if (out_frame_serial) {
+        *out_frame_serial = 0u;
+    }
+    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+        return 0u;
+    }
+    uint_fast32_t overlay_frame_serial = g_render_thread.last_overlay_frame_serial;
+    if (overlay_frame_serial == 0u || overlay_frame_serial == *io_last_presented_overlay_frame_serial) {
+        (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+        return 0u;
+    }
+    size_t count = (size_t)g_render_thread.last_overlay_clip_rect_count;
+    if (count > out_capacity) {
+        count = out_capacity;
+    }
+    if (count > 0u) {
+        memcpy(out_rects, g_render_thread.last_overlay_clip_rects, count * sizeof(VgClipRect));
+    }
+    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    *io_last_presented_overlay_frame_serial = overlay_frame_serial;
+    if (out_frame_serial) {
+        *out_frame_serial = overlay_frame_serial;
+    }
     return count;
 }
 
@@ -981,6 +1070,8 @@ static void *viewer_render_thread_main(void *arg) {
          */
         if (g_gram_pixels && frame_dirty_rect_count > 0u) {
             uint64_t transfer_begin_ns = monotonic_now_ns();
+            uint_fast32_t completed_frame_serial =
+                atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_relaxed) + 1u;
             VgClipRect planned_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t planned_count = vg_dirty_union_plan_rects(frame_dirty_rects,
                                                              frame_dirty_rect_count,
@@ -990,34 +1081,13 @@ static void *viewer_render_thread_main(void *arg) {
             for (size_t rect_i = 0; rect_i < planned_count; rect_i++) {
                 (void)vg_panel_backend_submit_clip_rect(&g_gram_panel, fb, planned_rects[rect_i]);
             }
-            if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) == 0) {
-                size_t stored_count = planned_count;
-                if (stored_count > VIEWER_MAX_DIRTY_PLAN_RECTS) {
-                    stored_count = VIEWER_MAX_DIRTY_PLAN_RECTS;
-                }
-                g_render_thread.last_transfer_clip_rect_count = (uint16_t)stored_count;
-                if (stored_count > 0u) {
-                    memcpy(g_render_thread.last_transfer_clip_rects,
-                           planned_rects,
-                           stored_count * sizeof(VgClipRect));
-                }
-                (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
-            }
             uint64_t transfer_end_ns = monotonic_now_ns();
             uint64_t transfer_ns = (transfer_end_ns > transfer_begin_ns)
                                        ? (transfer_end_ns - transfer_begin_ns)
                                        : 0u;
-            atomic_store_explicit(&g_render_thread.last_transfer_rects,
-                                  (uint32_t)planned_count,
-                                  memory_order_relaxed);
-            atomic_store_explicit(&g_render_thread.last_transfer_ns, transfer_ns, memory_order_relaxed);
+            viewer_store_last_transfer_result(completed_frame_serial, planned_rects, planned_count, transfer_ns);
         } else {
-            atomic_store_explicit(&g_render_thread.last_transfer_rects, 0u, memory_order_relaxed);
-            atomic_store_explicit(&g_render_thread.last_transfer_ns, 0u, memory_order_relaxed);
-            if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) == 0) {
-                g_render_thread.last_transfer_clip_rect_count = 0u;
-                (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
-            }
+            viewer_store_last_transfer_result(0u, NULL, 0u, 0u);
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
     }
@@ -1053,6 +1123,8 @@ static bool start_render_thread(VgFrameBuffer *fb) {
         return false;
     }
     g_render_thread.last_transfer_clip_rect_count = 0u;
+    g_render_thread.last_overlay_clip_rect_count = 0u;
+    g_render_thread.last_overlay_frame_serial = 0u;
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
     if (subjective_c_pthread_create_named(&g_render_thread.thread, NULL, viewer_render_thread_main, fb, "render") != 0) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
@@ -1184,7 +1256,7 @@ static void viewer_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRunti
     if (!flags) {
         return;
     }
-    if (viewer_key_pressed_once(keys, MFB_KB_KEY_R, &flags->r_key_was_down)) {
+    if (viewer_key_pressed_once(keys, KB_KEY_R, &flags->r_key_was_down)) {
         flags->redraw_overlay_enabled = !flags->redraw_overlay_enabled;
     }
 }
@@ -1203,6 +1275,9 @@ int tinyclj_tiny_fx_host_app_run(void) {
     bool render_thread_started = false;
     bool runloop_thread_started = false;
     bool demo_bundle_initialized = false;
+    ID direct_input_fn = NULL;
+    ID direct_launch_arg = NULL;
+    ID direct_pause_arg = NULL;
     ViewerSceneBundle demo_bundle = {0};
     ViewerSpatialRuleSet spatial_rules = {0};
     int exit_code = 1;
@@ -1260,6 +1335,13 @@ int tinyclj_tiny_fx_host_app_run(void) {
         goto cleanup;
     } END_TRY
     demo_bundle_initialized = true;
+    direct_input_fn = RETAIN(eval_string("tiny-breakout.runtime/apply-input!", viewer_eval_state));
+    direct_launch_arg = RETAIN(eval_string("{:launch true}", viewer_eval_state));
+    direct_pause_arg = RETAIN(eval_string("{:pause true}", viewer_eval_state));
+    if (!direct_input_fn || !direct_launch_arg || !direct_pause_arg) {
+        fprintf(stderr, "Failed to resolve direct breakout input actions\n");
+        goto cleanup;
+    }
     if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
         fprintf(stderr, "Failed to initialize configured slot runtime\n");
         goto cleanup;
@@ -1306,6 +1388,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     perf_window_init(&perf_window, 0.0);
 
     uint_fast32_t last_presented_frame_serial = 0u;
+    uint_fast32_t last_presented_overlay_frame_serial = 0u;
     uint_fast32_t last_collision_frame_serial = 0u;
     ViewerRuntimeFlags runtime_flags = {
 #if defined(__APPLE__)
@@ -1352,9 +1435,17 @@ int tinyclj_tiny_fx_host_app_run(void) {
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
         viewer_update_redraw_overlay_toggle(keys, &runtime_flags);
+        bool fire_pressed = viewer_key_group_pressed_once(keys,
+                                                         KB_KEY_SPACE,
+                                                         KB_KEY_ENTER,
+                                                         &runtime_flags.fire_key_was_down);
+        bool pause_pressed = viewer_key_pressed_once(keys, KB_KEY_Y, &runtime_flags.pause_key_was_down);
+        if (!viewer_enqueue_direct_input_action(fire_pressed, (CljObject *)direct_input_fn, direct_launch_arg) ||
+            !viewer_enqueue_direct_input_action(pause_pressed, (CljObject *)direct_input_fn, direct_pause_arg)) {
+            fprintf(stderr, "Failed to enqueue direct breakout input action\n");
+            break;
+        }
         viewer_simulate_gpio_keys(keys, &runtime_flags);
-        runtime_flags.fire_key_was_down = keys && ((keys[MFB_KB_KEY_SPACE] != 0) || (keys[MFB_KB_KEY_ENTER] != 0));
-        runtime_flags.pause_key_was_down = keys && (keys[MFB_KB_KEY_Y] != 0);
         viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
@@ -1371,11 +1462,15 @@ int tinyclj_tiny_fx_host_app_run(void) {
         }
 
         viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
-        if (runtime_flags.redraw_overlay_enabled && has_new_render_frame && frame_result.transfer_rects > 0u) {
+        if (has_new_render_frame) {
             VgClipRect overlay_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
-            size_t overlay_count = viewer_copy_last_transfer_rects(overlay_rects,
-                                                                   VIEWER_MAX_DIRTY_PLAN_RECTS);
-            viewer_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
+            size_t overlay_count = viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+                                                                     overlay_rects,
+                                                                     VIEWER_MAX_DIRTY_PLAN_RECTS,
+                                                                     NULL);
+            if (runtime_flags.redraw_overlay_enabled && overlay_count > 0u) {
+                viewer_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
+            }
         }
 
         if (has_new_render_frame) {
@@ -1478,7 +1573,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
                                  ? (update_end_ns - update_begin_ns)
                                  : 0u;
         timing_accumulator_add(&update_stats, update_ns);
-        if (state != MFB_STATE_OK) {
+        if (state != STATE_OK) {
             break;
         }
     }
@@ -1486,6 +1581,9 @@ int tinyclj_tiny_fx_host_app_run(void) {
     exit_code = 0;
 
 cleanup:
+    RELEASE(direct_input_fn);
+    RELEASE(direct_launch_arg);
+    RELEASE(direct_pause_arg);
 #if defined(__APPLE__)
     if (window) {
         macos_viewer_save_window_position();

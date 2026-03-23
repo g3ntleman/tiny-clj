@@ -8,6 +8,7 @@
 
 #include "object.h"
 #include "memory.h"
+#include "thread_local.h"
 #include "common.h"
 #include <setjmp.h>
 #include <stdbool.h>
@@ -101,7 +102,7 @@ typedef struct GlobalExceptionStack {
 } GlobalExceptionStack;
 
 /** @brief Global exception stack instance. */
-extern GlobalExceptionStack global_exception_stack;
+extern THREAD_LOCAL GlobalExceptionStack global_exception_stack;
 
 /**
  * @brief Read-only view of a registered process-global thread role.
@@ -181,6 +182,21 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     CLJ_FREE(h);
 }
 
+static inline void exception_handler_unlink(ExceptionHandler *h) {
+    if (!h) return;
+    if (global_exception_stack.top == h) {
+        global_exception_stack.top = h->next;
+        return;
+    }
+    ExceptionHandler *prev = global_exception_stack.top;
+    while (prev && prev->next != h) {
+        prev = prev->next;
+    }
+    if (prev) {
+        prev->next = h->next;
+    }
+}
+
 #define TRY { \
     ExceptionHandler *_h = exception_handler_alloc_or_abort(); \
     _h->next = global_exception_stack.top; \
@@ -190,15 +206,13 @@ static inline void exception_handler_free(ExceptionHandler *h) {
 
 #define CATCH(ex) \
         /* Success path: pop stack only */ \
-        ExceptionHandler *_success_handler = global_exception_stack.top; \
-        global_exception_stack.top = _success_handler->next; \
-        exception_handler_free(_success_handler); \
+        exception_handler_unlink(_h); \
+        exception_handler_free(_h); \
     } else { \
         /* Exception path: get exception from handler */ \
-        ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
-        global_exception_stack.top = _caught_h->next; \
-        exception_handler_free(_caught_h); \
+        CLJException *ex = _h->exception; \
+        exception_handler_unlink(_h); \
+        exception_handler_free(_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 
@@ -220,15 +234,13 @@ static inline void exception_handler_free(ExceptionHandler *h) {
 
 #define CATCH(ex) \
         /* Success path: pop stack only */ \
-        ExceptionHandler *_success_handler = global_exception_stack.top; \
-        global_exception_stack.top = _success_handler->next; \
-        CLJ_FREE(_success_handler); \
+        exception_handler_unlink(_h); \
+        CLJ_FREE(_h); \
     } else { \
         /* Exception path: get exception from handler */ \
-        ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
-        global_exception_stack.top = _caught_h->next; \
-        CLJ_FREE(_caught_h); \
+        CLJException *ex = _h->exception; \
+        exception_handler_unlink(_h); \
+        CLJ_FREE(_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 

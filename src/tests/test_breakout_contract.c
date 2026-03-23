@@ -691,10 +691,10 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "       (= 1002 (:other breakout-test-paddle-rule)) "
         "       (= 1003 (:self breakout-test-brick-rule)) "
         "       (= 2001 (:other breakout-test-brick-rule)) "
-        "       (= \"Lifes:\" (:text breakout-test-lives-label)) "
+        "       (= \"Lives:\" (:text breakout-test-lives-label)) "
         "       (= \"3\" (:text breakout-test-lives-value)) "
-        "       (= 236 (:x breakout-test-lives-label)) "
-        "       (= 296 (:x breakout-test-lives-value)) "
+        "       (= 226 (:x breakout-test-lives-label)) "
+        "       (= 286 (:x breakout-test-lives-value)) "
         "       (= :breakout/ball (:id (:prototype breakout-test-ball))) "
         "       (= :breakout/paddle (:id (:prototype breakout-test-paddle))) "
         "       (= :breakout/brick (:id (:prototype breakout-test-brick-node)))))",
@@ -820,6 +820,7 @@ TEST(test_breakout_contract_host_config_exposes_viewer_slots_and_atoms_without_n
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
+        "  (load-file \"libs/tiny-clj/deployment.clj\") "
         "  (require 'tiny-clj.deployment) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
         "        slots (:slots cfg) "
@@ -839,6 +840,7 @@ TEST(test_breakout_contract_runtime_apply_input_mutates_state_discretely) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
+        "  (load-file \"libs/tiny-clj/deployment.clj\") "
         "  (require 'tiny-clj.deployment) "
         "  (require 'tiny-breakout.runtime) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
@@ -865,9 +867,14 @@ TEST(test_breakout_contract_host_fire_button_simulation_reaches_breakout_runtime
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-clj.gpio/simulate! 13 1) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
-        "    (tiny-breakout.runtime/start-runtime! nil) "
-        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "    (= :play (:phase @tiny-breakout.runtime/state*))))",
+        "    ((:startup-callback cfg) nil)) "
+        "  (tiny-clj.gpio/simulate! 13 0) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (tiny-clj.gpio/simulate! 13 1) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (= :play (:phase @tiny-breakout.runtime/state*)))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -880,8 +887,8 @@ TEST(test_breakout_contract_host_left_button_moves_until_button_up) {
         "  (require 'tiny-clj.gpio) "
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-clj.gpio/simulate! 14 1) "
-        "  (tiny-clj.deployment/breakout-host-config) "
-        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    ((:startup-callback cfg) nil)) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
         "        _ (tiny-clj.gpio/simulate! 14 0) "

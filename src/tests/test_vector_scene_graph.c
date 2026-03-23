@@ -855,6 +855,48 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_falls_bac
     vg_rendered_state_reset_all();
 }
 
+TEST(test_vector_scene_graph_rendered_state_capture_text_content_change_uses_aabb_union, 0) {
+    vg_rendered_state_reset_all();
+
+    VgTransformFixed t0 = vg_transform_fixed_identity();
+    uintptr_t entity = (uintptr_t)fixnum(4202);
+
+    vg_rendered_state_capture_begin(4u, 1u, 0u);
+    vg_rendered_state_capture_record_entity(entity, t0);
+    vg_rendered_state_capture_record_entity_content_signature(entity, 0x11111111u);
+    vg_rendered_state_capture_record_entity_aabb(entity, (VgAabb){10, 19, 20, 30});
+    vg_rendered_state_capture_commit();
+
+    vg_rendered_state_capture_begin(4u, 2u, 16u);
+    vg_rendered_state_capture_record_entity(entity, t0);
+    vg_rendered_state_capture_record_entity_content_signature(entity, 0x22222222u);
+    vg_rendered_state_capture_record_entity_aabb(entity, (VgAabb){10, 14, 20, 30});
+
+    VgClipRect clip = {0, 0, TEST_W, TEST_H};
+    VgClipRect dirty = {0};
+    TEST_ASSERT_TRUE_MESSAGE(
+        vg_rendered_state_capture_compute_dirty_rect(4u, clip, 1u, &dirty),
+        "text content change with AABB should dirty only the text bounds");
+    TEST_ASSERT_EQUAL_INT(9, dirty.x);
+    TEST_ASSERT_EQUAL_INT(19, dirty.y);
+    TEST_ASSERT_EQUAL_INT(12, dirty.w);
+    TEST_ASSERT_EQUAL_INT(13, dirty.h);
+
+    vg_rendered_state_capture_discard();
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_text_local_bounds_tracks_visible_glyphs_only, 0) {
+    VgRectData bounds = {0};
+    VgTextData text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = " HI "};
+
+    TEST_ASSERT_TRUE(vg_text_local_bounds(&text, &bounds));
+    TEST_ASSERT_EQUAL_INT(6, bounds.x);
+    TEST_ASSERT_EQUAL_INT(0, bounds.y);
+    TEST_ASSERT_EQUAL_INT(19, bounds.w);
+    TEST_ASSERT_EQUAL_INT(11, bounds.h);
+}
+
 TEST(test_vector_scene_graph_rendered_state_capture_collect_dirty_rects_keeps_far_entities_separate, 0) {
     vg_rendered_state_reset_all();
 

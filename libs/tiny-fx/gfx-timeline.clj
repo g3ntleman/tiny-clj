@@ -2,8 +2,6 @@
   (:require [tiny-clj.runtime :as runtime]
             [tiny-clj.event :as event]))
 
-(declare poll-watchers!)
-
 (def timeline-watchers* (atom {}))
 
 (def ^:private poll-timer-id :tiny-fx/timeline-watch-poll)
@@ -24,6 +22,38 @@
     (throw "timeline/watch requires :entity-id"))
   (when (and f (not (keyword? (:field opts))))
     (throw "timeline/watch requires keyword :field")))
+
+(defn- next-poll-delay-ms
+  []
+  (let [watcher-entries (vec @timeline-watchers*)]
+    (loop [i 0
+           best-delay nil]
+      (if (< i (count watcher-entries))
+        (let [[_ watcher] (nth watcher-entries i)
+              progress (runtime/renderer-timeline-progress (:slot watcher)
+                                                          (:entity-id watcher)
+                                                          (:field watcher))
+              flagged (= true (:end-event progress))
+              at-end (and flagged (= true (:at-end progress)))
+              was-at-end (= true (:last-at-end watcher))
+              phase-ms (let [v (:phase-ms progress)] (if (number? v) v 0))
+              period-ms (let [v (:period-ms progress)] (if (number? v) v 0))
+              remaining-ms (if (> period-ms phase-ms)
+                             (- period-ms phase-ms)
+                             poll-period-ms)
+              next-delay (cond
+                           (nil? progress) nil
+                           (and at-end (not was-at-end)) poll-period-ms
+                           (and flagged (not at-end)) (max poll-period-ms remaining-ms)
+                           :else nil)
+              next-best (cond
+                          (nil? next-delay) best-delay
+                          (nil? best-delay) next-delay
+                          (< next-delay best-delay) next-delay
+                          :else best-delay)]
+          (recur (inc i) next-best))
+        (when (number? best-delay)
+          (if (> best-delay 0) best-delay poll-period-ms))))))
 
 (defn poll-watchers!
   "Runtime helper: checks watched timelines and emits one callback on each false->true :at-end edge."
@@ -70,57 +100,19 @@
         (tiny-fx.gfx-timeline/kick-watchers!))))
   nil)
 
-(def ^:private poll-timer-fn
-  (fn []
-    (tiny-fx.gfx-timeline/poll-watchers!)))
-
-(def ^:private poll-timer-spec {:id poll-timer-id
-                                :fn poll-timer-fn})
-
-(defn- next-poll-delay-ms
-  []
-  (let [watchers @timeline-watchers*]
-    (loop [remaining (seq watchers)
-           best-delay nil]
-      (if (seq remaining)
-        (let [[_ watcher] (first remaining)
-              progress (runtime/renderer-timeline-progress (:slot watcher)
-                                                          (:entity-id watcher)
-                                                          (:field watcher))
-              flagged (= true (:end-event progress))
-              at-end (and flagged (= true (:at-end progress)))
-              was-at-end (= true (:last-at-end watcher))
-              phase-ms (let [v (:phase-ms progress)] (if (number? v) v 0))
-              period-ms (let [v (:period-ms progress)] (if (number? v) v 0))
-              remaining-ms (if (> period-ms phase-ms)
-                             (- period-ms phase-ms)
-                             1)
-              next-delay (cond
-                           (nil? progress) nil
-                           (and at-end (not was-at-end)) 1
-                           (and flagged (not at-end)) remaining-ms
-                           :else nil)
-              next-best (cond
-                          (nil? next-delay) best-delay
-                          (nil? best-delay) next-delay
-                          (< next-delay best-delay) next-delay
-                          :else best-delay)]
-          (recur (next remaining) next-best))
-        (if (number? best-delay)
-          (if (> best-delay 0) best-delay 1)
-          nil)))))
-
 (defn kick-watchers!
   "Ensures timeline watchers have at most one pending wakeup.
 The next poll is scheduled for the nearest known end edge, or soon when the
 renderer has not published a fresh snapshot yet."
   []
-  (let [delay-ms (if (empty? @timeline-watchers*)
+  (let [watcher-entries (vec @tiny-fx.gfx-timeline/timeline-watchers*)
+        delay-ms (if (zero? (count watcher-entries))
                    nil
                    (let [computed (next-poll-delay-ms)]
                      (if (number? computed) computed coarse-poll-ms)))]
     (if (number? delay-ms)
-      (schedule delay-ms tiny-fx.gfx-timeline/poll-timer-spec)
+      (schedule delay-ms {:id poll-timer-id
+                          :fn tiny-fx.gfx-timeline/poll-watchers!})
       (cancel-timer poll-timer-id)))
   nil)
 
@@ -152,11 +144,11 @@ segment and then emits the next real false->true end edge."
       (let [id (nth args 0)
             f (nth args 1)
             opts (if (= argc 3) (nth args 2) {})]
-        (validate-watch id f opts)
-        (reset! timeline-watchers*
+        (tiny-fx.gfx-timeline/validate-watch id f opts)
+        (reset! tiny-fx.gfx-timeline/timeline-watchers*
                 (if (nil? f)
-                  (dissoc @timeline-watchers* id)
-                  (assoc @timeline-watchers*
+                  (dissoc @tiny-fx.gfx-timeline/timeline-watchers* id)
+                  (assoc @tiny-fx.gfx-timeline/timeline-watchers*
                          id
                          {:id id
                           :slot (:slot opts)
@@ -164,7 +156,7 @@ segment and then emits the next real false->true end edge."
                           :field (:field opts)
                           :callback f
                           :last-at-end false})))
-        (kick-watchers!)
+        (tiny-fx.gfx-timeline/kick-watchers!)
         nil))))
 
 ;; Mark timeline as loaded so event/on :timeline works without explicit preload.

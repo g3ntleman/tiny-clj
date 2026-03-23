@@ -440,6 +440,16 @@ static void capture_entity_world_aabb_points(ID entity_id,
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)entity_id, world_aabb);
 }
 
+static uint32_t text_content_signature(const char *text) {
+    const uint8_t *p = (const uint8_t *)(text ? text : "");
+    uint32_t hash = 2166136261u;
+    while (*p) {
+        hash ^= (uint32_t)(*p++);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
 /*
  * Collision proxies can be visually hidden, but they still need current world
  * bounds in the rendered-state snapshot.
@@ -1536,6 +1546,45 @@ static bool render_record_node(ID node_obj,
                                                                          now_ms,
                                                                          sc,
                                                                          out_has_animation));
+        vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
+                                                                  text_content_signature(temp.data.text.text));
+        {
+            VgRectData local_bounds = {0};
+            if (vg_text_local_bounds(&temp.data.text, &local_bounds)) {
+                VgTransformFixed text_t = vg_transform_fixed_identity();
+                text_t.m02 = ((int32_t)temp.data.text.x) << CLJ_FIXED_FRAC_BITS;
+                text_t.m12 = ((int32_t)temp.data.text.y) << CLJ_FIXED_FRAC_BITS;
+                text_t.m00 = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                text_t.m11 = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                if (temp.data.text.rot_deg != 0) {
+                    VgTransform local_t = vg_transform_identity();
+                    local_t.tx = temp.data.text.x;
+                    local_t.ty = temp.data.text.y;
+                    local_t.sx = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                    local_t.sy = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                    local_t.rot_deg = temp.data.text.rot_deg;
+                    text_t = vg_transform_fixed_from_transform(local_t);
+                }
+                VgTransformFixed text_world_t = vg_transform_fixed_compose(world_t, text_t);
+                int16_t x_max = (local_bounds.w > 0)
+                                    ? (int16_t)(local_bounds.x + local_bounds.w - 1)
+                                    : local_bounds.x;
+                int16_t y_max = (local_bounds.h > 0)
+                                    ? (int16_t)(local_bounds.y + local_bounds.h - 1)
+                                    : local_bounds.y;
+                VgPoint points[4] = {
+                    {.x = local_bounds.x, .y = local_bounds.y},
+                    {.x = x_max, .y = local_bounds.y},
+                    {.x = x_max, .y = y_max},
+                    {.x = local_bounds.x, .y = y_max},
+                };
+                if (!leaf_visible_after_aabb_capture(entity_id, text_world_t, points, 4u, style.visible)) {
+                    return true;
+                }
+            } else if (!style.visible) {
+                return true;
+            }
+        }
         if (!style.visible) {
             return true;
         }

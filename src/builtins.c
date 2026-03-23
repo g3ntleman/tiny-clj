@@ -5067,7 +5067,12 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
   }
   const bool trace_require_heap =
       (debug_require_heap != 0) &&
-      src_name && strstr(src_name, "sound-demos.clj") != NULL;
+      src_name &&
+      (strstr(src_name, "sound-demos.clj") != NULL ||
+       strstr(src_name, "tiny-clj/deployment.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/runtime.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/scene.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/core.clj") != NULL);
   Reader reader;
   reader_init_with_length(&reader, src_data, src_len);
   if (src_name && src_name[0]) {
