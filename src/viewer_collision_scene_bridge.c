@@ -1,5 +1,6 @@
 #include "viewer_collision_bridge.h"
 
+#include <pthread.h>
 #include <string.h>
 
 #include "memory.h"
@@ -7,6 +8,61 @@
 #include "tiny_fx_gfx.h"
 #include "vector.h"
 #include "viewer_host_slots.h"
+
+static pthread_once_t g_viewer_collision_scene_symbols_once = PTHREAD_ONCE_INIT;
+static ID g_viewer_collision_kw_prototype = NULL;
+static ID g_viewer_collision_sym_aabb = NULL;
+static ID g_viewer_collision_sym_spatial_event = NULL;
+static ID g_viewer_collision_kw_source_spatial = NULL;
+static ID g_viewer_collision_kw_collision_rules = NULL;
+static ID g_viewer_collision_kw_id = NULL;
+static ID g_viewer_collision_kw_slot = NULL;
+static ID g_viewer_collision_kw_kind = NULL;
+static ID g_viewer_collision_kw_channel = NULL;
+static ID g_viewer_collision_kw_radius = NULL;
+static ID g_viewer_collision_kw_self = NULL;
+static ID g_viewer_collision_kw_other = NULL;
+static ID g_viewer_collision_kw_a_id = NULL;
+static ID g_viewer_collision_kw_b_id = NULL;
+static ID g_viewer_collision_kw_collision = NULL;
+
+static void viewer_collision_scene_symbols_init_once(void) {
+    g_viewer_collision_kw_prototype = intern_symbol_global(":prototype");
+    g_viewer_collision_sym_aabb = intern_symbol_global("Aabb");
+    g_viewer_collision_sym_spatial_event = intern_symbol_global("SpatialEvent");
+    g_viewer_collision_kw_source_spatial = intern_symbol_global(":spatial");
+    g_viewer_collision_kw_collision_rules = intern_symbol_global(":collision-rules");
+    g_viewer_collision_kw_id = intern_symbol_global(":id");
+    g_viewer_collision_kw_slot = intern_symbol_global(":slot");
+    g_viewer_collision_kw_kind = intern_symbol_global(":kind");
+    g_viewer_collision_kw_channel = intern_symbol_global(":channel");
+    g_viewer_collision_kw_radius = intern_symbol_global(":radius");
+    g_viewer_collision_kw_self = intern_symbol_global(":self");
+    g_viewer_collision_kw_other = intern_symbol_global(":other");
+    g_viewer_collision_kw_a_id = intern_symbol_global(":a-id");
+    g_viewer_collision_kw_b_id = intern_symbol_global(":b-id");
+    g_viewer_collision_kw_collision = intern_symbol_global(":collision");
+}
+
+static bool viewer_collision_scene_symbols_ready(void) {
+    (void)pthread_once(&g_viewer_collision_scene_symbols_once,
+                       viewer_collision_scene_symbols_init_once);
+    return g_viewer_collision_kw_prototype &&
+           g_viewer_collision_sym_aabb &&
+           g_viewer_collision_sym_spatial_event &&
+           g_viewer_collision_kw_source_spatial &&
+           g_viewer_collision_kw_collision_rules &&
+           g_viewer_collision_kw_id &&
+           g_viewer_collision_kw_slot &&
+           g_viewer_collision_kw_kind &&
+           g_viewer_collision_kw_channel &&
+           g_viewer_collision_kw_radius &&
+           g_viewer_collision_kw_self &&
+           g_viewer_collision_kw_other &&
+           g_viewer_collision_kw_a_id &&
+           g_viewer_collision_kw_b_id &&
+           g_viewer_collision_kw_collision;
+}
 
 static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a,
                                                   const ViewerCollisionPolicy *b) {
@@ -31,11 +87,10 @@ static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a
 }
 
 static ID viewer_entity_prototype(ID entity_rec) {
-    ID k_prototype = intern_symbol_global(":prototype");
-    if (!entity_rec || TAG(entity_rec) != CLJ_RECORD || !k_prototype) {
+    if (!entity_rec || TAG(entity_rec) != CLJ_RECORD || !viewer_collision_scene_symbols_ready()) {
         return NULL;
     }
-    return tiny_fx_gfx_get_field(entity_rec, k_prototype, NULL);
+    return tiny_fx_gfx_get_field(entity_rec, g_viewer_collision_kw_prototype, NULL);
 }
 
 static bool viewer_selector_is_prototype(ID selector) {
@@ -79,7 +134,10 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     if (!box) {
         return NULL;
     }
-    CljRecordDescriptor *desc = record_descriptor_lookup(intern_symbol_global("Aabb"));
+    if (!viewer_collision_scene_symbols_ready()) {
+        return NULL;
+    }
+    CljRecordDescriptor *desc = record_descriptor_lookup(g_viewer_collision_sym_aabb);
     if (!desc) {
         return NULL;
     }
@@ -168,13 +226,15 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
                                        uint32_t snapshot_gen,
                                        const VgAabb *self_box,
                                        const VgAabb *other_box) {
+    if (!viewer_collision_scene_symbols_ready()) {
+        return NULL;
+    }
     if (!bundle || !policy || !bundle->game_scene || !bundle->has_game_slot ||
         bundle->game_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
         return NULL;
     }
-    CljRecordDescriptor *desc = record_descriptor_lookup(intern_symbol_global("SpatialEvent"));
-    ID source_spatial = intern_symbol_global(":spatial");
-    if (!desc || !source_spatial) {
+    CljRecordDescriptor *desc = record_descriptor_lookup(g_viewer_collision_sym_spatial_event);
+    if (!desc) {
         return NULL;
     }
     ID self_aabb_rec = viewer_make_aabb_record(self_box);
@@ -189,7 +249,7 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
     ID other_entity = entity_index ? map_get_sentinel(entity_index, policy->other_entity_id, NULL) : NULL;
     ID slot_id = policy->slot_id ? policy->slot_id : bundle->slots[bundle->game_slot_index].id;
     ID values[17] = {
-        source_spatial,
+        g_viewer_collision_kw_source_spatial,
         policy->rule_id,
         slot_id,
         policy->kind,
@@ -222,26 +282,15 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
  */
 bool viewer_collision_load_rules_from_scene(FrameScene *game_scene,
                                             ViewerSpatialRuleSet *io_rule_set) {
-    if (!game_scene || !io_rule_set) {
+    if (!viewer_collision_scene_symbols_ready()) {
         return false;
     }
-    ID k_collision_rules = intern_symbol_global(":collision-rules");
-    ID k_id = intern_symbol_global(":id");
-    ID k_slot = intern_symbol_global(":slot");
-    ID k_kind = intern_symbol_global(":kind");
-    ID k_channel = intern_symbol_global(":channel");
-    ID k_radius = intern_symbol_global(":radius");
-    ID k_self = intern_symbol_global(":self");
-    ID k_other = intern_symbol_global(":other");
-    ID k_a_id = intern_symbol_global(":a-id");
-    ID k_b_id = intern_symbol_global(":b-id");
-    if (!k_collision_rules || !k_id || !k_slot || !k_kind || !k_channel || !k_radius ||
-        !k_self || !k_other || !k_a_id || !k_b_id) {
+    if (!game_scene || !io_rule_set) {
         return false;
     }
     bool ok = true;
     uint32_t next_version = viewer_next_rule_set_version(io_rule_set);
-    ID rules = tiny_fx_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
+    ID rules = tiny_fx_gfx_get_field((ID)game_scene, g_viewer_collision_kw_collision_rules, NULL);
     if (!rules) {
         destroy_spatial_rule_set(io_rule_set);
         io_rule_set->version = next_version;
@@ -269,18 +318,20 @@ bool viewer_collision_load_rules_from_scene(FrameScene *game_scene,
             ok = false;
             break;
         }
-        ID slot_obj = tiny_fx_gfx_get_field(rule, k_slot, NULL);
-        ID id_obj = tiny_fx_gfx_get_field(rule, k_id, NULL);
-        ID kind_obj = tiny_fx_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
-        ID channel_obj = tiny_fx_gfx_get_field(rule, k_channel, NULL);
-        ID radius_obj = tiny_fx_gfx_get_field(rule, k_radius, fixnum(0));
-        ID self_selector = tiny_fx_gfx_get_field(rule, k_self, NULL);
-        ID other_selector = tiny_fx_gfx_get_field(rule, k_other, NULL);
+        ID slot_obj = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_slot, NULL);
+        ID id_obj = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_id, NULL);
+        ID kind_obj = tiny_fx_gfx_get_field(rule,
+                                            g_viewer_collision_kw_kind,
+                                            g_viewer_collision_kw_collision);
+        ID channel_obj = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_channel, NULL);
+        ID radius_obj = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_radius, fixnum(0));
+        ID self_selector = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_self, NULL);
+        ID other_selector = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_other, NULL);
         if (!self_selector) {
-            self_selector = tiny_fx_gfx_get_field(rule, k_a_id, NULL);
+            self_selector = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_a_id, NULL);
         }
         if (!other_selector) {
-            other_selector = tiny_fx_gfx_get_field(rule, k_b_id, NULL);
+            other_selector = tiny_fx_gfx_get_field(rule, g_viewer_collision_kw_b_id, NULL);
         }
         if (!is_fixnum(radius_obj) || !self_selector || !other_selector) {
             destroy_spatial_rule_set(&next_rule_set);

@@ -2,11 +2,21 @@
 
 #include <pthread.h>
 #include <string.h>
+#include <stdio.h>
+#include <time.h>
 
 #include "event_loop.h"
 #include "memory.h"
 #include "rendered_state_snapshot.h"
 #include "viewer_host_slots.h"
+
+// #region agent log
+static long tinyclj_debug_collision_now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (long)(ts.tv_sec * 1000L + ts.tv_nsec / 1000000L);
+}
+// #endregion
 
 #define VIEWER_COLLISION_EVENT_HEADROOM_BYTES (4u * 1024u)
 #define VIEWER_COLLISION_EVENT_MAX_PENDING 48u
@@ -33,6 +43,21 @@ typedef struct {
 static ViewerCollisionDispatchState g_viewer_collision_dispatch = {
     .mutex = PTHREAD_MUTEX_INITIALIZER,
 };
+
+static pthread_once_t g_viewer_collision_dispatch_symbols_once = PTHREAD_ONCE_INIT;
+static ID g_viewer_collision_kw_phase_enter = NULL;
+static ID g_viewer_collision_kw_phase_exit = NULL;
+
+static void viewer_collision_dispatch_symbols_init_once(void) {
+    g_viewer_collision_kw_phase_enter = intern_symbol_global(":enter");
+    g_viewer_collision_kw_phase_exit = intern_symbol_global(":exit");
+}
+
+static bool viewer_collision_dispatch_symbols_ready(void) {
+    (void)pthread_once(&g_viewer_collision_dispatch_symbols_once,
+                       viewer_collision_dispatch_symbols_init_once);
+    return g_viewer_collision_kw_phase_enter && g_viewer_collision_kw_phase_exit;
+}
 
 static void viewer_collision_reset_dispatch_state_locked(void) {
     g_viewer_collision_dispatch.bundle = NULL;
@@ -318,6 +343,23 @@ bool viewer_collision_detect_step(ViewerSceneBundle *bundle,
         if (!queued) {
             continue;
         }
+        // #region agent log
+        {
+            FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
+            if (f) {
+                fprintf(f, "{\"sessionId\":\"c994fc\",\"hypothesisId\":\"H25\",\"location\":\"viewer_collision_dispatch.c:detect\","
+                        "\"message\":\"collision enqueued\","
+                        "\"data\":{\"policyIndex\":%u,\"entering\":%s,\"selfMinX\":%d,\"selfMinY\":%d,\"selfMaxX\":%d,\"selfMaxY\":%d,"
+                        "\"otherMinX\":%d,\"otherMinY\":%d,\"otherMaxX\":%d,\"otherMaxY\":%d},"
+                        "\"timestamp\":%ld}\n",
+                        (unsigned)i, inside ? "true" : "false",
+                        self_box.min_x, self_box.min_y, self_box.max_x, self_box.max_y,
+                        other_box.min_x, other_box.min_y, other_box.max_x, other_box.max_y,
+                        tinyclj_debug_collision_now_ms());
+                fclose(f);
+            }
+        }
+        // #endregion
         state->collision_latched = inside;
         any_triggered = true;
     }
@@ -332,9 +374,7 @@ bool viewer_collision_detect_step(ViewerSceneBundle *bundle,
  */
 bool viewer_collision_poll_drain(void) {
     bool drained_any = false;
-    ID phase_enter = intern_symbol_global(":enter");
-    ID phase_exit = intern_symbol_global(":exit");
-    if (!phase_enter || !phase_exit) {
+    if (!viewer_collision_dispatch_symbols_ready()) {
         return false;
     }
 
@@ -366,7 +406,7 @@ bool viewer_collision_poll_drain(void) {
         }
 
         ViewerCollisionPolicy *policy = &rule_set->items[hit->policy_index];
-        ID phase = hit->entering ? phase_enter : phase_exit;
+        ID phase = hit->entering ? g_viewer_collision_kw_phase_enter : g_viewer_collision_kw_phase_exit;
         event_payload = viewer_collision_make_spatial_event(bundle,
                                                             policy,
                                                             phase,
@@ -374,6 +414,20 @@ bool viewer_collision_poll_drain(void) {
                                                             &hit->self_box,
                                                             &hit->other_box);
         if (event_payload) {
+            // #region agent log
+            {
+                FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
+                if (f) {
+                    fprintf(f, "{\"sessionId\":\"c994fc\",\"hypothesisId\":\"H27\",\"location\":\"viewer_collision_dispatch.c:drain\","
+                            "\"message\":\"collision callback dispatched\","
+                            "\"data\":{\"policyIndex\":%u,\"entering\":%s},"
+                            "\"timestamp\":%ld}\n",
+                            (unsigned)hit->policy_index, hit->entering ? "true" : "false",
+                            tinyclj_debug_collision_now_ms());
+                    fclose(f);
+                }
+            }
+            // #endregion
             enqueued = viewer_invoke_collision_callback(bundle, event_payload);
         }
         if (enqueued || !event_payload) {

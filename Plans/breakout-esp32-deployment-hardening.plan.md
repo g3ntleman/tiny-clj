@@ -32,6 +32,30 @@ todos:
   - id: docs-and-ownership-comments
     content: Add focused documentation for thread/ownership contracts and for the runtime, collision, and sound execution model
     status: pending
+  - id: ingress-task-map-alloc
+    content: Eliminate per-enqueue map allocation in event_loop_enqueue_ingress_call by using a fixed-slot ring buffer of POD task descriptors instead of heap-allocated CljPersistentMap per ingress entry
+    status: pending
+  - id: named-timer-heap-alloc
+    content: Replace the malloc-based NamedTimerEntry linked list with a fixed-capacity static array to remove per-schedule heap allocation in the timer hot path
+    status: pending
+  - id: intern-symbol-caching
+    content: Cache repeatedly called intern_symbol_global lookups in collision dispatch and scene bridge into static module-level variables initialized once, instead of repeated hash-table probes per frame or per hit
+    status: pending
+  - id: atom-swap-malloc
+    content: Replace the per-call CLJ_MALLOC in atom_swap for the fn_args array with a small fixed-size stack buffer (covers the common 1-3 extra-args case) and only fall back to heap for rare large-arity swaps
+    status: pending
+  - id: collision-static-sizing
+    content: Review and shrink VIEWER_COLLISION_RAW_HIT_CAP (512) and VIEWER_MAX_SPATIAL_RULES (128) to match actual Breakout usage, reducing static BSS footprint on ESP32
+    status: pending
+  - id: runtime-namespace-merge
+    content: Merge runtime-play.clj back into runtime.clj to eliminate the indirection through runtime-play-call!/eval and the duplicated helper functions between the two namespaces
+    status: pending
+  - id: startup-eval-string-reduction
+    content: Reduce the number of eval_string calls in viewer_load_breakout_host_config_fast by resolving multiple vars in a single eval expression or by using direct C namespace lookups
+    status: pending
+  - id: remove-cmake-dead-targets
+    content: Clean up stale CMake targets such as the removed tiny-clj-profile and verify that only shipping and test targets remain
+    status: pending
   - id: regression-and-budgets
     content: Add targeted regression tests and measurement steps for heap, thread-safety, sound callbacks, collision dispatch, and ESP32 binary size before implementation sign-off
     status: pending
@@ -396,6 +420,161 @@ Before implementation sign-off, require these checks:
    - repeated brick collision
    - repeated sound SFX trigger
 
+---
+
+## 10. Ingress task-map heap elimination (`ingress-task-map-alloc`)
+
+### Problem
+
+Every `event_loop_enqueue_ingress_call` allocates a `CljPersistentMap` via `task_to_map` (4-key map: `:fn`, `:arg`, `:has-arg`, plus optional `:result-chan`). Collision bursts can fire dozens of these per frame.
+
+### Measures
+
+1. Replace the heap-allocated map with a POD struct (`EventLoopIngressSlot`) containing `fn`, `arg`, `has_arg` fields directly in the `g_event_loop_ingress_queue` ring buffer.
+2. Only materialize the Clj map lazily when the task is drained to the interpreter-thread task queue.
+3. Keep `event_loop_enqueue` (go-block path) unchanged since it needs the full map for result channels.
+
+### Review gate
+
+- No `make_map` or `map_transient` calls remain in the ingress-push path.
+- Coalescing still works (compare fn + arg directly).
+
+---
+
+## 11. Named-timer heap elimination (`named-timer-heap-alloc`)
+
+### Problem
+
+`timer_named_set` does `CLJ_MALLOC(sizeof(NamedTimerEntry))` for each new named timer. Breakout schedules timers per ball-serve, per-segment watchdog, etc. The linked-list walk is also O(n) and allocation-heavy for an ESP32 hot path.
+
+### Measures
+
+1. Replace `NamedTimerEntry` linked list with a fixed `NamedTimerEntry g_named_timers[NAMED_TIMER_CAP]` array (capacity 8–16 is sufficient for Breakout).
+2. Use a free-list index or simple linear scan for insert/remove.
+3. Eliminate `CLJ_MALLOC`/`CLJ_FREE` from the schedule/cancel path.
+
+### Review gate
+
+- Zero `CLJ_MALLOC`/`CLJ_FREE` calls in the timer schedule/cancel path.
+- Existing timer tests still pass.
+
+---
+
+## 12. intern_symbol_global caching (`intern-symbol-caching`)
+
+### Problem
+
+`viewer_collision_scene_bridge.c` calls `intern_symbol_global` **>15 times per collision dispatch cycle** for fixed, known keywords (`:prototype`, `:id`, `:slot`, `:kind`, `:channel`, `:radius`, `:self`, `:other`, `:a-id`, `:b-id`, `:collision`, etc.). Each call does a global hash-table lookup. The same pattern exists in `viewer_collision_dispatch.c` (`:enter`, `:exit`).
+
+### Measures
+
+1. Add a `viewer_collision_init()` function that caches all collision-related keywords into static module-level `CljSymbol *` variables (same pattern as `event_loop_init`).
+2. Replace all inline `intern_symbol_global` calls with the cached statics.
+3. Call `viewer_collision_init()` from `event_loop_init` or `runtime_init`.
+
+### Review gate
+
+- No `intern_symbol_global` calls remain in per-frame or per-hit code paths in collision scene bridge/dispatch.
+- Record-descriptor lookups (`record_descriptor_lookup`) are also hoisted where possible.
+
+---
+
+## 13. atom_swap stack-buffer optimization (`atom-swap-malloc`)
+
+### Problem
+
+`atom_swap` allocates `fn_args` via `CLJ_MALLOC` for every swap call. In Breakout, `swap!` on `state*` and `held-buttons*` happens on every input and collision event – these are heap allocations in the hot path.
+
+### Measures
+
+1. Use a small stack-local `ID fn_args_buf[4]` for the common case (0–3 extra args).
+2. Only fall back to `CLJ_MALLOC` if `extra_args_count > 3`.
+3. Ensure `CLJ_FREE` is only called when the heap path was taken.
+
+### Review gate
+
+- `atom_swap` with 0–3 extra args causes zero heap allocations.
+- All existing atom tests pass.
+
+---
+
+## 14. Collision static sizing review (`collision-static-sizing`)
+
+### Problem
+
+`VIEWER_COLLISION_RAW_HIT_CAP` is 512, `VIEWER_MAX_SPATIAL_RULES` is 128. Breakout has ~5 active spatial rules and at most ~20 simultaneous collision hits per frame. The over-provisioned arrays waste ~20KB of BSS on ESP32.
+
+### Measures
+
+1. Profile actual Breakout rule/hit counts via instrumented tests.
+2. Lower caps to next-power-of-2 above the measured maximum (e.g. `RAW_HIT_CAP` → 64, `MAX_SPATIAL_RULES` → 16).
+3. Add a compile-time `#if` or `_Static_assert` so ESP32 and host can differ if needed.
+
+### Review gate
+
+- All collision tests pass with reduced caps.
+- No truncation warnings during a full Breakout play-through test.
+
+---
+
+## 15. Runtime namespace merge (`runtime-namespace-merge`)
+
+### Problem
+
+`runtime.clj` and `runtime-play.clj` share duplicated helper functions (`scene-record`, `button-down-event?`, collision-dispatch patterns). `runtime-play.clj` is loaded via a dynamic `(require 'tiny-breakout.runtime-play)` followed by an `(eval (symbol ...))` call in `runtime-play-call!`, adding both latency and code size.
+
+### Measures
+
+1. Merge `runtime-play.clj` back into `runtime.clj`.
+2. Replace the `runtime-play-call!` indirection with direct function calls.
+3. Remove the dynamic `require`/`eval` pattern from `apply-input!` and `on-spatial-event!`.
+4. Delete the `runtime-play.clj` file.
+
+### Review gate
+
+- No `require` or `eval` calls remain in the Breakout hot path (input, collision, publish).
+- All Breakout runtime tests pass unchanged.
+
+---
+
+## 16. Startup eval_string reduction (`startup-eval-string-reduction`)
+
+### Problem
+
+`viewer_load_breakout_host_config_fast` uses 4+ separate `eval_string` calls to resolve `scene*`, `bootstrap-runtime!`, `start-runtime!`, and `on-spatial-event!`. Each `eval_string` parses, compiles, and evaluates a full Clojure expression.
+
+### Measures
+
+1. Combine into a single `eval_string` that returns a vector/map of all needed values.
+2. Or use a direct C-level namespace-var lookup (`namespace_resolve_var`) to avoid the eval overhead entirely.
+3. Keep the existing `WITH_AUTORELEASE_POOL` scoping.
+
+### Review gate
+
+- Startup allocations measurably reduced (heap profile test).
+- Config load still succeeds in all test scenarios.
+
+---
+
+## 17. CMake dead-target cleanup (`remove-cmake-dead-targets`)
+
+### Problem
+
+The `tiny-clj-profile` target was already removed from CMakeLists.txt in the previous commit. There may be other stale or dead targets, outdated source lists, or orphaned `#ifdef` blocks in the build system.
+
+### Measures
+
+1. Audit `CMakeLists.txt` for targets that reference removed files or are no longer built.
+2. Remove any leftover `add_executable`/`add_library` entries for dead targets.
+3. Verify `make` and `make test` still succeed with a clean build.
+
+### Review gate
+
+- `cmake --build build` succeeds with no warnings about missing sources.
+- Only shipping (`tiny-clj`, `tiny-clj-host`, `unit-tests`) and known test targets remain.
+
+---
+
 ## Suggested implementation slices
 
 To keep review manageable, split implementation into these PR-sized slices:
@@ -404,10 +583,11 @@ To keep review manageable, split implementation into these PR-sized slices:
 2. Thread/ownership contract + assertions/docs.
 3. Audio callback detox.
 4. Render-thread snapshot handoff.
-5. Breakout runtime hot-path cleanup.
-6. Collision-event shape reduction.
-7. Scene rebuild reduction.
-8. Code-size/readability refactor + final regression/size pass.
+5. Breakout runtime hot-path cleanup (includes runtime namespace merge + startup eval reduction).
+6. Collision-event shape reduction + intern_symbol caching + static sizing.
+7. Ingress task-map + named-timer + atom_swap heap elimination.
+8. Scene rebuild reduction.
+9. Code-size/readability refactor + CMake cleanup + final regression/size pass.
 
 ## Out of scope for this plan
 
