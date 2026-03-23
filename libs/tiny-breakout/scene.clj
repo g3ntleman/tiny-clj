@@ -1,6 +1,7 @@
 (ns tiny-breakout.scene
   (:require [tiny-breakout.core :as core]
-            [tiny-fx.gfx-scene :refer [->Group ->Rect ->VText normalize-spatial-rule]]))
+            [tiny-fx.color :as color]
+            [tiny-fx.gfx-scene :refer [->Group ->Rect ->Style ->VText normalize-spatial-rule]]))
 
 (defn paddle-prototype
   []
@@ -128,6 +129,29 @@
     (get centered-overlay-x-by-text overlay)
     100))
 
+(def ^:private overlay-fade-stops
+  [[0 (color/color 0x404040)]
+   [333 (color/color 0x808080)]
+   [666 (color/color 0xc0c0c0)]
+   [1000 (color/color 0xffffff)]])
+
+(defn overlay-fade-keyframes
+  [start-ms]
+  (color/step-keyframes start-ms overlay-fade-stops))
+
+(defn overlay-style
+  [state overlay]
+  (if (= overlay "")
+    nil
+    (let [start-ms (get state :overlay-start-ms)
+          stroke-color (if (number? start-ms)
+                         (record-create 'Timeline
+                                        [(overlay-fade-keyframes start-ms)
+                                         false
+                                         false])
+                         (second (first overlay-fade-stops)))]
+      (->Style stroke-color nil true false nil false nil))))
+
 (defn brick->entity
   [brick prototype]
   (->Rect (:id brick)
@@ -218,11 +242,12 @@
           lives-text (str lives)
           overlay (overlay-text phase)
           overlay-x (overlay-x overlay)
+          overlay-style (overlay-style state overlay)
           base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
                          1002 (->Rect 1002 nil nil true paddle-x-field core/paddle-y core/paddle-width core/paddle-height paddle-shape)
                          1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
                          1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
-                         1005 (->VText 1005 nil nil true overlay-x 120 1 0 overlay nil)
+                         1005 (->VText 1005 nil overlay-style true overlay-x 120 1 0 overlay nil)
                          1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
                          1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
       (loop [i 0

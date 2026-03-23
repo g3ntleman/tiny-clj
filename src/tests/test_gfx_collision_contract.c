@@ -584,6 +584,30 @@ TEST(test_gfx_scene_rgb888_int_color_conversion) {
     TEST_ASSERT_EQUAL_INT(63488, as_fixnum(vector_nth(v, 3))); // red
 }
 
+TEST(test_gfx_scene_rgb_channel_color_conversion) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.color/color 0 255 255) "
+        "   (tiny-fx.color/color 255 255 255) "
+        "   (tiny-fx.color/color 255 0 255) "
+        "   (tiny-fx.color/color 255 0 0)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(2047, as_fixnum(vector_nth(v, 0)));  // cyan
+    TEST_ASSERT_EQUAL_INT(65535, as_fixnum(vector_nth(v, 1))); // white
+    TEST_ASSERT_EQUAL_INT(63519, as_fixnum(vector_nth(v, 2))); // magenta
+    TEST_ASSERT_EQUAL_INT(63488, as_fixnum(vector_nth(v, 3))); // red
+}
+
 TEST(test_gfx_scene_rgb888_int_color_invalid_input) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
@@ -596,6 +620,30 @@ TEST(test_gfx_scene_rgb888_int_color_invalid_input) {
         "   (tiny-fx.color/color -1) "
         "   (tiny-fx.color/color 16777216) "
         "   (tiny-fx.color/color 3.14)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+    TEST_ASSERT_NULL(vector_nth(v, 0));
+    TEST_ASSERT_NULL(vector_nth(v, 1));
+    TEST_ASSERT_NULL(vector_nth(v, 2));
+    TEST_ASSERT_NULL(vector_nth(v, 3));
+}
+
+TEST(test_gfx_scene_rgb_channel_color_invalid_input) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.color/color nil 0 0) "
+        "   (tiny-fx.color/color -1 0 0) "
+        "   (tiny-fx.color/color 256 0 0) "
+        "   (tiny-fx.color/color 0 3.14 0)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -630,4 +678,51 @@ TEST(test_gfx_scene_web_hex_color_invalid_input) {
     TEST_ASSERT_NULL(vector_nth(v, 1));
     TEST_ASSERT_NULL(vector_nth(v, 2));
     TEST_ASSERT_NULL(vector_nth(v, 3));
+}
+
+TEST(test_gfx_scene_color_step_keyframes_expands_relative_and_absolute_stops) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.color) "
+        "  {:relative (tiny-fx.color/step-keyframes [[0 10] [50 20] [100 30]]) "
+        "   :absolute (tiny-fx.color/step-keyframes 123 [[0 10] [50 20] [100 30]])})",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(is_map(out));
+
+    ID relative_kw = intern_symbol_global(":relative");
+    ID absolute_kw = intern_symbol_global(":absolute");
+    ID relative = map_get(out, relative_kw);
+    ID absolute = map_get(out, absolute_kw);
+    TEST_ASSERT_TRUE(TAG(relative) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_TRUE(TAG(absolute) == CLJ_VECTOR_PERSISTENT);
+
+    CljPersistentVector *relative_v = as_vector(relative);
+    CljPersistentVector *absolute_v = as_vector(absolute);
+    TEST_ASSERT_NOT_NULL(relative_v);
+    TEST_ASSERT_NOT_NULL(absolute_v);
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(relative_v));
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(absolute_v));
+
+    ID rel0 = vector_nth(relative_v, 0);
+    ID rel1 = vector_nth(relative_v, 1);
+    ID rel2 = vector_nth(relative_v, 2);
+    ID rel3 = vector_nth(relative_v, 3);
+    ID rel4 = vector_nth(relative_v, 4);
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(as_vector(rel0), 0)));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(as_vector(rel0), 1)));
+    TEST_ASSERT_EQUAL_INT(50, as_fixnum(vector_nth(as_vector(rel1), 0)));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(as_vector(rel1), 1)));
+    TEST_ASSERT_EQUAL_INT(50, as_fixnum(vector_nth(as_vector(rel2), 0)));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(as_vector(rel2), 1)));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(vector_nth(as_vector(rel3), 0)));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(as_vector(rel3), 1)));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(vector_nth(as_vector(rel4), 0)));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(as_vector(rel4), 1)));
+
+    ID abs0 = vector_nth(absolute_v, 0);
+    ID abs4 = vector_nth(absolute_v, 4);
+    TEST_ASSERT_EQUAL_INT(123, as_fixnum(vector_nth(as_vector(abs0), 0)));
+    TEST_ASSERT_EQUAL_INT(223, as_fixnum(vector_nth(as_vector(abs4), 0)));
 }

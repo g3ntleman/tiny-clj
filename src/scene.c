@@ -450,6 +450,28 @@ static uint32_t text_content_signature(const char *text) {
     return hash;
 }
 
+static uint32_t signature_hash_u32(uint32_t hash, uint32_t value) {
+    hash ^= value;
+    hash *= 16777619u;
+    return hash;
+}
+
+static uint32_t style_content_signature(VgStyle style) {
+    uint32_t hash = 2166136261u;
+    hash = signature_hash_u32(hash, style.stroke_color);
+    hash = signature_hash_u32(hash, style.stroke_width);
+    hash = signature_hash_u32(hash, style.visible ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.has_fill ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.fill_color);
+    hash = signature_hash_u32(hash, style.has_bg_color ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.bg_color);
+    return hash;
+}
+
+static uint32_t combine_content_signatures(uint32_t a, uint32_t b) {
+    return signature_hash_u32(a, b);
+}
+
 /*
  * Collision proxies can be visually hidden, but they still need current world
  * bounds in the rendered-state snapshot.
@@ -1288,6 +1310,11 @@ static bool render_record_node(ID node_obj,
         vg_rendered_state_capture_record_entity((uintptr_t)entity_id, world_t);
     }
     VgStyle style = decode_style(node_obj, entity_id, h, now_ms, sc, out_has_animation);
+    uint32_t style_signature = style_content_signature(style);
+    if (entity_id) {
+        vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
+                                                                  style_signature);
+    }
 
     if (h == sc->h_group) {
         if (!style.visible) {
@@ -1547,7 +1574,8 @@ static bool render_record_node(ID node_obj,
                                                                          sc,
                                                                          out_has_animation));
         vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
-                                                                  text_content_signature(temp.data.text.text));
+                                                                  combine_content_signatures(style_signature,
+                                                                                             text_content_signature(temp.data.text.text)));
         {
             VgRectData local_bounds = {0};
             if (vg_text_local_bounds(&temp.data.text, &local_bounds)) {

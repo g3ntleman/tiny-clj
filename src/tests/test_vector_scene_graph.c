@@ -1360,6 +1360,41 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 4]);
 }
 
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_for_style_animation) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (->Rect 'root nil "
+        "                              (->Style 0 1 true true "
+        "                                       (record-create (quote Timeline) [[[0 31] [100 63488]] false false]) "
+        "                                       false 0) "
+        "                              true 4 8 12 8 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [4 8 12 8] 0 true true 0 0 nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    VgRenderFrameSlotResult result = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(scene, &state, &fb, 1u, 0u, false, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    TEST_ASSERT_TRUE(state.has_animation);
+    TEST_ASSERT_EQUAL_HEX16(31u, pixels[(size_t)10 * TEST_W + 8]);
+
+    memset(&result, 0, sizeof(result));
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(scene, &state, &fb, 1u, 50u, true, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    TEST_ASSERT_TRUE(result.dirty_pixels > 0u);
+    TEST_ASSERT_TRUE(result.dirty_rect.w > 0);
+    TEST_ASSERT_TRUE(result.dirty_rect.h > 0);
+    TEST_ASSERT_NOT_EQUAL(31u, pixels[(size_t)10 * TEST_W + 8]);
+}
+
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_union) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

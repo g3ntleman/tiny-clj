@@ -18,27 +18,11 @@
       nil
       (+ (* c1 16) c2))))
 
-(defn rgb888->color
-  "Converts 8-bit RGB channels to RGB565 integer color."
-  [r g b]
-  (let [r5 (quot (* r 31) 255)
-        g6 (quot (* g 63) 255)
-        b5 (quot (* b 31) 255)]
-    (+ (* r5 2048) (* g6 32) b5)))
-
 (defn color
-  "Converts a 24-bit RGB888 integer (0xRRGGBB) to RGB565 integer color.
-Returns nil for invalid input."
-  [rgb]
-  (if (or (nil? rgb)
-          (not (integer? rgb))
-          (< rgb 0)
-          (> rgb 16777215))
-    nil
-    (let [r (bit-and (bit-shift-right rgb 16) 255)
-          g (bit-and (bit-shift-right rgb 8) 255)
-          b (bit-and rgb 255)]
-      (rgb888->color r g b))))
+  "Converts either a 24-bit RGB888 integer (0xRRGGBB) or three 8-bit RGB
+channels to an RGB565 integer color. Returns nil for invalid input."
+  [& args]
+  :native)
 
 (defn web-hex->color
   "Converts #RRGGBB into RGB565 integer color. Returns nil for invalid input."
@@ -52,5 +36,39 @@ Returns nil for invalid input."
               b (parse-hex2 t 5)]
           (if (or (nil? r) (nil? g) (nil? b))
             nil
-            (color (+ (* r 65536) (* g 256) b))))
+            (color r g b)))
         nil))))
+
+(defn step-keyframes
+  "Turns monotonic [offset-ms value] stops into hold-then-step keyframes.
+With one arity, returns relative keyframes. With two arities, shifts all
+keyframes by start-ms."
+  [& args]
+  (let [argc (count args)]
+    (cond
+      (= argc 1)
+      (let [stops (first args)]
+        (if (empty? stops)
+          []
+          (loop [remaining (rest stops)
+                 prev (first stops)
+                 keyframes [(first stops)]]
+            (if (empty? remaining)
+              keyframes
+              (let [[next-ms next-value :as next-stop] (first remaining)
+                    [_ prev-value] prev]
+                (recur (rest remaining)
+                       next-stop
+                       (conj keyframes
+                             [next-ms prev-value]
+                             [next-ms next-value])))))))
+
+      (= argc 2)
+      (let [start-ms (first args)
+            stops (second args)]
+        (mapv (fn [[offset-ms value]]
+                [(+ start-ms offset-ms) value])
+              (step-keyframes stops)))
+
+      :else
+      (throw "tiny-fx.color/step-keyframes expects 1 or 2 arguments"))))

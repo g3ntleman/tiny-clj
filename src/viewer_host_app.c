@@ -1353,11 +1353,6 @@ int viewer_host_app_run(void) {
         goto cleanup;
     }
     runloop_thread_started = true;
-    if (demo_bundle.startup_callback &&
-        !event_loop_enqueue_ingress_call((CljObject *)demo_bundle.startup_callback, NULL)) {
-        fprintf(stderr, "Failed to enqueue viewer startup callback\n");
-        goto cleanup;
-    }
     if (!vg_slot_change_tracker_init(&g_slot_change_tracker, demo_bundle.slot_count)) {
         fprintf(stderr, "Failed to initialize slot change tracker\n");
         goto cleanup;
@@ -1391,6 +1386,7 @@ int viewer_host_app_run(void) {
     uint_fast32_t last_presented_frame_serial = 0u;
     uint_fast32_t last_presented_overlay_frame_serial = 0u;
     uint_fast32_t last_collision_frame_serial = 0u;
+    bool startup_callback_pending = demo_bundle.startup_callback != NULL;
     ViewerRuntimeFlags runtime_flags = {
 #if defined(__APPLE__)
         .use_mfb_waitsync = false,
@@ -1597,6 +1593,13 @@ int viewer_host_app_run(void) {
         timing_accumulator_add(&update_stats, update_ns);
         if (state != STATE_OK) {
             break;
+        }
+        if (startup_callback_pending) {
+            if (!event_loop_enqueue_ingress_call((CljObject *)demo_bundle.startup_callback, NULL)) {
+                fprintf(stderr, "Failed to enqueue viewer startup callback\n");
+                break;
+            }
+            startup_callback_pending = false;
         }
     }
 

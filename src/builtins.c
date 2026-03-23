@@ -4254,6 +4254,11 @@ static StaticSymbolData sym_tinyclj_runtime_renderer_timeline_progress_qualified
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.runtime/renderer-timeline-progress"}};
+static StaticSymbolData sym_tinyfx_color_color_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.color/color"}};
 
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4483,6 +4488,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_renderer_timeline_progress_qualified_data.sym,
                       native_tinyclj_runtime_renderer_timeline_progress,
                       "tiny-clj.runtime/renderer-timeline-progress"),
+    NATIVE_ENTRY(&sym_tinyfx_color_color_qualified_data.sym, native_tinyfx_color_color),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),

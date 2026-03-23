@@ -557,6 +557,23 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
     breakout_viewer_test_context_destroy(&ctx);
 }
 
+TEST(test_breakout_runtime_startup_restarts_title_overlay_fade_on_runtime_start) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (let [overlay (get (:index @tiny-breakout.runtime/scene*) 1005) "
+        "        kf (:keyframes (:stroke-color (:style overlay)))] "
+        "    (> (first (first kf)) 0)))",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
 TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve) {
     BreakoutViewerTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));

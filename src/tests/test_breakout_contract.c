@@ -856,6 +856,33 @@ TEST(test_breakout_contract_scene_centers_breakout_level_clear_and_game_over_ove
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_scene_animates_overlay_text_color_on_phase_entry) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (require 'tiny-fx.color) "
+        "  (let [scene (tiny-breakout.scene/build-scene "
+        "                (assoc (tiny-breakout.core/init-state) "
+        "                       :phase :game-over "
+        "                       :overlay-start-ms 123)) "
+        "        overlay (get (:index scene) 1005) "
+        "        style (:style overlay) "
+        "        kf (:keyframes (:stroke-color style))] "
+        "    (and (= \"Game Over\" (:text overlay)) "
+        "         (= [[123 (tiny-fx.color/color 0x404040)] "
+        "             [456 (tiny-fx.color/color 0x404040)] "
+        "             [456 (tiny-fx.color/color 0x808080)] "
+        "             [789 (tiny-fx.color/color 0x808080)] "
+        "             [789 (tiny-fx.color/color 0xC0C0C0)] "
+        "             [1123 (tiny-fx.color/color 0xC0C0C0)] "
+        "             [1123 (tiny-fx.color/color 0xFFFFFF)]] "
+        "            kf))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_host_config_exposes_viewer_slots_and_atoms_without_native_runtime_flag) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(

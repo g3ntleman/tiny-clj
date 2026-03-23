@@ -72,6 +72,12 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
     return tinyclj_runtime_fx_disabled("tiny-clj.runtime/renderer-timeline-progress");
 }
 
+ID native_tinyfx_color_color(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-fx.color/color");
+}
+
 #else
 
 #define TINYCLJ_SCENE_BENCH_WIDTH 320u
@@ -153,6 +159,25 @@ static ID g_kw_loop = NULL;
 static ID g_kw_end_event = NULL;
 static ID g_kw_at_end = NULL;
 static ID g_kw_permille = NULL;
+
+static bool tinyfx_color_parse_u8(ID value, uint8_t *out) {
+    if (!is_fixnum(value)) {
+        return false;
+    }
+    int32_t parsed = as_fixnum(value);
+    if (parsed < 0 || parsed > 255) {
+        return false;
+    }
+    *out = (uint8_t)parsed;
+    return true;
+}
+
+static ID tinyfx_color_rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    const uint16_t r5 = (uint16_t)(((uint32_t)r * 31u) / 255u);
+    const uint16_t g6 = (uint16_t)(((uint32_t)g * 63u) / 255u);
+    const uint16_t b5 = (uint16_t)(((uint32_t)b * 31u) / 255u);
+    return fixnum((int32_t)((r5 << 11) | (g6 << 5) | b5));
+}
 
 static IdSymbolCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_id, ":id"},
@@ -465,6 +490,36 @@ static bool tinyclj_runtime_parse_rendered_field(ID field_obj, VgRenderedField *
 void builtins_tiny_fx_gfx_reset_cached_state(void) {
     tinyclj_runtime_clear_slot_bindings();
     tinyclj_runtime_reset_keyword_cache();
+}
+
+ID native_tinyfx_color_color(ID *args, unsigned int argc) {
+    if (argc == 1u) {
+        if (!is_fixnum(args[0])) {
+            return NULL;
+        }
+        int32_t rgb = as_fixnum(args[0]);
+        if (rgb < 0 || rgb > 0xFFFFFF) {
+            return NULL;
+        }
+        return tinyfx_color_rgb565((uint8_t)((uint32_t)rgb >> 16),
+                                   (uint8_t)(((uint32_t)rgb >> 8) & 0xFFu),
+                                   (uint8_t)((uint32_t)rgb & 0xFFu));
+    }
+    if (argc == 3u) {
+        uint8_t r = 0u;
+        uint8_t g = 0u;
+        uint8_t b = 0u;
+        if (!tinyfx_color_parse_u8(args[0], &r) ||
+            !tinyfx_color_parse_u8(args[1], &g) ||
+            !tinyfx_color_parse_u8(args[2], &b)) {
+            return NULL;
+        }
+        return tinyfx_color_rgb565(r, g, b);
+    }
+    throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                              "Wrong number of args (%u) passed to: tiny-fx.color/color",
+                              argc);
+    return NULL;
 }
 
 #ifdef DEBUG

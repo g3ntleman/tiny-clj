@@ -6,6 +6,8 @@
 
 (def state* (atom nil))
 (def scene* (atom nil))
+(def ^:private idle-overlay-animation {:text "" :start-ms 0})
+(def ^:private overlay-animation* (atom idle-overlay-animation))
 (def idle-held-buttons {:left false :right false :last nil})
 (def held-buttons* (atom idle-held-buttons))
 
@@ -52,7 +54,40 @@
 
 (defn- scene-record
   [state]
-  (record-from-map 'FrameScene (dissoc (tiny-breakout.scene/build-scene state) :type)))
+  (let [overlay (scene/overlay-text (:phase state))
+        animation @overlay-animation*
+        scene-state (if (and (not= overlay "")
+                             (= overlay (:text animation)))
+                      (assoc state :overlay-start-ms (:start-ms animation))
+                      (dissoc state :overlay-start-ms))]
+    (record-from-map 'FrameScene (dissoc (tiny-breakout.scene/build-scene scene-state) :type))))
+
+(defn- sync-overlay-animation!
+  [previous-state next-state]
+  (let [previous-overlay (scene/overlay-text (:phase previous-state))
+        next-overlay (scene/overlay-text (:phase next-state))]
+    (cond
+      (= next-overlay "")
+      (reset! overlay-animation* idle-overlay-animation)
+
+      (not= previous-overlay next-overlay)
+      (reset! overlay-animation* {:text next-overlay
+                                  :start-ms (current-time-ms)})
+
+      :else nil)))
+
+(defn- restart-overlay-animation!
+  []
+  (let [state @state*
+        overlay (scene/overlay-text (:phase state))]
+    (reset! overlay-animation*
+            (if (= overlay "")
+              idle-overlay-animation
+              {:text overlay
+               :start-ms (current-time-ms)}))
+    (when (map? state)
+      (reset! scene* (scene-record state))))
+  nil)
 
 (defn- on-segment-timeline-event!
   [event]
@@ -161,12 +196,14 @@
 
 (defn publish-state!
   [state]
-  (let [state (scene/with-expanded-collision-rules state)
+  (let [previous-state @state*
+        state (scene/with-expanded-collision-rules state)
         events (:events state)
         state-without-events (assoc state :events [])
         segment (:ball-segment state-without-events)
         segment-id (if (map? segment) (:id segment) nil)
         end-ms (if (map? segment) (:end-ms segment) nil)]
+    (sync-overlay-animation! previous-state state-without-events)
     (when (and (map? (:ball-segment state-without-events))
                (not @tiny-breakout.runtime/segment-watch-active*)
                @event/gfx-timeline-loaded?)
@@ -215,6 +252,7 @@
 (defn reset-runtime!
   []
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (reset! tiny-breakout.runtime/overlay-animation* tiny-breakout.runtime/idle-overlay-animation)
   (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
   (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
   (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
@@ -241,6 +279,7 @@
     (catch Exception _
       nil))
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (reset! tiny-breakout.runtime/overlay-animation* tiny-breakout.runtime/idle-overlay-animation)
   (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
   (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
   (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
@@ -257,6 +296,7 @@
   [& _args]
   (event/preload-timeline-runtime!)
   (tiny-breakout.runtime/configure-input-watchers!)
+  (tiny-breakout.runtime/restart-overlay-animation!)
   nil)
 
 ;; Preload the split runtime helper during namespace load so heap probes do not
