@@ -351,13 +351,19 @@ now-ms may be nil; in that case the segment end timestamp is used."
                              (anchor-ball (:to-x segment) (:to-y segment)))]
             (cond
               (= wall :left)
-              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
+              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))
+                                                 :events (conj (:events anchored) :wall-hit))
+                                 resume-ms)
 
               (= wall :right)
-              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
+              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))
+                                                 :events (conj (:events anchored) :wall-hit))
+                                 resume-ms)
 
               (= wall :top)
-              (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) resume-ms)
+              (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))
+                                                 :events (conj (:events anchored) :wall-hit))
+                                 resume-ms)
 
               (= wall :bottom)
               (apply-bottom-out anchored)

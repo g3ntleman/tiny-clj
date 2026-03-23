@@ -10,6 +10,15 @@ option(TINYCLJ_GAME_DEMO "Build optional MiniFB-based breakout runtime tests" OF
 option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
 option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx sound/gfx feature set" ON)
 
+# Keep one canonical build tree for all host targets.
+get_filename_component(TINYCLJ_EXPECTED_BINARY_DIR "${CMAKE_SOURCE_DIR}/build" ABSOLUTE)
+get_filename_component(TINYCLJ_ACTUAL_BINARY_DIR "${CMAKE_BINARY_DIR}" ABSOLUTE)
+if(NOT TINYCLJ_ACTUAL_BINARY_DIR STREQUAL TINYCLJ_EXPECTED_BINARY_DIR)
+    message(FATAL_ERROR
+        "tiny-clj must be configured with -B build (expected: ${TINYCLJ_EXPECTED_BINARY_DIR}, got: ${TINYCLJ_ACTUAL_BINARY_DIR})"
+    )
+endif()
+
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -152,9 +161,15 @@ set_target_properties(subjective-c-tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/bin"
 )
 
-# Set output directory for all executables to "build"
+# Keep default target outputs in the canonical build tree.
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+if(NOT DEFINED CMAKE_LIBRARY_OUTPUT_DIRECTORY OR CMAKE_LIBRARY_OUTPUT_DIRECTORY STREQUAL "")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+if(NOT DEFINED CMAKE_ARCHIVE_OUTPUT_DIRECTORY OR CMAKE_ARCHIVE_OUTPUT_DIRECTORY STREQUAL "")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 # Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats.

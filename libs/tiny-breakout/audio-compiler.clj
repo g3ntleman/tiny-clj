@@ -41,7 +41,13 @@
             {:notes [1318] :duration 20}
             {:notes [1568] :duration 24}
             {:notes [2093] :duration 48}]
-    :opts {:channel-count 1 :gate-percent 74 :volumes [210]}}})
+    :opts {:channel-count 1 :gate-percent 74 :volumes [210]}}
+
+   :sfx/wall-hit
+   {:track-id :tiny-breakout/wall-hit
+    :steps [{:notes [660] :duration 16}
+            {:notes [440] :duration 18}]
+    :opts {:channel-count 1 :gate-percent 68 :volumes [140]}}})
 
 (defn- clamp-int
   [value min-value max-value fallback]

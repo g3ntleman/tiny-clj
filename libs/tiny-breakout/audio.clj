@@ -27,7 +27,11 @@
 
    :sfx/victory
    {:track-id :tiny-breakout/victory
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32])}})
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32])}
+
+   :sfx/wall-hit
+   {:track-id :tiny-breakout/wall-hit
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32])}})
 
 (def ^:private known-cues
   [:sfx/paddle-hit
@@ -35,7 +39,8 @@
    :sfx/life-lost
    :sfx/level-clear
    :sfx/game-over
-   :sfx/victory])
+   :sfx/victory
+   :sfx/wall-hit])
 
 (defn- event->cue
   [event-id]
@@ -46,6 +51,7 @@
     (= event-id :level-clear) :sfx/level-clear
     (= event-id :game-over) :sfx/game-over
     (= event-id :victory) :sfx/victory
+    (= event-id :wall-hit) :sfx/wall-hit
     :else nil))
 
 (defn events->cues

@@ -5,14 +5,10 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 build_dir="${1:-}"
 if [[ -z "$build_dir" ]]; then
-  if [[ -d "$root_dir/build-release" ]]; then
-    build_dir="$root_dir/build-release"
-  else
-    build_dir="$root_dir/build/"
-  fi
+  build_dir="$root_dir/build/"
 fi
 
-# Allow passing a relative path like "build-release"
+# Allow passing a relative path like "build"
 if [[ "$build_dir" != /* ]]; then
   build_dir="$root_dir/$build_dir"
 fi

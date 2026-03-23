@@ -391,6 +391,85 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_when_key_differs) {
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
 
+TEST(test_event_loop_ingress_call_coalesces_duplicate_spatial_identity_without_key) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-spatial-coalesce-marker (atom [])) "
+        "  (fn event-loop-ingress-spatial-coalesce-task [event] "
+        "    (swap! event-loop-ingress-spatial-coalesce-marker "
+        "           conj [(:id event) (:phase event) (:self event) (:other event)]) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 1}",
+                               g_test_eval_state);
+    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 2}",
+                               g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first spatial ingress should enqueue");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "duplicate spatial identity should coalesce");
+
+    EventLoopIngressStats stats = {0};
+    TEST_ASSERT_TRUE(event_loop_ingress_stats(&stats));
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.accepted_count);
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.pending_count);
+
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
+
+    ID marker_ok = eval_string("(= @event-loop-ingress-spatial-coalesce-marker [[:ball-vs-brick :enter 1003 2001]])",
+                               g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
+TEST(test_event_loop_ingress_call_does_not_coalesce_spatial_events_for_different_other_entity) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-spatial-other-marker (atom [])) "
+        "  (fn event-loop-ingress-spatial-other-task [event] "
+        "    (swap! event-loop-ingress-spatial-other-marker "
+        "           conj [(:id event) (:phase event) (:self event) (:other event)]) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001}",
+                               g_test_eval_state);
+    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2002}",
+                               g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first spatial ingress should enqueue");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "different :other should enqueue independently");
+
+    EventLoopIngressStats stats = {0};
+    TEST_ASSERT_TRUE(event_loop_ingress_stats(&stats));
+    TEST_ASSERT_EQUAL_UINT32(2u, stats.accepted_count);
+    TEST_ASSERT_EQUAL_UINT32(2u, stats.pending_count);
+
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
+
+    ID marker_ok = eval_string(
+        "(= @event-loop-ingress-spatial-other-marker "
+        "   [[:ball-vs-brick :enter 1003 2001] [:ball-vs-brick :enter 1003 2002]])",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
 /* Target: 64 (raised to 1024); TODO: tearDown heap / run_next preface — lower toward 64 when possible. */
 TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_ingress_calls, 1024) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");

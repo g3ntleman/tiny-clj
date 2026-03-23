@@ -87,7 +87,7 @@ cmake --build build
 For size comparisons, use a **Release** (or Embedded) build. Debug builds are much larger.
 
 ```bash
-./scripts/measure_esp32_size.sh build-release
+./scripts/measure_esp32_size.sh build
 ```
 
 ### ESP-IDF (ESP32 toolchain) via git submodule

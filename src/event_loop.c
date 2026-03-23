@@ -32,6 +32,12 @@ static CljSymbol *KW_ARG;
 static CljSymbol *KW_HAS_ARG;
 static CljSymbol *KW_EVENT_KIND;
 static CljSymbol *KW_EVENT_KEY;
+static CljSymbol *KW_EVENT_SOURCE;
+static CljSymbol *KW_EVENT_ID;
+static CljSymbol *KW_EVENT_PHASE;
+static CljSymbol *KW_EVENT_SELF;
+static CljSymbol *KW_EVENT_OTHER;
+static CljSymbol *KW_SOURCE_SPATIAL;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -150,6 +156,94 @@ static bool event_loop_extract_event_kind_and_key(ID payload, ID *out_kind, ID *
     return true;
 }
 
+static bool event_loop_extract_spatial_event_identity(ID payload,
+                                                      ID *out_id,
+                                                      ID *out_phase,
+                                                      ID *out_self,
+                                                      ID *out_other) {
+    if (out_id) *out_id = NULL;
+    if (out_phase) *out_phase = NULL;
+    if (out_self) *out_self = NULL;
+    if (out_other) *out_other = NULL;
+    if (!payload || !KW_EVENT_SOURCE || !KW_SOURCE_SPATIAL ||
+        !KW_EVENT_ID || !KW_EVENT_PHASE || !KW_EVENT_SELF || !KW_EVENT_OTHER) {
+        return false;
+    }
+
+    ID source = event_loop_value_get_sentinel(payload, KW_EVENT_SOURCE, NOT_FOUND);
+    if (source == NOT_FOUND || !source || !event_loop_value_equals(source, KW_SOURCE_SPATIAL)) {
+        return false;
+    }
+
+    ID event_id = event_loop_value_get_sentinel(payload, KW_EVENT_ID, NOT_FOUND);
+    ID phase = event_loop_value_get_sentinel(payload, KW_EVENT_PHASE, NOT_FOUND);
+    ID self = event_loop_value_get_sentinel(payload, KW_EVENT_SELF, NOT_FOUND);
+    ID other = event_loop_value_get_sentinel(payload, KW_EVENT_OTHER, NOT_FOUND);
+    if (event_id == NOT_FOUND || phase == NOT_FOUND || self == NOT_FOUND || other == NOT_FOUND ||
+        !event_id || !phase || !self || !other) {
+        return false;
+    }
+
+    if (out_id) *out_id = event_id;
+    if (out_phase) *out_phase = phase;
+    if (out_self) *out_self = self;
+    if (out_other) *out_other = other;
+    return true;
+}
+
+static bool event_loop_payload_supports_coalescing(ID payload) {
+    ID event_id = NULL;
+    ID phase = NULL;
+    ID self = NULL;
+    ID other = NULL;
+    if (event_loop_extract_spatial_event_identity(payload, &event_id, &phase, &self, &other)) {
+        return true;
+    }
+    ID kind = NULL;
+    ID key = NULL;
+    return event_loop_extract_event_kind_and_key(payload, &kind, &key);
+}
+
+static bool event_loop_payload_matches_coalescing_key(ID queued_payload, ID candidate_payload) {
+    ID queued_id = NULL;
+    ID queued_phase = NULL;
+    ID queued_self = NULL;
+    ID queued_other = NULL;
+    ID candidate_id = NULL;
+    ID candidate_phase = NULL;
+    ID candidate_self = NULL;
+    ID candidate_other = NULL;
+    bool queued_spatial = event_loop_extract_spatial_event_identity(queued_payload,
+                                                                     &queued_id,
+                                                                     &queued_phase,
+                                                                     &queued_self,
+                                                                     &queued_other);
+    bool candidate_spatial = event_loop_extract_spatial_event_identity(candidate_payload,
+                                                                        &candidate_id,
+                                                                        &candidate_phase,
+                                                                        &candidate_self,
+                                                                        &candidate_other);
+    if (queued_spatial && candidate_spatial) {
+        return event_loop_value_equals(queued_id, candidate_id) &&
+               event_loop_value_equals(queued_phase, candidate_phase) &&
+               event_loop_value_equals(queued_self, candidate_self) &&
+               event_loop_value_equals(queued_other, candidate_other);
+    }
+
+    ID queued_kind = NULL;
+    ID queued_key = NULL;
+    ID candidate_kind = NULL;
+    ID candidate_key = NULL;
+    bool queued_kind_key = event_loop_extract_event_kind_and_key(queued_payload, &queued_kind, &queued_key);
+    bool candidate_kind_key =
+        event_loop_extract_event_kind_and_key(candidate_payload, &candidate_kind, &candidate_key);
+    if (queued_kind_key && candidate_kind_key) {
+        return event_loop_value_equals(queued_kind, candidate_kind) &&
+               event_loop_value_equals(queued_key, candidate_key);
+    }
+    return false;
+}
+
 #ifdef DEBUG
 static const char *event_loop_debug_value_cstr(ID value, CljString **owned_string) {
     if (owned_string) {
@@ -169,28 +263,21 @@ static const char *event_loop_debug_value_cstr(ID value, CljString **owned_strin
 }
 
 static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
-                                                         ID payload,
-                                                         ID kind,
-                                                         ID key) {
+                                                         ID payload) {
     const char *fn_cstr = event_loop_debug_value_cstr(fn_one_arity, NULL);
-    const char *kind_cstr = event_loop_debug_value_cstr(kind, NULL);
-    const char *key_cstr = event_loop_debug_value_cstr(key, NULL);
     const char *payload_cstr = event_loop_debug_value_cstr(payload, NULL);
 
     event_loop_mini_fprintf(stderr,
-                            "[runloop][ingress][coalesce] fn=%s kind=%s key=%s payload=%s\n",
+                            "[runloop][ingress][coalesce] fn=%s payload=%s\n",
                             fn_cstr,
-                            kind_cstr,
-                            key_cstr,
                             payload_cstr);
 }
 #endif
 
-static bool event_loop_ingress_entry_matches_kind_key(ID entry,
-                                                      ID fn_one_arity,
-                                                      ID kind,
-                                                      ID key) {
-    if (!entry || !fn_one_arity || !kind || !key || TAG(entry) != CLJ_MAP_PERSISTENT) {
+static bool event_loop_ingress_entry_matches_payload(ID entry,
+                                                     ID fn_one_arity,
+                                                     ID candidate_arg) {
+    if (!entry || !fn_one_arity || !candidate_arg || TAG(entry) != CLJ_MAP_PERSISTENT) {
         return false;
     }
     ID queued_fn = map_get_sentinel(entry, KW_FN, NULL);
@@ -204,13 +291,7 @@ static bool event_loop_ingress_entry_matches_kind_key(ID entry,
     if (queued_arg == NOT_FOUND || !queued_arg) {
         return false;
     }
-    ID queued_kind = NULL;
-    ID queued_key = NULL;
-    if (!event_loop_extract_event_kind_and_key(queued_arg, &queued_kind, &queued_key)) {
-        return false;
-    }
-    return event_loop_value_equals(queued_kind, kind) &&
-           event_loop_value_equals(queued_key, key);
+    return event_loop_payload_matches_coalescing_key(queued_arg, candidate_arg);
 }
 
 typedef enum {
@@ -221,10 +302,9 @@ typedef enum {
 
 static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID entry,
                                                                            ID coalesce_fn,
-                                                                           ID coalesce_kind,
-                                                                           ID coalesce_key) {
+                                                                           ID coalesce_arg) {
     if (!entry) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
-    bool coalescing_enabled = coalesce_fn && coalesce_kind && coalesce_key;
+    bool coalescing_enabled = coalesce_fn && coalesce_arg;
 
     event_loop_ingress_lock_acquire();
     if (g_event_loop_ingress_closed || g_event_loop_ingress_count >= EVENT_LOOP_INGRESS_CAP) {
@@ -237,10 +317,9 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID ent
         for (uint16_t i = 0u; i < g_event_loop_ingress_count; i++) {
             uint16_t idx = (uint16_t)((g_event_loop_ingress_head + i) % EVENT_LOOP_INGRESS_CAP);
             ID queued = g_event_loop_ingress_queue[idx];
-            if (event_loop_ingress_entry_matches_kind_key(queued,
-                                                          coalesce_fn,
-                                                          coalesce_kind,
-                                                          coalesce_key)) {
+            if (event_loop_ingress_entry_matches_payload(queued,
+                                                         coalesce_fn,
+                                                         coalesce_arg)) {
                 event_loop_ingress_lock_release();
                 return EVENT_LOOP_INGRESS_PUSH_COALESCED;
             }
@@ -507,6 +586,12 @@ void event_loop_init(void) {
     KW_HAS_ARG = intern_symbol_global(":has-arg");
     KW_EVENT_KIND = intern_symbol_global(":kind");
     KW_EVENT_KEY = intern_symbol_global(":key");
+    KW_EVENT_SOURCE = intern_symbol_global(":source");
+    KW_EVENT_ID = intern_symbol_global(":id");
+    KW_EVENT_PHASE = intern_symbol_global(":phase");
+    KW_EVENT_SELF = intern_symbol_global(":self");
+    KW_EVENT_OTHER = intern_symbol_global(":other");
+    KW_SOURCE_SPATIAL = intern_symbol_global(":spatial");
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;
@@ -572,7 +657,7 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     if (!fn_zero_arity) return false;
     ID retained = RETAIN(fn_zero_arity);
     EventLoopIngressPushResult push_result =
-        event_loop_ingress_push_with_coalescing(retained, NULL, NULL, NULL);
+        event_loop_ingress_push_with_coalescing(retained, NULL, NULL);
     if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
         return true;
     }
@@ -582,9 +667,7 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
-    ID event_kind = NULL;
-    ID event_key = NULL;
-    bool can_coalesce = event_loop_extract_event_kind_and_key(arg, &event_kind, &event_key);
+    bool can_coalesce = event_loop_payload_supports_coalescing(arg);
 
     CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg, true);
     if (!task_map) {
@@ -593,15 +676,14 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     EventLoopIngressPushResult push_result =
         event_loop_ingress_push_with_coalescing(task_map,
                                                 can_coalesce ? fn_one_arity : NULL,
-                                                can_coalesce ? event_kind : NULL,
-                                                can_coalesce ? event_key : NULL);
+                                                can_coalesce ? arg : NULL);
     if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
         return true;
     }
     if (push_result == EVENT_LOOP_INGRESS_PUSH_COALESCED) {
 #ifdef DEBUG
         if (can_coalesce) {
-            event_loop_debug_log_coalesced_ingress_event(fn_one_arity, arg, event_kind, event_key);
+            event_loop_debug_log_coalesced_ingress_event(fn_one_arity, arg);
         }
 #endif
         RELEASE(task_map);

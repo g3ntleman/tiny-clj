@@ -108,10 +108,8 @@ fi
 # Prüfe ob tiny-clj verfügbar ist
 # Umgebungsvariable TINY_CLJ_PATH hat Vorrang
 if [ -z "$TINY_CLJ_PATH" ]; then
-    # Bevorzuge Release-Build, dann Standard-Build
-    if [ -f "./build-release/tiny-clj-repl" ]; then
-        TINY_CLJ_PATH="./build-release/tiny-clj-repl"
-    elif [ -f "./build/tiny-clj-repl" ]; then
+    # Tiny-clj host targets are built in the canonical build/ dir.
+    if [ -f "./build/tiny-clj-repl" ]; then
         TINY_CLJ_PATH="./build/tiny-clj-repl"
     fi
 fi
