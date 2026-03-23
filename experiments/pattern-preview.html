@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Pattern Fill Preview – 1D Noise Warp</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;700&display=swap');
+  :root {
+    --bg: #1a1a2e; --surface: #16213e; --accent: #e94560;
+    --text: #eee; --muted: #888; --border: #333;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 16px;
+    min-height: 100vh;
+  }
+  h1 { font-family: 'JetBrains Mono', monospace; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); }
+  .subtitle { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .preview-wrap {
+    border: 2px solid var(--border); border-radius: 4px; overflow: hidden;
+    image-rendering: pixelated; background: #000;
+  }
+  canvas { display: block; image-rendering: pixelated; }
+  .controls {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px;
+    background: var(--surface); padding: 16px 20px; border-radius: 8px;
+    border: 1px solid var(--border); width: 644px;
+  }
+  .control-group { display: flex; flex-direction: column; gap: 4px; }
+  label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+  }
+  input[type=color] {
+    width: 100%; height: 32px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--surface); cursor: pointer;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .val { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); text-align: right; }
+  select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .stats {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);
+    grid-column: 1 / -1; text-align: center; padding-top: 4px; border-top: 1px solid var(--border);
+  }
+  .full-width { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<h1>Pattern Fill Preview</h1>
+<div class="subtitle">1D Noise Warp &middot; 4-Color Palette &middot; RGB565 Simulation &middot; 320&times;240</div>
+
+<div class="preview-wrap">
+  <canvas id="cv" width="320" height="240" style="width:640px;height:480px;"></canvas>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Color A <span class="val" id="vColorA"></span></label>
+    <input type="color" id="colorA" value="#b07820">
+  </div>
+  <div class="control-group">
+    <label>Color B <span class="val" id="vColorB"></span></label>
+    <input type="color" id="colorB" value="#e8c840">
+  </div>
+  <div class="control-group">
+    <label>Seed <span class="val" id="vSeed"></span></label>
+    <input type="range" id="seed" min="0" max="999" value="42">
+  </div>
+  <div class="control-group">
+    <label>Noise Array Size <span class="val" id="vSize"></span></label>
+    <input type="range" id="noiseSize" min="64" max="512" step="16" value="256">
+  </div>
+  <div class="control-group">
+    <label>Palette Size <span class="val" id="vPalSize"></span></label>
+    <select id="palSize">
+      <option value="4">4 Farben</option>
+      <option value="8" selected>8 Farben</option>
+      <option value="16">16 Farben</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>Smooth Radius <span class="val" id="vSmooth"></span></label>
+    <input type="range" id="smoothR" min="0" max="32" step="1" value="8">
+  </div>
+  <div class="control-group">
+    <label>Palette Spread <span class="val" id="vSpread"></span></label>
+    <input type="range" id="spread" min="5" max="100" step="5" value="25">
+  </div>
+  <div class="control-group">
+    <label>Pattern Mode</label>
+    <select id="mode">
+      <option value="warp" selected>1D Warp (noiseX[x + noiseY[y]])</option>
+      <option value="warp-grain">1D Warp + Grain</option>
+      <option value="add">1D Add (noiseX[x] + noiseY[y]) – Tartan</option>
+      <option value="hash2d">2D Hash (organic, teurer)</option>
+      <option value="solid">Solid (Vergleich)</option>
+    </select>
+  </div>
+  <div class="control-group full-width">
+    <label>Palette Preview</label>
+    <canvas id="paletteCv" width="320" height="20" style="width:100%;height:20px;border-radius:4px;"></canvas>
+  </div>
+  <div class="stats" id="stats">--</div>
+</div>
+
+<script>
+const W = 320, H = 240;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const imgData = ctx.createImageData(W, H);
+const palCv = document.getElementById('paletteCv');
+const palCtx = palCv.getContext('2d');
+
+function hash1d(i, seed) {
+  let h = (i * 374761393 + seed * 668265263) >>> 0;
+  h ^= h >>> 13; h = (h * 1274126177) >>> 0; h ^= h >>> 16;
+  return h & 0xFF;
+}
+
+function hash2d(x, y, seed) {
+  let h = ((x * 374761393 + y * 668265263 + seed * 362437) >>> 0);
+  h ^= h >>> 13; h = (h * 1274126177) >>> 0; h ^= h >>> 16;
+  return h & 0xFF;
+}
+
+function hexToRgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF];
+}
+
+function rgbToRgb565(r, g, b) {
+  return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+}
+
+function rgb565ToRgb(c) {
+  const r = ((c >> 11) & 0x1F) << 3;
+  const g = ((c >> 5) & 0x3F) << 2;
+  const b = (c & 0x1F) << 3;
+  return [r | (r >> 5), g | (g >> 6), b | (b >> 5)];
+}
+
+function lerpRgb565(c1, c2, t) {
+  const [r1, g1, b1] = rgb565ToRgb(c1);
+  const [r2, g2, b2] = rgb565ToRgb(c2);
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return rgbToRgb565(r, g, b);
+}
+
+function darken565(c, factor) {
+  const [r, g, b] = rgb565ToRgb(c);
+  return rgbToRgb565(Math.round(r * factor), Math.round(g * factor), Math.round(b * factor));
+}
+
+function lighten565(c, factor) {
+  const [r, g, b] = rgb565ToRgb(c);
+  return rgbToRgb565(
+    Math.min(255, Math.round(r + (255 - r) * factor)),
+    Math.min(255, Math.round(g + (255 - g) * factor)),
+    Math.min(255, Math.round(b + (255 - b) * factor))
+  );
+}
+
+function buildPalette(hexA, hexB, spread, count) {
+  const [ra, ga, ba] = hexToRgb(hexA);
+  const [rb, gb, bb] = hexToRgb(hexB);
+  const ca = rgbToRgb565(ra, ga, ba);
+  const cb = rgbToRgb565(rb, gb, bb);
+  const mid = lerpRgb565(ca, cb, 0.5);
+  const s = spread / 100;
+  const pal = [];
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const target = t < 0.5 ? ca : cb;
+    const blend = Math.abs(t - 0.5) * 2;
+    pal.push(lerpRgb565(mid, target, blend * s));
+  }
+  return pal;
+}
+
+function drawPalette(palette) {
+  const pw = palCv.width / palette.length;
+  for (let i = 0; i < palette.length; i++) {
+    const [r, g, b] = rgb565ToRgb(palette[i]);
+    palCtx.fillStyle = `rgb(${r},${g},${b})`;
+    palCtx.fillRect(i * pw, 0, pw + 1, 20);
+  }
+}
+
+function render() {
+  const hexA = document.getElementById('colorA').value;
+  const hexB = document.getElementById('colorB').value;
+  const seed = parseInt(document.getElementById('seed').value);
+  const arrSize = parseInt(document.getElementById('noiseSize').value);
+  const palSize = parseInt(document.getElementById('palSize').value);
+  const mode = document.getElementById('mode').value;
+  const mask = arrSize - 1;
+  const palMask = palSize - 1;
+  const shiftBits = 8 - Math.log2(palSize);
+
+  document.getElementById('vColorA').textContent = hexA;
+  document.getElementById('vColorB').textContent = hexB;
+  document.getElementById('vSeed').textContent = seed;
+  document.getElementById('vSize').textContent = arrSize;
+  document.getElementById('vPalSize').textContent = palSize;
+
+  const spread = parseInt(document.getElementById('spread').value);
+  document.getElementById('vSpread').textContent = spread + '%';
+
+  const palette = buildPalette(hexA, hexB, spread, palSize);
+  drawPalette(palette);
+  const palRgb = palette.map(rgb565ToRgb);
+
+  const smoothR = parseInt(document.getElementById('smoothR').value);
+  document.getElementById('vSmooth').textContent = smoothR;
+
+  const rawX = new Uint8Array(arrSize);
+  const rawY = new Uint8Array(H);
+  for (let i = 0; i < arrSize; i++) rawX[i] = hash1d(i, seed);
+  for (let i = 0; i < H; i++) rawY[i] = hash1d(i, seed ^ 0x9E3779B9);
+
+  const noiseX = new Uint8Array(arrSize);
+  const noiseY = new Uint8Array(H);
+  if (smoothR > 0) {
+    for (let i = 0; i < arrSize; i++) {
+      let sum = 0;
+      for (let d = -smoothR; d <= smoothR; d++) sum += rawX[(i + d + arrSize) % arrSize];
+      noiseX[i] = (sum / (2 * smoothR + 1)) & 0xFF;
+    }
+    for (let i = 0; i < H; i++) {
+      let sum = 0;
+      for (let d = -smoothR; d <= smoothR; d++) sum += rawY[(i + d + H) % H];
+      noiseY[i] = (sum / (2 * smoothR + 1)) & 0xFF;
+    }
+  } else {
+    noiseX.set(rawX);
+    noiseY.set(rawY);
+  }
+
+  const t0 = performance.now();
+  const data = imgData.data;
+
+  for (let y = 0; y < H; y++) {
+    const vy = noiseY[y];
+    const rowOff = y * W * 4;
+    for (let x = 0; x < W; x++) {
+      let idx;
+      if (mode === 'warp') {
+        idx = (noiseX[(x + vy) & mask] >> shiftBits) & palMask;
+      } else if (mode === 'warp-grain') {
+        const base = noiseX[(x + vy) & mask];
+        const grain = (hash2d(x, y, seed) & 0x1F) - 16;
+        const v = Math.max(0, Math.min(255, base + grain));
+        idx = (v >> shiftBits) & palMask;
+      } else if (mode === 'add') {
+        idx = ((noiseX[x & mask] + vy) >> shiftBits) & palMask;
+      } else if (mode === 'hash2d') {
+        idx = (hash2d(x, y, seed) >> shiftBits) & palMask;
+      } else {
+        idx = palSize >> 1;
+      }
+      const off = rowOff + x * 4;
+      data[off]     = palRgb[idx][0];
+      data[off + 1] = palRgb[idx][1];
+      data[off + 2] = palRgb[idx][2];
+      data[off + 3] = 255;
+    }
+  }
+
+  const elapsed = (performance.now() - t0).toFixed(2);
+  ctx.putImageData(imgData, 0, 0);
+
+  const memBytes = mode === 'hash2d' ? 0 : arrSize + H;
+  document.getElementById('stats').textContent =
+    `Render: ${elapsed} ms | Palette: ${palette.map(p => '0x' + p.toString(16).padStart(4, '0')).join(' ')} | Noise RAM: ${memBytes} B`;
+}
+
+document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
