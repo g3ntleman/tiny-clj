@@ -1071,7 +1071,8 @@ void throw_oom(void) {
   clj_oom_exception->file[sizeof(clj_oom_exception->file) - 1] = '\0';
   clj_oom_exception->line = __LINE__;
   clj_oom_exception->col = 0;
-  if (subjective_c_has_main_thread() && !subjective_c_is_main_thread()) {
+  bool has_handler = global_exception_stack.top != NULL;
+  if (subjective_c_has_main_thread() && !subjective_c_is_main_thread() && !has_handler) {
     fprintf(stderr, "OOM on thread '%s'; suppressing exception longjmp.\n",
             subjective_c_get_thread_name());
     fputs("OOM throw-site backtrace:\n", stderr);

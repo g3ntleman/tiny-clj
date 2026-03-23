@@ -11,12 +11,20 @@
 #ifndef SUBJECTIVE_C_THREAD_LOCAL_H
 #define SUBJECTIVE_C_THREAD_LOCAL_H
 
-// Portable Thread-Local Storage macro
-// On single-threaded systems, it expands to nothing (zero overhead)
-#if defined(SINGLE_THREADED) || defined(__STDC_NO_THREADS__) || defined(ESP32_BUILD)
-    #define THREAD_LOCAL  /* nothing */
+// Portable Thread-Local Storage macro.
+// On ESP32/single-threaded builds keep zero-overhead storage.
+// On toolchains that define __STDC_NO_THREADS__ (e.g. Apple Clang), fall back
+// to compiler TLS extension so exception handlers stay thread-local.
+#if defined(SINGLE_THREADED) || defined(ESP32_BUILD)
+#define THREAD_LOCAL /* nothing */
+#elif defined(__STDC_NO_THREADS__)
+#if defined(__clang__) || defined(__GNUC__)
+#define THREAD_LOCAL __thread
 #else
-    #define THREAD_LOCAL _Thread_local
+#define THREAD_LOCAL /* nothing */
+#endif
+#else
+#define THREAD_LOCAL _Thread_local
 #endif
 
 #endif // SUBJECTIVE_C_THREAD_LOCAL_H

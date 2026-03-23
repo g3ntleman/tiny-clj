@@ -254,8 +254,7 @@
 
 (defn- on-launch-button-event!
   [event]
-  (when (or (button-down-event? event)
-            (button-release-event? event))
+  (when (button-down-event? event)
     (apply-input! {:launch true}))
   nil)
 

@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "scene.h"
+#include "vector_scene_graph.h"
 #include "tiny_fx_gfx.h"
 #include "viewer_collision.h"
 

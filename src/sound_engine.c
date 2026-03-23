@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /* Global sound engine instance */
 SoundEngine g_sound_engine;
@@ -22,113 +21,13 @@ static ID KW_KIND = NULL;
 static ID KW_TRACK_ID = NULL;
 static ID KW_AUDIO = NULL;
 static ID KW_FINISHED = NULL;
-static ID g_voice_debug_track_ids[SOUND_MAX_VOICES] = {0};
-
-// #region agent log
-static long long tinyclj_debug_sound_now_ms(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
-        return 0;
-    }
-    return ((long long)ts.tv_sec * 1000ll) + ((long long)ts.tv_nsec / 1000000ll);
-}
-
-static const char *tinyclj_debug_sound_track_name(ID track_id) {
-    if (!track_id || TAG(track_id) != CLJ_SYMBOL) {
-        return "<non-symbol>";
-    }
-    CljSymbol *sym = as_symbol(track_id);
-    if (!sym || !sym->cname) {
-        return "<unnamed-symbol>";
-    }
-    return sym->cname;
-}
-
-static int tinyclj_debug_active_sfx_count(void) {
-    int count = 0;
-    for (int i = 0; i < SOUND_MAX_SFX; i++) {
-        if (g_sound_engine.sfx[i].stream.active) {
-            count++;
-        }
-    }
-    return count;
-}
-
-static void tinyclj_debug_log_sfx_start(ID track_id,
-                                        int slot,
-                                        int voice_index,
-                                        bool evicted_slot,
-                                        bool stole_voice,
-                                        uint32_t queue_remaining,
-                                        ID evicted_track_id,
-                                        int evicted_voice_index,
-                                        ID stolen_track_id,
-                                        int stolen_track_slot,
-                                        uint32_t stolen_track_gate_ticks) {
-    FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
-    if (!f) {
-        return;
-    }
-    fprintf(f,
-            "{\"sessionId\":\"c994fc\",\"runId\":\"initial\",\"hypothesisId\":\"H3\",\"location\":\"src/sound_engine.c:tick_drain_commands\",\"message\":\"sfx command drained\",\"data\":{\"trackId\":\"%s\",\"slot\":%d,\"voiceIndex\":%d,\"evictedSlot\":%s,\"stoleVoice\":%s,\"activeSfxCount\":%d,\"queueRemaining\":%u,\"evictedTrackId\":\"%s\",\"evictedVoiceIndex\":%d,\"stolenTrackId\":\"%s\",\"stolenTrackSlot\":%d,\"stolenTrackGateTicks\":%u},\"timestamp\":%lld}\n",
-            tinyclj_debug_sound_track_name(track_id),
-            slot,
-            voice_index,
-            evicted_slot ? "true" : "false",
-            stole_voice ? "true" : "false",
-            tinyclj_debug_active_sfx_count(),
-            queue_remaining,
-            tinyclj_debug_sound_track_name(evicted_track_id),
-            evicted_voice_index,
-            tinyclj_debug_sound_track_name(stolen_track_id),
-            stolen_track_slot,
-            stolen_track_gate_ticks,
-            tinyclj_debug_sound_now_ms());
-    fclose(f);
-}
-
-static void tinyclj_debug_log_sfx_end(ID track_id,
-                                      int slot,
-                                      int voice_index,
-                                      uint32_t stream_tick,
-                                      uint32_t gate_remaining_ticks) {
-    FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
-    if (!f) {
-        return;
-    }
-    fprintf(f,
-            "{\"sessionId\":\"c994fc\",\"runId\":\"initial\",\"hypothesisId\":\"H5\",\"location\":\"src/sound_engine.c:tick_process_due_sfx\",\"message\":\"sfx stream ended\",\"data\":{\"trackId\":\"%s\",\"slot\":%d,\"voiceIndex\":%d,\"streamTick\":%u,\"gateRemainingTicks\":%u},\"timestamp\":%lld}\n",
-            tinyclj_debug_sound_track_name(track_id),
-            slot,
-            voice_index,
-            stream_tick,
-            gate_remaining_ticks,
-            tinyclj_debug_sound_now_ms());
-    fclose(f);
-}
-
-static void tinyclj_debug_log_voice_output(int voice_index,
-                                           ID track_id,
-                                           uint16_t prev_freq_hz,
-                                           uint8_t prev_volume,
-                                           uint16_t next_freq_hz,
-                                           uint8_t next_volume) {
-    FILE *f = fopen("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log", "a");
-    if (!f) {
-        return;
-    }
-    fprintf(f,
-            "{\"sessionId\":\"c994fc\",\"runId\":\"initial\",\"hypothesisId\":\"H9\",\"location\":\"src/sound_engine.c:tick_apply_voice_output\",\"message\":\"voice output changed\",\"data\":{\"voiceIndex\":%d,\"trackId\":\"%s\",\"prevFreqHz\":%u,\"prevVolume\":%u,\"nextFreqHz\":%u,\"nextVolume\":%u},\"timestamp\":%lld}\n",
-            voice_index,
-            tinyclj_debug_sound_track_name(track_id),
-            (unsigned int)prev_freq_hz,
-            (unsigned int)prev_volume,
-            (unsigned int)next_freq_hz,
-            (unsigned int)next_volume,
-            tinyclj_debug_sound_now_ms());
-    fclose(f);
-}
-// #endregion
+static const IdSymbolCacheEntry g_sound_finished_event_kw_cache[] = {
+    {&KW_SOURCE, ":source"},
+    {&KW_KIND, ":kind"},
+    {&KW_TRACK_ID, ":track-id"},
+    {&KW_AUDIO, ":audio"},
+    {&KW_FINISHED, ":finished"},
+};
 
 #if defined(DEBUG) || defined(TINY_CLJ_TEST_RUNNER)
 __attribute__((weak)) void tinyclj_sound_backend_observe_set_voice(int voice_index,
@@ -274,12 +173,9 @@ static SoundTrackEntry *find_track(ID track_id) {
 }
 
 static void sound_ensure_finished_event_keywords(void) {
-    if (KW_SOURCE) return;
-    KW_SOURCE = intern_symbol_global(":source");
-    KW_KIND = intern_symbol_global(":kind");
-    KW_TRACK_ID = intern_symbol_global(":track-id");
-    KW_AUDIO = intern_symbol_global(":audio");
-    KW_FINISHED = intern_symbol_global(":finished");
+    (void)id_symbol_cache_init_global(
+        g_sound_finished_event_kw_cache,
+        sizeof(g_sound_finished_event_kw_cache) / sizeof(g_sound_finished_event_kw_cache[0]));
 }
 
 static ID sound_make_finished_event(ID track_id) {
@@ -649,9 +545,6 @@ static void notify_finished(ID track_id) {
 /* ========================================================================= */
 
 void sound_engine_init(int voice_count) {
-    // #region agent log
-    (void)remove("/Users/theisen/Projects/tiny-clj/.cursor/debug-c994fc.log");
-    // #endregion
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
     sound_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
@@ -905,13 +798,6 @@ static void tick_drain_commands(void) {
             if (!t) break;
             /* Find free SFX slot; if none, evict the oldest (lowest current_tick). */
             int slot = -1;
-            bool evicted_slot = false;
-            bool stole_voice = false;
-            ID evicted_track_id = NULL;
-            int evicted_voice_index = -1;
-            ID stolen_track_id = NULL;
-            int stolen_track_slot = -1;
-            uint32_t stolen_track_gate_ticks = 0u;
             for (int i = 0; i < SOUND_MAX_SFX; i++) {
                 if (!g_sound_engine.sfx[i].stream.active) {
                     slot = i;
@@ -926,9 +812,6 @@ static void tick_drain_commands(void) {
                         slot = i;
                     }
                 }
-                evicted_slot = true;
-                evicted_track_id = g_sound_engine.sfx[slot].stream.track_id;
-                evicted_voice_index = g_sound_engine.sfx[slot].voice_index;
                 g_sound_engine.sfx[slot].stream.active = false;
                 if (g_sound_engine.sfx[slot].voice_index >= 0) {
                     sound_voice_force_silence(&g_sound_engine.voices[g_sound_engine.sfx[slot].voice_index]);
@@ -952,7 +835,6 @@ static void tick_drain_commands(void) {
                         vi = i;
                     }
                 }
-                stole_voice = true;
             }
             if (vi < 0) break;
             /* Ensure one voice is owned by at most one active SFX stream. */
@@ -962,9 +844,6 @@ static void tick_drain_commands(void) {
                 }
                 if (g_sound_engine.sfx[i].stream.active &&
                     g_sound_engine.sfx[i].voice_index == vi) {
-                    stolen_track_id = g_sound_engine.sfx[i].stream.track_id;
-                    stolen_track_slot = i;
-                    stolen_track_gate_ticks = g_sound_engine.voices[vi].gate_remaining_ticks;
                     g_sound_engine.sfx[i].stream.active = false;
                     g_sound_engine.sfx[i].voice_index = -1;
                 }
@@ -972,20 +851,6 @@ static void tick_drain_commands(void) {
             sound_voice_force_silence(&g_sound_engine.voices[vi]);
             stream_init(&g_sound_engine.sfx[slot].stream, t, 1); /* one-shot */
             g_sound_engine.sfx[slot].voice_index = vi;
-            g_voice_debug_track_ids[vi] = cmd.track_id;
-            // #region agent log
-            tinyclj_debug_log_sfx_start(cmd.track_id,
-                                        slot,
-                                        vi,
-                                        evicted_slot,
-                                        stole_voice,
-                                        lockfree_spsc_queue_count(&g_sound_engine.cmd_queue.spsc),
-                                        evicted_track_id,
-                                        evicted_voice_index,
-                                        stolen_track_id,
-                                        stolen_track_slot,
-                                        stolen_track_gate_ticks);
-            // #endregion
             break;
         }
 
@@ -1039,8 +904,6 @@ static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
     uint16_t target_freq = 0;
     uint8_t target_vol = 0;
     bool retrigger = false;
-    uint16_t prev_freq = 0;
-    uint8_t prev_vol = 0;
     if (voice->active &&
         (voice->gate_remaining_ticks > 0 || voice->hold_until_next_note) &&
         voice->freq_hz > 0) {
@@ -1051,26 +914,11 @@ static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
     if (!retrigger && voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
         return;
     }
-    prev_freq = voice->applied_freq_hz;
-    prev_vol = voice->applied_volume;
     sound_backend_set_voice(voice_index, target_freq, target_vol, retrigger);
     tinyclj_sound_backend_observe_set_voice(voice_index, target_freq, target_vol, retrigger);
     voice->applied_freq_hz = target_freq;
     voice->applied_volume = target_vol;
     voice->applied_attack_generation = voice->attack_generation;
-    if ((prev_freq == 0u && target_freq > 0u) || (prev_freq > 0u && target_freq == 0u)) {
-        // #region agent log
-        tinyclj_debug_log_voice_output(voice_index,
-                                       g_voice_debug_track_ids[voice_index],
-                                       prev_freq,
-                                       prev_vol,
-                                       target_freq,
-                                       target_vol);
-        // #endregion
-        if (target_freq == 0u) {
-            g_voice_debug_track_ids[voice_index] = NULL;
-        }
-    }
 }
 
 static uint32_t tick_voice_ticks_until_envelope_boundary(const SoundVoice *voice) {
@@ -1154,17 +1002,6 @@ static void tick_process_due_sfx(void) {
         }
 
         if (!sfx->stream.active) {
-            // #region agent log
-            uint32_t gate_remaining = 0u;
-            if (vi >= 0 && vi < g_sound_engine.voice_count) {
-                gate_remaining = g_sound_engine.voices[vi].gate_remaining_ticks;
-            }
-            tinyclj_debug_log_sfx_end(sfx->stream.track_id,
-                                      i,
-                                      vi,
-                                      sfx->stream.current_tick,
-                                      gate_remaining);
-            // #endregion
             tick_release_sfx_voice(sfx);
         }
     }

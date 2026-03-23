@@ -2919,7 +2919,7 @@ static CljRecordDescriptor *lookup_record_descriptor_with_schema(ID type_symbol)
 #if TINYCLJ_WITH_TINY_FX
   if (!desc) {
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    if (tiny_fx_gfx_ensure_schema(st)) {
+    if (tiny_fx_gfx_require_records_namespace(st) && tiny_fx_gfx_ensure_schema(st)) {
       desc = record_descriptor_lookup(type_symbol);
     }
   }
@@ -3271,19 +3271,57 @@ ID native_run_next_task(ID *args, unsigned int argc) {
   return ran ? clj_true : clj_false;
 }
 
-static CljSymbol *g_timer_kw_id = NULL;
-static CljSymbol *g_timer_kw_period_ms = NULL;
+static ID g_timer_kw_id = NULL;
+static ID g_timer_kw_period_ms = NULL;
+static const IdSymbolCacheEntry g_timer_kw_cache[] = {
+    {&g_timer_kw_id, ":id"},
+    {&g_timer_kw_period_ms, ":period-ms"},
+};
+static ID g_stats_kw_build_time = NULL;
+static ID g_stats_kw_gpio_event_drops = NULL;
+static ID g_stats_kw_sound_cmd_drop_count = NULL;
+static ID g_stats_kw_sound_tick_overrun_count = NULL;
+static ID g_stats_kw_sound_queue_high_watermark = NULL;
+static ID g_stats_kw_sound_sfx_drop_count = NULL;
+static ID g_stats_kw_sound_finished_drop_count = NULL;
+static ID g_stats_kw_event_loop_ingress_accepted_count = NULL;
+static ID g_stats_kw_event_loop_ingress_rejected_count = NULL;
+static ID g_stats_kw_event_loop_ingress_drained_count = NULL;
+static ID g_stats_kw_event_loop_ingress_high_watermark = NULL;
+static ID g_stats_kw_event_loop_ingress_pending_count = NULL;
+static ID g_stats_kw_event_loop_ingress_closed = NULL;
+static ID g_stats_kw_heap_limit_bytes = NULL;
+static ID g_stats_kw_heap_bytes_free = NULL;
+static ID g_stats_kw_heap_bytes_total = NULL;
+static ID g_stats_kw_memory_stats = NULL;
+static const IdSymbolCacheEntry g_runtime_stats_kw_cache[] = {
+    {&g_stats_kw_build_time, ":build-time"},
+    {&g_stats_kw_gpio_event_drops, ":gpio-event-drops"},
+    {&g_stats_kw_sound_cmd_drop_count, ":sound-cmd-drop-count"},
+    {&g_stats_kw_sound_tick_overrun_count, ":sound-tick-overrun-count"},
+    {&g_stats_kw_sound_queue_high_watermark, ":sound-queue-high-watermark"},
+    {&g_stats_kw_sound_sfx_drop_count, ":sound-sfx-drop-count"},
+    {&g_stats_kw_sound_finished_drop_count, ":sound-finished-drop-count"},
+    {&g_stats_kw_event_loop_ingress_accepted_count, ":event-loop-ingress-accepted-count"},
+    {&g_stats_kw_event_loop_ingress_rejected_count, ":event-loop-ingress-rejected-count"},
+    {&g_stats_kw_event_loop_ingress_drained_count, ":event-loop-ingress-drained-count"},
+    {&g_stats_kw_event_loop_ingress_high_watermark, ":event-loop-ingress-high-watermark"},
+    {&g_stats_kw_event_loop_ingress_pending_count, ":event-loop-ingress-pending-count"},
+    {&g_stats_kw_event_loop_ingress_closed, ":event-loop-ingress-closed"},
+    {&g_stats_kw_heap_limit_bytes, ":heap-limit-bytes"},
+    {&g_stats_kw_heap_bytes_free, ":heap-bytes-free"},
+    {&g_stats_kw_heap_bytes_total, ":heap-bytes-total"},
+    {&g_stats_kw_memory_stats, ":memory-stats"},
+};
 
-static inline CljSymbol *timer_kw_id(void) {
-  if (!g_timer_kw_id)
-    g_timer_kw_id = intern_symbol_global(":id");
-  return g_timer_kw_id;
+static inline bool timer_keywords_ready(void) {
+  return id_symbol_cache_init_global(g_timer_kw_cache,
+                                     sizeof(g_timer_kw_cache) / sizeof(g_timer_kw_cache[0]));
 }
 
-static inline CljSymbol *timer_kw_period_ms(void) {
-  if (!g_timer_kw_period_ms)
-    g_timer_kw_period_ms = intern_symbol_global(":period-ms");
-  return g_timer_kw_period_ms;
+static inline bool runtime_stats_keywords_ready(void) {
+  return id_symbol_cache_init_global(g_runtime_stats_kw_cache,
+                                     sizeof(g_runtime_stats_kw_cache) / sizeof(g_runtime_stats_kw_cache[0]));
 }
 
 static bool parse_timer_fn_or_opts(ID arg,
@@ -3328,11 +3366,17 @@ static bool parse_timer_fn_or_opts(ID arg,
   if (out_fn_obj)
     *out_fn_obj = fn_obj;
 
-  ID key_obj = map_get_sentinel(opts, timer_kw_id(), NOT_FOUND);
+  if (!timer_keywords_ready()) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "%s failed to initialize timer option keywords", fn_name);
+    return false;
+  }
+
+  ID key_obj = map_get_sentinel(opts, g_timer_kw_id, NOT_FOUND);
   if (key_obj != NOT_FOUND && out_timer_key)
     *out_timer_key = key_obj;
 
-  ID period_obj = map_get_sentinel(opts, timer_kw_period_ms(), NOT_FOUND);
+  ID period_obj = map_get_sentinel(opts, g_timer_kw_period_ms, NOT_FOUND);
   if (period_obj != NOT_FOUND) {
     if (!period_obj || TAG(period_obj) != CLJ_INT) {
       throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -7523,12 +7567,13 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   ID v_os = make_string(os_name);
   ID v_ver = make_string("0.5");
+  (void)runtime_stats_keywords_ready();
 
   CljPersistentMap *m;
 #if defined(BUILD_EPOCH_SECONDS)
   int32_t days = (int32_t)(BUILD_EPOCH_SECONDS / 86400);
   uint32_t millis = (uint32_t)((BUILD_EPOCH_SECONDS % 86400) * 1000);
-  ID k_build_time = intern_symbol_global(":build-time");
+  ID k_build_time = g_stats_kw_build_time;
   ID v_build_time = make_instant(days, millis);
   m = make_map_from_kv(3, SYM_KW_OS, v_os, SYM_KW_VERSION, v_ver, k_build_time, v_build_time);
   RELEASE(v_os);
@@ -7555,7 +7600,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-    CljSymbol *k_gpio_event_drops = intern_symbol_global(":gpio-event-drops");
+    ID k_gpio_event_drops = g_stats_kw_gpio_event_drops;
     int32_t drops = 0;
     uint32_t raw_drops = gpio_get_event_drop_count();
     drops = (raw_drops > (uint32_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_drops;
@@ -7566,11 +7611,11 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   {
 #if TINYCLJ_WITH_TINY_FX
-    CljSymbol *k_sound_cmd_drop_count = intern_symbol_global(":sound-cmd-drop-count");
-    CljSymbol *k_sound_tick_overrun_count = intern_symbol_global(":sound-tick-overrun-count");
-    CljSymbol *k_sound_queue_high_watermark = intern_symbol_global(":sound-queue-high-watermark");
-    CljSymbol *k_sound_sfx_drop_count = intern_symbol_global(":sound-sfx-drop-count");
-    CljSymbol *k_sound_finished_drop_count = intern_symbol_global(":sound-finished-drop-count");
+    ID k_sound_cmd_drop_count = g_stats_kw_sound_cmd_drop_count;
+    ID k_sound_tick_overrun_count = g_stats_kw_sound_tick_overrun_count;
+    ID k_sound_queue_high_watermark = g_stats_kw_sound_queue_high_watermark;
+    ID k_sound_sfx_drop_count = g_stats_kw_sound_sfx_drop_count;
+    ID k_sound_finished_drop_count = g_stats_kw_sound_finished_drop_count;
 
     int32_t cmd_drops = (g_sound_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
@@ -7607,12 +7652,12 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-    CljSymbol *k_event_loop_ingress_accepted_count = intern_symbol_global(":event-loop-ingress-accepted-count");
-    CljSymbol *k_event_loop_ingress_rejected_count = intern_symbol_global(":event-loop-ingress-rejected-count");
-    CljSymbol *k_event_loop_ingress_drained_count = intern_symbol_global(":event-loop-ingress-drained-count");
-    CljSymbol *k_event_loop_ingress_high_watermark = intern_symbol_global(":event-loop-ingress-high-watermark");
-    CljSymbol *k_event_loop_ingress_pending_count = intern_symbol_global(":event-loop-ingress-pending-count");
-    CljSymbol *k_event_loop_ingress_closed = intern_symbol_global(":event-loop-ingress-closed");
+    ID k_event_loop_ingress_accepted_count = g_stats_kw_event_loop_ingress_accepted_count;
+    ID k_event_loop_ingress_rejected_count = g_stats_kw_event_loop_ingress_rejected_count;
+    ID k_event_loop_ingress_drained_count = g_stats_kw_event_loop_ingress_drained_count;
+    ID k_event_loop_ingress_high_watermark = g_stats_kw_event_loop_ingress_high_watermark;
+    ID k_event_loop_ingress_pending_count = g_stats_kw_event_loop_ingress_pending_count;
+    ID k_event_loop_ingress_closed = g_stats_kw_event_loop_ingress_closed;
 
     EventLoopIngressStats ingress_stats = {0};
     if (event_loop_ingress_stats(&ingress_stats)) {
@@ -7656,7 +7701,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   {
     size_t heap_limit = memory_get_heap_limit_bytes();
     if (heap_limit < SIZE_MAX) {
-      CljSymbol *k_heap_limit_bytes = intern_symbol_global(":heap-limit-bytes");
+      ID k_heap_limit_bytes = g_stats_kw_heap_limit_bytes;
       if (k_heap_limit_bytes) {
         int32_t heap_limit_fixnum = (heap_limit > (size_t)FIXNUM_MAX)
                                         ? (int32_t)FIXNUM_MAX
@@ -7732,7 +7777,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       size_t heap_free = platform_heap_bytes_free();
       if (heap_free != (size_t)-1) {
         int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
-        CljSymbol *kw = intern_symbol_global(":heap-bytes-free");
+        ID kw = g_stats_kw_heap_bytes_free;
         if (kw)
           MAP_REASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
       }
@@ -7759,13 +7804,13 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       CljPersistentMap *ms = make_map(2);
       if (ms) {
         int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
-        CljSymbol *kw_free = intern_symbol_global(":heap-bytes-free");
+        ID kw_free = g_stats_kw_heap_bytes_free;
         if (kw_free)
           MAP_REASSIGN(ms, map_assoc(ms, kw_free, fixnum(hf)));
         size_t heap_total = platform_heap_bytes_total();
         if (heap_total != (size_t)-1) {
           int32_t ht = (heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total;
-          CljSymbol *kw_total = intern_symbol_global(":heap-bytes-total");
+          ID kw_total = g_stats_kw_heap_bytes_total;
           if (kw_total)
             MAP_REASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
         }
@@ -7774,7 +7819,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
           int32_t er = (ext_ram > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ext_ram;
           MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_EXTERNAL_RAM_TOTAL, fixnum(er)));
         }
-        CljSymbol *kw_ms = intern_symbol_global(":memory-stats");
+        ID kw_ms = g_stats_kw_memory_stats;
         if (kw_ms)
           MAP_REASSIGN(m, map_assoc(m, kw_ms, ms));
         RELEASE(ms);

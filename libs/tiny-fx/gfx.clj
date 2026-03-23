@@ -1,6 +1,7 @@
 
 (ns tiny-fx.gfx
-  (:require [tiny-clj.runtime]))
+  (:require [tiny-clj.runtime]
+            [tiny-fx.gfx-records]))
 
 ;; Direct var aliases to tiny-clj.runtime (no forwarding wrapper functions).
 ;; This keeps arity/error behavior identical to the native runtime entry points.

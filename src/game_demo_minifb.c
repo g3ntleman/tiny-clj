@@ -1317,7 +1317,8 @@ int tinyclj_tiny_fx_host_app_run(void) {
         goto cleanup;
     }
     evalstate_set_ns(viewer_eval_state, "user");
-    if (!tiny_fx_gfx_ensure_schema(viewer_eval_state)) {
+    if (!tiny_fx_gfx_require_records_namespace(viewer_eval_state) ||
+        !tiny_fx_gfx_ensure_schema(viewer_eval_state)) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
@@ -1504,24 +1505,45 @@ int tinyclj_tiny_fx_host_app_run(void) {
             double max_bw_kb = perf_snapshot.max_dirty_bytes_per_frame / 1024.0;
             double spi_mib_s = bytes_per_second_to_mib_per_second(perf_snapshot.dirty_bytes_per_s);
             char title[200];
-            (void)snprintf(title,
-                           sizeof(title),
-                           "[%s%s] FPS %.1f spi %.2fMiB/s tx %.1f/s tm %.2f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
-                           runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
-                           runtime_flags.redraw_overlay_enabled ? "+R" : "",
-                           perf_snapshot.fps,
-                           spi_mib_s,
-                           perf_snapshot.transfer_rects_per_s,
-                           perf_snapshot.avg_transfer_ms_per_frame,
-                           max_bw_kb,
-                           full_frame_kb,
-                           (unsigned long long)perf_snapshot.skipped_generations,
-                           (unsigned long long)perf_snapshot.skipped_max_frame,
-                           long_frame_count,
-                           dt_max_ms,
-                           perf_snapshot.max_render_lock_hold_us,
-                           dt_avg_ms,
-                           up_avg_ms);
+            if (runtime_flags.use_mfb_waitsync || runtime_flags.redraw_overlay_enabled) {
+                (void)snprintf(title,
+                               sizeof(title),
+                               "[%s%s] FPS %.1f spi %.2fMiB/s tx %.1f/s tm %.2f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
+                               runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "",
+                               runtime_flags.redraw_overlay_enabled
+                                   ? (runtime_flags.use_mfb_waitsync ? "+R" : "R")
+                                   : "",
+                               perf_snapshot.fps,
+                               spi_mib_s,
+                               perf_snapshot.transfer_rects_per_s,
+                               perf_snapshot.avg_transfer_ms_per_frame,
+                               max_bw_kb,
+                               full_frame_kb,
+                               (unsigned long long)perf_snapshot.skipped_generations,
+                               (unsigned long long)perf_snapshot.skipped_max_frame,
+                               long_frame_count,
+                               dt_max_ms,
+                               perf_snapshot.max_render_lock_hold_us,
+                               dt_avg_ms,
+                               up_avg_ms);
+            } else {
+                (void)snprintf(title,
+                               sizeof(title),
+                               "FPS %.1f spi %.2fMiB/s tx %.1f/s tm %.2f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
+                               perf_snapshot.fps,
+                               spi_mib_s,
+                               perf_snapshot.transfer_rects_per_s,
+                               perf_snapshot.avg_transfer_ms_per_frame,
+                               max_bw_kb,
+                               full_frame_kb,
+                               (unsigned long long)perf_snapshot.skipped_generations,
+                               (unsigned long long)perf_snapshot.skipped_max_frame,
+                               long_frame_count,
+                               dt_max_ms,
+                               perf_snapshot.max_render_lock_hold_us,
+                               dt_avg_ms,
+                               up_avg_ms);
+            }
             macos_viewer_set_window_title(title);
             if (viewer_perf_stderr_diag_enabled()) {
                 if (perf_snapshot.skipped_generations > 0u) {

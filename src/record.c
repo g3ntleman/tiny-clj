@@ -5,9 +5,9 @@
 #include "symbol_token.h"
 #include "seq.h"
 #include "strings.h"
-#include "value.h"
 #include "exception.h"
 #include "mini_format.h"
+#include <stdarg.h>
 
 // Normalize a field designator to a keyword (e.g. x, "x", :x -> :x).
 static ID keyword_from_field(ID field) {
@@ -205,4 +205,103 @@ CljRecordDescriptor *record_register_descriptor(ID type_symbol, ID fields) {
     hashmap_assoc_inplace(&g_runtime.record_registry, type_symbol, desc);
     RELEASE(desc);
     return record_descriptor_lookup(type_symbol);
+}
+
+static ID keyword_from_cname(const char *field_name) {
+    if (!field_name || !field_name[0]) {
+        return NULL;
+    }
+
+    while (*field_name == ':') {
+        field_name++;
+    }
+    if (!field_name[0]) {
+        return NULL;
+    }
+
+    char kw_name[256] = {0};
+    size_t pos = format_append_char(kw_name, 0u, sizeof(kw_name), ':');
+    (void)format_append(kw_name, pos, sizeof(kw_name), field_name);
+    return intern_symbol_global(kw_name);
+}
+
+static ID type_symbol_from_cnames(const char *ns_name, const char *type_name) {
+    if (!type_name || !type_name[0]) {
+        return NULL;
+    }
+    if (!ns_name || !ns_name[0]) {
+        return intern_symbol_global(type_name);
+    }
+    CljSymbol *ns_sym = intern_symbol_global(ns_name);
+    if (!ns_sym) {
+        return NULL;
+    }
+    return intern_symbol(ns_sym, type_name);
+}
+
+static CljRecordDescriptor *record_register_descriptor_from_ns_cnames_v(const char *ns_name,
+                                                                        const char *type_name,
+                                                                        size_t field_count,
+                                                                        va_list args) {
+    if (!type_name || !type_name[0] || field_count == 0u) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "record-register-from-cnames requires type and at least one field",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID type_symbol = type_symbol_from_cnames(ns_name, type_name);
+    if (!type_symbol) {
+        return NULL;
+    }
+
+    CljPersistentVector *fields = make_vector((unsigned int)field_count, STRONG);
+    if (!fields) {
+        return NULL;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; i < field_count; i++) {
+        const char *field_name = va_arg(args, const char *);
+        ID field_keyword = keyword_from_cname(field_name);
+        if (!field_keyword) {
+            ok = false;
+            break;
+        }
+        vector_conj_inplace(&fields, field_keyword);
+    }
+    if (!ok) {
+        RELEASE(fields);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "record-register-from-cnames requires non-empty field names",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljRecordDescriptor *desc = record_register_descriptor(type_symbol, fields);
+    RELEASE(fields);
+    return desc;
+}
+
+CljRecordDescriptor *record_register_descriptor_from_ns_cnames(const char *ns_name,
+                                                               const char *type_name,
+                                                               size_t field_count,
+                                                               ...) {
+    va_list args;
+    va_start(args, field_count);
+    CljRecordDescriptor *desc =
+        record_register_descriptor_from_ns_cnames_v(ns_name, type_name, field_count, args);
+    va_end(args);
+    return desc;
+}
+
+CljRecordDescriptor *record_register_descriptor_from_cnames(const char *type_name,
+                                                            size_t field_count,
+                                                            ...) {
+    va_list args;
+    va_start(args, field_count);
+    CljRecordDescriptor *desc =
+        record_register_descriptor_from_ns_cnames_v(NULL, type_name, field_count, args);
+    va_end(args);
+    return desc;
 }

@@ -604,6 +604,7 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
 
 TEST(test_vector_scene_graph_game_demo_player_entity_matches_tri_type_hash) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_TRUE(tiny_fx_gfx_require_records_namespace(g_test_eval_state));
     TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
 
     ID player = eval_string(
@@ -753,6 +754,7 @@ TEST(test_vector_scene_graph_game_demo_collision_proxy_tracks_visible_player_sca
 
 TEST(test_vector_scene_graph_game_demo_hidden_collision_proxy_captures_rendered_aabb) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_TRUE(tiny_fx_gfx_require_records_namespace(g_test_eval_state));
     TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
     vg_rendered_state_reset_all();
 

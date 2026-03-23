@@ -837,6 +837,25 @@ TEST(test_breakout_contract_scene_uses_exact_terminal_overlay_texts) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_scene_centers_breakout_level_clear_and_game_over_overlay_texts) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [title (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :title)) "
+        "        clear (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :level-clear)) "
+        "        lose (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :game-over)) "
+        "        title-overlay (get (:index title) 1005) "
+        "        clear-overlay (get (:index clear) 1005) "
+        "        lose-overlay (get (:index lose) 1005)] "
+        "    (and (= 120 (:x title-overlay)) "
+        "         (= 108 (:x clear-overlay)) "
+        "         (= 118 (:x lose-overlay)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_host_config_exposes_viewer_slots_and_atoms_without_native_runtime_flag) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(

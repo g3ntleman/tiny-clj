@@ -30,6 +30,11 @@ typedef struct RecordSlotFrame {
   unsigned int slot_count;
 } RecordSlotFrame;
 
+static ID g_optimize_sym_record_get_index = NULL;
+static const IdSymbolCacheEntry g_optimize_symbol_cache[] = {
+    {&g_optimize_sym_record_get_index, "record-get-index"},
+};
+
 // Check if expr is the last element in list (single traversal)
 static bool is_last_in_list(CljObject *expr, CljList *list) {
   if (!list)
@@ -223,7 +228,12 @@ static bool rewrite_record_lookup_call(CljASTCall *call,
   vector_conj_inplace(&new_args, fixnum(index));
   vector_conj_inplace(&new_args, default_expr);
 
-  CljSymbol *fast_op = intern_symbol_global("record-get-index");
+  if (!id_symbol_cache_init_global(g_optimize_symbol_cache,
+                                   sizeof(g_optimize_symbol_cache) / sizeof(g_optimize_symbol_cache[0]))) {
+    RELEASE(new_args);
+    return false;
+  }
+  CljSymbol *fast_op = g_optimize_sym_record_get_index;
   if (!fast_op) {
     RELEASE(new_args);
     return false;

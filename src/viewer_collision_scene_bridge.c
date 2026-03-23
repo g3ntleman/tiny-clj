@@ -5,63 +5,103 @@
 
 #include "memory.h"
 #include "record.h"
+#include "runtime.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
 #include "viewer_host_slots.h"
 
+static ID g_viewer_collision_kw_prototype;
+static ID g_viewer_collision_sym_aabb;
+static ID g_viewer_collision_sym_spatial_event;
+static ID g_viewer_collision_kw_source_spatial;
+static ID g_viewer_collision_kw_collision_rules;
+static ID g_viewer_collision_kw_id;
+static ID g_viewer_collision_kw_slot;
+static ID g_viewer_collision_kw_kind;
+static ID g_viewer_collision_kw_channel;
+static ID g_viewer_collision_kw_radius;
+static ID g_viewer_collision_kw_self;
+static ID g_viewer_collision_kw_other;
+static ID g_viewer_collision_kw_a_id;
+static ID g_viewer_collision_kw_b_id;
+static ID g_viewer_collision_kw_collision;
+
+static IdSymbolCacheEntry g_viewer_collision_scene_symbols[] = {
+    { &g_viewer_collision_kw_prototype, ":prototype" },
+    { &g_viewer_collision_sym_aabb, "Aabb" },
+    { &g_viewer_collision_sym_spatial_event, "SpatialEvent" },
+    { &g_viewer_collision_kw_source_spatial, ":spatial" },
+    { &g_viewer_collision_kw_collision_rules, ":collision-rules" },
+    { &g_viewer_collision_kw_id, ":id" },
+    { &g_viewer_collision_kw_slot, ":slot" },
+    { &g_viewer_collision_kw_kind, ":kind" },
+    { &g_viewer_collision_kw_channel, ":channel" },
+    { &g_viewer_collision_kw_radius, ":radius" },
+    { &g_viewer_collision_kw_self, ":self" },
+    { &g_viewer_collision_kw_other, ":other" },
+    { &g_viewer_collision_kw_a_id, ":a-id" },
+    { &g_viewer_collision_kw_b_id, ":b-id" },
+    { &g_viewer_collision_kw_collision, ":collision" },
+};
+#define VC_SCENE_SYM_COUNT (sizeof(g_viewer_collision_scene_symbols) / sizeof(g_viewer_collision_scene_symbols[0]))
+
+static CljRecordDescriptor *g_viewer_collision_desc_aabb = NULL;
+static CljRecordDescriptor *g_viewer_collision_desc_spatial_event = NULL;
+static CljHashMap *g_viewer_collision_desc_cache_registry = NULL;
+
 static pthread_once_t g_viewer_collision_scene_symbols_once = PTHREAD_ONCE_INIT;
-static ID g_viewer_collision_kw_prototype = NULL;
-static ID g_viewer_collision_sym_aabb = NULL;
-static ID g_viewer_collision_sym_spatial_event = NULL;
-static ID g_viewer_collision_kw_source_spatial = NULL;
-static ID g_viewer_collision_kw_collision_rules = NULL;
-static ID g_viewer_collision_kw_id = NULL;
-static ID g_viewer_collision_kw_slot = NULL;
-static ID g_viewer_collision_kw_kind = NULL;
-static ID g_viewer_collision_kw_channel = NULL;
-static ID g_viewer_collision_kw_radius = NULL;
-static ID g_viewer_collision_kw_self = NULL;
-static ID g_viewer_collision_kw_other = NULL;
-static ID g_viewer_collision_kw_a_id = NULL;
-static ID g_viewer_collision_kw_b_id = NULL;
-static ID g_viewer_collision_kw_collision = NULL;
 
 static void viewer_collision_scene_symbols_init_once(void) {
-    g_viewer_collision_kw_prototype = intern_symbol_global(":prototype");
-    g_viewer_collision_sym_aabb = intern_symbol_global("Aabb");
-    g_viewer_collision_sym_spatial_event = intern_symbol_global("SpatialEvent");
-    g_viewer_collision_kw_source_spatial = intern_symbol_global(":spatial");
-    g_viewer_collision_kw_collision_rules = intern_symbol_global(":collision-rules");
-    g_viewer_collision_kw_id = intern_symbol_global(":id");
-    g_viewer_collision_kw_slot = intern_symbol_global(":slot");
-    g_viewer_collision_kw_kind = intern_symbol_global(":kind");
-    g_viewer_collision_kw_channel = intern_symbol_global(":channel");
-    g_viewer_collision_kw_radius = intern_symbol_global(":radius");
-    g_viewer_collision_kw_self = intern_symbol_global(":self");
-    g_viewer_collision_kw_other = intern_symbol_global(":other");
-    g_viewer_collision_kw_a_id = intern_symbol_global(":a-id");
-    g_viewer_collision_kw_b_id = intern_symbol_global(":b-id");
-    g_viewer_collision_kw_collision = intern_symbol_global(":collision");
+    for (size_t i = 0; i < VC_SCENE_SYM_COUNT; i++) {
+        *g_viewer_collision_scene_symbols[i].slot =
+            intern_symbol_global(g_viewer_collision_scene_symbols[i].cname);
+    }
 }
 
 static bool viewer_collision_scene_symbols_ready(void) {
     (void)pthread_once(&g_viewer_collision_scene_symbols_once,
                        viewer_collision_scene_symbols_init_once);
-    return g_viewer_collision_kw_prototype &&
-           g_viewer_collision_sym_aabb &&
-           g_viewer_collision_sym_spatial_event &&
-           g_viewer_collision_kw_source_spatial &&
-           g_viewer_collision_kw_collision_rules &&
-           g_viewer_collision_kw_id &&
-           g_viewer_collision_kw_slot &&
-           g_viewer_collision_kw_kind &&
-           g_viewer_collision_kw_channel &&
-           g_viewer_collision_kw_radius &&
-           g_viewer_collision_kw_self &&
-           g_viewer_collision_kw_other &&
-           g_viewer_collision_kw_a_id &&
-           g_viewer_collision_kw_b_id &&
-           g_viewer_collision_kw_collision;
+    for (size_t i = 0; i < VC_SCENE_SYM_COUNT; i++) {
+        if (!*g_viewer_collision_scene_symbols[i].slot) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool viewer_collision_scene_descriptors_ready(void) {
+    if (!viewer_collision_scene_symbols_ready()) {
+        return false;
+    }
+
+    CljHashMap *registry = g_runtime.record_registry;
+    if (g_viewer_collision_desc_aabb &&
+        g_viewer_collision_desc_spatial_event &&
+        registry &&
+        g_viewer_collision_desc_cache_registry == registry) {
+        return true;
+    }
+
+    // Record descriptors are runtime-lifecycle scoped. Ensure schema is present
+    // and rebind descriptor pointers whenever the registry instance changes.
+    if (!tiny_fx_gfx_ensure_schema(NULL)) {
+        return false;
+    }
+    registry = g_runtime.record_registry;
+    if (!registry) {
+        g_viewer_collision_desc_cache_registry = NULL;
+        g_viewer_collision_desc_aabb = NULL;
+        g_viewer_collision_desc_spatial_event = NULL;
+        return false;
+    }
+
+    g_viewer_collision_desc_aabb = record_descriptor_lookup(g_viewer_collision_sym_aabb);
+    g_viewer_collision_desc_spatial_event = record_descriptor_lookup(g_viewer_collision_sym_spatial_event);
+    if (!g_viewer_collision_desc_aabb || !g_viewer_collision_desc_spatial_event) {
+        return false;
+    }
+    g_viewer_collision_desc_cache_registry = registry;
+    return true;
 }
 
 static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a,
@@ -134,11 +174,7 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     if (!box) {
         return NULL;
     }
-    if (!viewer_collision_scene_symbols_ready()) {
-        return NULL;
-    }
-    CljRecordDescriptor *desc = record_descriptor_lookup(g_viewer_collision_sym_aabb);
-    if (!desc) {
+    if (!viewer_collision_scene_descriptors_ready()) {
         return NULL;
     }
     ID values[4] = {
@@ -147,7 +183,7 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
         fixnum(box->max_x),
         fixnum(box->max_y),
     };
-    return (ID)make_record_with_descriptor_values(desc, values, 4u);
+    return (ID)make_record_with_descriptor_values(g_viewer_collision_desc_aabb, values, 4u);
 }
 
 static uint32_t viewer_next_rule_set_version(const ViewerSpatialRuleSet *rule_set) {
@@ -226,15 +262,11 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
                                        uint32_t snapshot_gen,
                                        const VgAabb *self_box,
                                        const VgAabb *other_box) {
-    if (!viewer_collision_scene_symbols_ready()) {
+    if (!viewer_collision_scene_descriptors_ready()) {
         return NULL;
     }
     if (!bundle || !policy || !bundle->game_scene || !bundle->has_game_slot ||
         bundle->game_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
-        return NULL;
-    }
-    CljRecordDescriptor *desc = record_descriptor_lookup(g_viewer_collision_sym_spatial_event);
-    if (!desc) {
         return NULL;
     }
     ID self_aabb_rec = viewer_make_aabb_record(self_box);
@@ -267,7 +299,9 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
         fixnum(policy->radius_px),
         policy->channel,
     };
-    ID event_rec = (ID)make_record_with_descriptor_values(desc, values, 17u);
+    ID event_rec = (ID)make_record_with_descriptor_values(g_viewer_collision_desc_spatial_event,
+                                                          values,
+                                                          17u);
     RELEASE(self_aabb_rec);
     RELEASE(other_aabb_rec);
     return event_rec;

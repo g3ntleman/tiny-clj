@@ -15,6 +15,16 @@
 #include "tiny_clj.h"
 #include "vector.h"
 
+static ID g_startup_sym_command_line_args = NULL;
+static const IdSymbolCacheEntry g_startup_symbol_cache[] = {
+    {&g_startup_sym_command_line_args, "*command-line-args*"},
+};
+
+static inline bool startup_symbols_ready(void) {
+  return id_symbol_cache_init_global(g_startup_symbol_cache,
+                                     sizeof(g_startup_symbol_cache) / sizeof(g_startup_symbol_cache[0]));
+}
+
 /**
  * @brief Release argument array built for eval_function_call.
  *
@@ -121,7 +131,12 @@ static bool startup_push_command_line_args_binding(EvalState *st, ID command_lin
     return false;
   }
 
-  CljSymbol *cli_sym = intern_symbol_global("*command-line-args*");
+  if (!startup_symbols_ready()) {
+    RELEASE(frame);
+    throw_exception(EXCEPTION_RUNTIME, "Failed to initialize startup symbols", __FILE__, __LINE__, 0);
+    return false;
+  }
+  CljSymbol *cli_sym = g_startup_sym_command_line_args;
   if (!cli_sym) {
     RELEASE(frame);
     throw_exception(EXCEPTION_RUNTIME, "Failed to intern *command-line-args*", __FILE__, __LINE__, 0);

@@ -30,6 +30,18 @@
 volatile sig_atomic_t g_clojure_core_last_form = 0;
 
 static bool g_core_quiet = false;
+static ID g_core_sym_inc = NULL;
+static ID g_core_sym_math = NULL;
+static const IdSymbolCacheEntry g_clojure_core_symbol_cache[] = {
+    {&g_core_sym_inc, "inc"},
+    {&g_core_sym_math, "Math"},
+};
+
+static inline bool clojure_core_symbols_ready(void) {
+  return id_symbol_cache_init_global(
+      g_clojure_core_symbol_cache,
+      sizeof(g_clojure_core_symbol_cache) / sizeof(g_clojure_core_symbol_cache[0]));
+}
 
 static int getenv_int(const char *name, int default_value) {
   const char *v = getenv(name);
@@ -436,9 +448,11 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
 int load_clojure_core(EvalState *st) {
   if (!st)
     return 0;
+  if (!clojure_core_symbols_ready())
+    return 0;
   CljNamespace *existing_core = ns_find("clojure.core");
   if (existing_core && existing_core->loaded && existing_core->mappings) {
-    CljSymbol *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = g_core_sym_inc;
     if (!inc_sym)
       return 0;
     CljObject *inc_val =
@@ -475,12 +489,12 @@ int load_clojure_core(EvalState *st) {
   CljNamespace *core = ns_find("clojure.core");
   if (!core)
     return 0;
-  CljSymbol *math_alias = intern_symbol_global("Math");
+  CljSymbol *math_alias = g_core_sym_math;
   if (math_alias && SYM_CLOJURE_CORE)
     ns_set_alias(core, math_alias, SYM_CLOJURE_CORE);
   if (!core->mappings)
     return 0;
-  CljSymbol *inc_sym = intern_symbol_global("inc");
+  CljSymbol *inc_sym = g_core_sym_inc;
   if (!inc_sym)
     return 0;
   CljObject *inc_val = (CljObject *)map_get_sentinel((CljValue)core->mappings, (CljValue)inc_sym, NULL);

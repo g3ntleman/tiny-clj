@@ -9,6 +9,7 @@
 #include "event_loop.h"
 #include "platform.h"
 #include "exception.h"
+#include "memory.h"
 
 /* Host viewer only (this file is not linked on ESP32 — see TINYCLJ_FX_HOST_SOURCES).
  * Must exceed desktop EVAL_STACK_LIMIT with headroom: deep Clojure eval on this thread
@@ -106,6 +107,8 @@ static void *viewer_runloop_thread_main(void *arg) {
         }
         platform_runloop_run_once((unsigned int)timeout_ms);
     }
+    /* Runloop thread owns its own autorelease pool state; drain/free before exit. */
+    autorelease_pool_free();
     subjective_c_clear_interpreter_thread();
     return NULL;
 }

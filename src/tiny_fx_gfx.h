@@ -82,6 +82,7 @@ DEFRECORD(FrameScene, root, index, clip_rect, z, visible, opaque, erase_color, g
 DEFRECORD(Scene, root, index, clip_rect, erase_color, collision_rules)
 
 bool tiny_fx_gfx_ensure_schema(EvalState *st);
+bool tiny_fx_gfx_require_records_namespace(EvalState *st);
 const VgRecordSchema *tiny_fx_gfx_schema(void);
 const VgRecordKeys *tiny_fx_gfx_record_keys(void);
 // Returns a borrowed alias; caller must ensure the parent record outlives usage.

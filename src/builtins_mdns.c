@@ -90,15 +90,20 @@ static ID kw_service = NULL;
 static ID kw_addrs = NULL;
 static ID kw_txt = NULL;
 
+static const IdSymbolCacheEntry g_mdns_keyword_cache[] = {
+    {&kw_instance_found, ":instance-found"},
+    {&kw_resolved, ":resolved"},
+    {&kw_expired, ":expired"},
+    {&kw_instance, ":instance"},
+    {&kw_service, ":service"},
+    {&kw_addrs, ":addrs"},
+    {&kw_txt, ":txt"},
+};
+
 static void mdns_init_keywords(void) {
-    if (kw_instance_found) return;
-    kw_instance_found = (ID)intern_symbol_global(":instance-found");
-    kw_resolved = (ID)intern_symbol_global(":resolved");
-    kw_expired = (ID)intern_symbol_global(":expired");
-    kw_instance = (ID)intern_symbol_global(":instance");
-    kw_service = (ID)intern_symbol_global(":service");
-    kw_addrs = (ID)intern_symbol_global(":addrs");
-    kw_txt = (ID)intern_symbol_global(":txt");
+    (void)id_symbol_cache_init_global(
+        g_mdns_keyword_cache,
+        sizeof(g_mdns_keyword_cache) / sizeof(g_mdns_keyword_cache[0]));
 }
 
 #ifdef __APPLE__

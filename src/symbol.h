@@ -4,6 +4,7 @@ extern struct CljSymbol *SYM_KW_META;
 
 #include "object.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 // Forward declaration for CljSymbol (needed for self-reference)
 typedef struct CljSymbol CljSymbol;
@@ -260,6 +261,31 @@ extern CljSymbol *SYM_LIST_BATCH;
     CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname);
     CljSymbol* intern_symbol_global(const char *cname);
 #endif // CLJ_HOT_PATH
+
+typedef struct {
+    ID *slot;
+    const char *cname;
+} IdSymbolCacheEntry;
+
+static inline bool id_symbol_cache_init_global(const IdSymbolCacheEntry *entries, size_t count) {
+    if (!entries) {
+        return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        ID *slot = entries[i].slot;
+        if (!slot) {
+            return false;
+        }
+        if (*slot) {
+            continue;
+        }
+        *slot = intern_symbol_global(entries[i].cname);
+        if (!*slot) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // Helpers
 void symbol_table_add(CljSymbol *symbol);

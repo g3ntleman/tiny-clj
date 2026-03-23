@@ -1,0 +1,12 @@
+---
+description: Prefer robust single-path solutions over unclear fallback paths
+alwaysApply: true
+---
+
+# Robustness Over Fallbacks
+
+- Prefer robust, deterministic implementations with one clear primary code path.
+- Avoid introducing fallback logic that creates unclear or hard-to-reason-about runtime behavior.
+- If a fallback is unavoidable, document the trigger, ownership, and expected lifecycle clearly and add focused tests for both paths.
+- During refactors, remove obsolete fallback branches and dead compatibility code instead of keeping them "just in case."
+- In reviews and implementation decisions, optimize for maintainability and predictable behavior over defensive multi-path complexity.

@@ -117,6 +117,17 @@
     (= phase :level-clear) "Level Clear"
     :else ""))
 
+(def ^:private centered-overlay-x-by-text
+  {"Breakout" 120
+   "Level Clear" 108
+   "Game Over" 118})
+
+(defn overlay-x
+  [overlay]
+  (if (contains? centered-overlay-x-by-text overlay)
+    (get centered-overlay-x-by-text overlay)
+    100))
+
 (defn brick->entity
   [brick prototype]
   (->Rect (:id brick)
@@ -206,11 +217,12 @@
           score-text (str "Score: " score)
           lives-text (str lives)
           overlay (overlay-text phase)
+          overlay-x (overlay-x overlay)
           base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
                          1002 (->Rect 1002 nil nil true paddle-x-field core/paddle-y core/paddle-width core/paddle-height paddle-shape)
                          1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
                          1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
-                         1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)
+                         1005 (->VText 1005 nil nil true overlay-x 120 1 0 overlay nil)
                          1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
                          1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
       (loop [i 0

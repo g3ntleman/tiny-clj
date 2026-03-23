@@ -85,11 +85,6 @@ typedef struct {
 
 typedef struct {
     ID *slot;
-    const char *name;
-} TinycljKeywordCacheEntry;
-
-typedef struct {
-    ID *slot;
     uint8_t index;
 } TinycljNamedRendererSlot;
 
@@ -159,7 +154,7 @@ static ID g_kw_end_event = NULL;
 static ID g_kw_at_end = NULL;
 static ID g_kw_permille = NULL;
 
-static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
+static IdSymbolCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_id, ":id"},
     {&g_kw_atom, ":atom"},
     {&g_kw_deco, ":deco"},
@@ -251,18 +246,11 @@ static void tinyclj_runtime_reset_keyword_cache(void) {
 }
 
 static bool tinyclj_runtime_intern_common_keywords(void) {
-    size_t keyword_count = sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]);
-
-    for (size_t i = 0; i < keyword_count; i++) {
-        TinycljKeywordCacheEntry *entry = &g_runtime_keyword_cache[i];
-        if (*entry->slot) {
-            continue;
-        }
-        *entry->slot = intern_symbol_global(entry->name);
-        if (!*entry->slot) {
-            tinyclj_runtime_reset_keyword_cache();
-            return false;
-        }
+    if (!id_symbol_cache_init_global(
+            g_runtime_keyword_cache,
+            sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]))) {
+        tinyclj_runtime_reset_keyword_cache();
+        return false;
     }
     return true;
 }
@@ -522,7 +510,9 @@ ID native_tinyfx_gfx_bench_vector_scene_bench(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    if (!tiny_fx_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-fx.game-demo")) {
+    if (!tiny_fx_gfx_require_records_namespace(st) ||
+        !tiny_fx_gfx_ensure_schema(st) ||
+        !require_namespace_by_name(st, "tiny-fx.game-demo")) {
         throw_exception(EXCEPTION_RUNTIME,
                         "tiny-fx.gfx-bench/vector-scene-bench failed to initialize tiny-fx scene schema",
                         __FILE__,

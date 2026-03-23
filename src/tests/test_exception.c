@@ -80,6 +80,11 @@ typedef struct {
 } ThrowOomWorkerArgs;
 
 typedef struct {
+    bool caught;
+    bool returned;
+} ThrowOomTryCatchWorkerArgs;
+
+typedef struct {
     bool before_register_is_main_thread;
     bool after_register_is_main_thread;
 } MainThreadRegistrationWorkerArgs;
@@ -99,6 +104,21 @@ static void *throw_oom_worker_main(void *arg) {
         return NULL;
     }
     throw_oom();
+    args->returned = true;
+    return NULL;
+}
+
+static void *throw_oom_try_catch_worker_main(void *arg) {
+    ThrowOomTryCatchWorkerArgs *args = (ThrowOomTryCatchWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    TRY {
+        throw_oom();
+    } CATCH(ex) {
+        (void)ex;
+        args->caught = true;
+    } END_TRY
     args->returned = true;
     return NULL;
 }
@@ -433,6 +453,20 @@ TEST(test_throw_oom_on_background_thread_does_not_cross_thread_longjmp) {
 
     TEST_ASSERT_FALSE_MESSAGE(exception_caught, "background-thread OOM must not longjmp into main-thread TRY");
     TEST_ASSERT_TRUE_MESSAGE(args.returned, "throw_oom should return on background threads");
+}
+
+TEST(test_throw_oom_on_background_thread_with_local_try_catch_is_catchable) {
+    pthread_t worker;
+    ThrowOomTryCatchWorkerArgs args = {0};
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_try_catch_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_TRUE_MESSAGE(args.returned, "worker thread should complete after local OOM handling");
+    TEST_ASSERT_TRUE_MESSAGE(args.caught, "background-thread OOM should be catchable inside local TRY/CATCH");
 }
 
 TEST(test_register_main_thread_does_not_replace_existing_main_thread) {

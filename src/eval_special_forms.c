@@ -1072,6 +1072,23 @@ ID eval_handle_recur(CljPersistentVector *args, const EvalContext *ctx) {
 
 // Cached Clojure quasiquote-fn (resolved after bootstrap)
 static CljFunction *g_quasiquote_fn = NULL;
+static ID g_eval_sf_sym_quasiquote_fn = NULL;
+static ID g_eval_sf_kw_macro = NULL;
+static ID g_eval_sf_sym_record_create = NULL;
+static ID g_eval_sf_sym_record_from_map = NULL;
+static ID g_eval_sf_sym_m = NULL;
+static const IdSymbolCacheEntry g_eval_sf_symbol_cache[] = {
+    {&g_eval_sf_sym_quasiquote_fn, "quasiquote-fn"},
+    {&g_eval_sf_kw_macro, ":macro"},
+    {&g_eval_sf_sym_record_create, "record-create"},
+    {&g_eval_sf_sym_record_from_map, "record-from-map"},
+    {&g_eval_sf_sym_m, "m"},
+};
+
+static inline bool eval_special_forms_symbols_ready(void) {
+  return id_symbol_cache_init_global(g_eval_sf_symbol_cache,
+                                     sizeof(g_eval_sf_symbol_cache) / sizeof(g_eval_sf_symbol_cache[0]));
+}
 
 void eval_special_forms_reset_caches(void) {
   g_quasiquote_fn = NULL;
@@ -1086,7 +1103,10 @@ ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, Eva
 
   // Resolve quasiquote-fn from clojure.core (lazy initialization)
   if (!g_quasiquote_fn) {
-    CljSymbol *sym = intern_symbol_global("quasiquote-fn");
+    if (!eval_special_forms_symbols_ready()) {
+      return NULL;
+    }
+    CljSymbol *sym = g_eval_sf_sym_quasiquote_fn;
     CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
     if (resolved != NOT_FOUND && is_closure(resolved)) {
       g_quasiquote_fn = as_function(resolved);
@@ -1225,7 +1245,11 @@ ID eval_special_defmacro(CljPersistentVector *args, CljPersistentMap *env, EvalS
 
   // Set :macro true in metadata
   CljPersistentMap *meta = make_map(4);
-  CljSymbol *kw_macro = intern_symbol_global(":macro");
+  if (!eval_special_forms_symbols_ready()) {
+    RELEASE(meta);
+    return NULL;
+  }
+  CljSymbol *kw_macro = g_eval_sf_kw_macro;
   ASSIGN(meta, map_assoc(meta, kw_macro, clj_true));
   meta_set((CljObject *)macro_fn, (CljObject *)meta);
   RELEASE(meta);
@@ -1268,7 +1292,12 @@ static ID make_record_ctor_body(ID type_symbol, ID values_expr) {
   }
   vector_conj_inplace(&call_args, quoted_type);
   vector_conj_inplace(&call_args, values_expr);
-  CljASTCall *call = make_ast_call(intern_symbol_global("record-create"), call_args);
+  if (!eval_special_forms_symbols_ready()) {
+    RELEASE(call_args);
+    RELEASE(quoted_type);
+    return NULL;
+  }
+  CljASTCall *call = make_ast_call(g_eval_sf_sym_record_create, call_args);
   RELEASE(call_args);
   RELEASE(quoted_type);
   return call ? (ID)call : NULL;
@@ -1286,7 +1315,12 @@ static ID make_record_map_ctor_body(ID type_symbol, ID map_symbol) {
   }
   vector_conj_inplace(&call_args, quoted_type);
   vector_conj_inplace(&call_args, map_symbol);
-  CljASTCall *call = make_ast_call(intern_symbol_global("record-from-map"), call_args);
+  if (!eval_special_forms_symbols_ready()) {
+    RELEASE(call_args);
+    RELEASE(quoted_type);
+    return NULL;
+  }
+  CljASTCall *call = make_ast_call(g_eval_sf_sym_record_from_map, call_args);
   RELEASE(call_args);
   RELEASE(quoted_type);
   return call ? (ID)call : NULL;
@@ -1364,7 +1398,10 @@ ID eval_special_defrecord(CljPersistentVector *args, CljPersistentMap *env, Eval
 
   CljSymbol *ctor_sym = intern_symbol_global(ctor_name);
   CljSymbol *map_ctor_sym = intern_symbol_global(map_ctor_name);
-  CljSymbol *m_sym = intern_symbol_global("m");
+  if (!eval_special_forms_symbols_ready()) {
+    return NULL;
+  }
+  CljSymbol *m_sym = g_eval_sf_sym_m;
   if (!ctor_sym || !map_ctor_sym || !m_sym) {
     throw_exception(EXCEPTION_RUNTIME,
                     "defrecord failed to intern constructor symbols",

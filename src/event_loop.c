@@ -26,18 +26,32 @@
 #include <sys/time.h>
 
 // Task Map keys (go-block tasks only)
-static CljSymbol *KW_FN;
-static CljSymbol *KW_RESULT_CHAN;
-static CljSymbol *KW_ARG;
-static CljSymbol *KW_HAS_ARG;
-static CljSymbol *KW_EVENT_KIND;
-static CljSymbol *KW_EVENT_KEY;
-static CljSymbol *KW_EVENT_SOURCE;
-static CljSymbol *KW_EVENT_ID;
-static CljSymbol *KW_EVENT_PHASE;
-static CljSymbol *KW_EVENT_SELF;
-static CljSymbol *KW_EVENT_OTHER;
-static CljSymbol *KW_SOURCE_SPATIAL;
+static ID KW_FN;
+static ID KW_RESULT_CHAN;
+static ID KW_ARG;
+static ID KW_HAS_ARG;
+static ID KW_EVENT_KIND;
+static ID KW_EVENT_KEY;
+static ID KW_EVENT_SOURCE;
+static ID KW_EVENT_ID;
+static ID KW_EVENT_PHASE;
+static ID KW_EVENT_SELF;
+static ID KW_EVENT_OTHER;
+static ID KW_SOURCE_SPATIAL;
+static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
+    {&KW_FN, ":fn"},
+    {&KW_RESULT_CHAN, ":result-chan"},
+    {&KW_ARG, ":arg"},
+    {&KW_HAS_ARG, ":has-arg"},
+    {&KW_EVENT_KIND, ":kind"},
+    {&KW_EVENT_KEY, ":key"},
+    {&KW_EVENT_SOURCE, ":source"},
+    {&KW_EVENT_ID, ":id"},
+    {&KW_EVENT_PHASE, ":phase"},
+    {&KW_EVENT_SELF, ":self"},
+    {&KW_EVENT_OTHER, ":other"},
+    {&KW_SOURCE_SPATIAL, ":spatial"},
+};
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -580,18 +594,9 @@ static CljTransientVector* task_queue_get(void) {
 }
 
 void event_loop_init(void) {
-    KW_FN = intern_symbol_global(":fn");
-    KW_RESULT_CHAN = intern_symbol_global(":result-chan");
-    KW_ARG = intern_symbol_global(":arg");
-    KW_HAS_ARG = intern_symbol_global(":has-arg");
-    KW_EVENT_KIND = intern_symbol_global(":kind");
-    KW_EVENT_KEY = intern_symbol_global(":key");
-    KW_EVENT_SOURCE = intern_symbol_global(":source");
-    KW_EVENT_ID = intern_symbol_global(":id");
-    KW_EVENT_PHASE = intern_symbol_global(":phase");
-    KW_EVENT_SELF = intern_symbol_global(":self");
-    KW_EVENT_OTHER = intern_symbol_global(":other");
-    KW_SOURCE_SPATIAL = intern_symbol_global(":spatial");
+    (void)id_symbol_cache_init_global(
+        g_event_loop_kw_cache,
+        sizeof(g_event_loop_kw_cache) / sizeof(g_event_loop_kw_cache[0]));
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;

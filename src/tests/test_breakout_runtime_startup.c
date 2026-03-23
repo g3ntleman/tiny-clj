@@ -83,7 +83,8 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
         return false;
     }
     evalstate_set_ns(ctx->st, "user");
-    if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
+    if (!tiny_fx_gfx_require_records_namespace(ctx->st) ||
+        !tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
     if (!viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
@@ -119,7 +120,8 @@ static bool breakout_viewer_test_context_init_with_heap_limit(BreakoutViewerTest
         return false;
     }
     evalstate_set_ns(ctx->st, "user");
-    if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
+    if (!tiny_fx_gfx_require_records_namespace(ctx->st) ||
+        !tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
     if (!viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
@@ -551,6 +553,51 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
         "  (= :play (:phase @tiny-breakout.runtime/state*)))",
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+
+    ID state = eval_string(
+        "(do "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/publish-state! "
+        "    (assoc @tiny-breakout.runtime/state* "
+        "      :phase :level-clear "
+        "      :level-index 0 "
+        "      :events [] "
+        "      :ball-segment nil)) "
+        "  (tiny-clj.gpio/simulate! 13 0) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (tiny-clj.gpio/simulate! 13 1) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  @tiny-breakout.runtime/state*)",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(state);
+    TEST_ASSERT_TRUE(is_map(state));
+    ID k_phase = intern_symbol_global(":phase");
+    ID k_level_index = intern_symbol_global(":level-index");
+    ID k_bricks = intern_symbol_global(":bricks");
+    TEST_ASSERT_NOT_NULL(k_phase);
+    TEST_ASSERT_NOT_NULL(k_level_index);
+    TEST_ASSERT_NOT_NULL(k_bricks);
+
+    ID phase = map_get_sentinel(state, k_phase, NULL);
+    ID level_index = map_get_sentinel(state, k_level_index, NULL);
+    ID bricks = map_get_sentinel(state, k_bricks, NULL);
+
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), phase);
+    TEST_ASSERT_TRUE(is_fixnum(level_index));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(level_index));
+    TEST_ASSERT_TRUE(is_vector(bricks));
+    TEST_ASSERT_TRUE(vector_count(as_vector(bricks)) > 0);
 
     breakout_viewer_test_context_destroy(&ctx);
 }

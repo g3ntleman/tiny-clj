@@ -43,6 +43,12 @@ extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
 // The public API lives in eval.h. The current implementation is a minimal toggle
 // to satisfy tests and allow future integration of compiled/preattached AST eval.
 static int g_eval_use_compiled_ast = 0;
+static ID g_eval_kw_total = NULL;
+static ID g_eval_kw_peak = NULL;
+static const IdSymbolCacheEntry g_eval_mem_diff_kw_cache[] = {
+    {&g_eval_kw_total, ":total"},
+    {&g_eval_kw_peak, ":peak"},
+};
 
 void eval_set_use_compiled_ast(int enabled) {
   g_eval_use_compiled_ast = enabled ? 1 : 0;
@@ -3437,8 +3443,13 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
   // Build result map with per-type diffs. Always return a map, even if all
   // deltas are zero (useful for consistent debugging output).
   CljPersistentMap *result = map_empty();
-  ASSIGN(result, map_assoc(result, intern_symbol_global(":total"), fixnum((int)total_diff)));
-  ASSIGN(result, map_assoc(result, intern_symbol_global(":peak"), fixnum((int)peak_extra)));
+  if (!id_symbol_cache_init_global(g_eval_mem_diff_kw_cache,
+                                   sizeof(g_eval_mem_diff_kw_cache) / sizeof(g_eval_mem_diff_kw_cache[0]))) {
+    RELEASE(result);
+    return NULL;
+  }
+  ASSIGN(result, map_assoc(result, g_eval_kw_total, fixnum((int)total_diff)));
+  ASSIGN(result, map_assoc(result, g_eval_kw_peak, fixnum((int)peak_extra)));
 
   // Add per-type diffs (bytes_current_by_type tracks actual bytes)
   for (int i = 0; i < CLJ_TYPE_COUNT; i++) {

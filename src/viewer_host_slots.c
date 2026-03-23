@@ -18,6 +18,36 @@
 
 #define TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES 614400u
 
+static ID g_viewer_kw_id = NULL;
+static ID g_viewer_kw_atom = NULL;
+static ID g_viewer_kw_game = NULL;
+static ID g_viewer_kw_tiny_breakout = NULL;
+static ID g_viewer_kw_slots = NULL;
+static ID g_viewer_kw_entry = NULL;
+static ID g_viewer_kw_prepare_callback = NULL;
+static ID g_viewer_kw_startup_callback = NULL;
+static ID g_viewer_kw_spatial_callback = NULL;
+static ID g_viewer_kw_game_scene_atom = NULL;
+
+static const IdSymbolCacheEntry g_viewer_slot_extract_symbol_cache[] = {
+    {&g_viewer_kw_id, ":id"},
+    {&g_viewer_kw_atom, ":atom"},
+};
+
+static const IdSymbolCacheEntry g_viewer_breakout_symbol_cache[] = {
+    {&g_viewer_kw_game, ":game"},
+    {&g_viewer_kw_tiny_breakout, ":tiny-breakout"},
+};
+
+static const IdSymbolCacheEntry g_viewer_host_config_symbol_cache[] = {
+    {&g_viewer_kw_slots, ":slots"},
+    {&g_viewer_kw_entry, ":entry"},
+    {&g_viewer_kw_prepare_callback, ":prepare-callback"},
+    {&g_viewer_kw_startup_callback, ":startup-callback"},
+    {&g_viewer_kw_spatial_callback, ":spatial-callback"},
+    {&g_viewer_kw_game_scene_atom, ":game-scene-atom"},
+};
+
 static inline uint32_t viewer_record_type_hash(ID obj) {
     if (!obj || TAG(obj) != CLJ_RECORD) {
         return 0u;
@@ -125,11 +155,9 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     if (!slots || !out_bundle || !is_vector(slots)) {
         return false;
     }
-    static ID k_id = NULL;
-    static ID k_atom = NULL;
-    k_id = intern_symbol_global(":id");
-    k_atom = intern_symbol_global(":atom");
-    if (!k_id || !k_atom) {
+    if (!id_symbol_cache_init_global(
+            g_viewer_slot_extract_symbol_cache,
+            sizeof(g_viewer_slot_extract_symbol_cache) / sizeof(g_viewer_slot_extract_symbol_cache[0]))) {
         return false;
     }
     CljPersistentVector *vec = as_vector(slots);
@@ -147,8 +175,8 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     }
     for (uint32_t i = 0; i < raw_count; i++) {
         ID slot_desc = vector_nth(vec, i);
-        ID slot_id = viewer_slot_desc_field(slot_desc, k_id);
-        ID slot_atom = viewer_slot_desc_field(slot_desc, k_atom);
+        ID slot_id = viewer_slot_desc_field(slot_desc, g_viewer_kw_id);
+        ID slot_atom = viewer_slot_desc_field(slot_desc, g_viewer_kw_atom);
         if (!slot_id || !is_symbol(slot_id) || !slot_atom || TAG(slot_atom) != CLJ_ATOM) {
             CLJ_HOST_FREE(slot_items);
             return false;
@@ -242,7 +270,12 @@ static bool viewer_load_breakout_host_config_fast(EvalState *st,
         goto cleanup;
     }
 
-    slot_items[0].id = intern_symbol_global(":game");
+    if (!id_symbol_cache_init_global(
+            g_viewer_breakout_symbol_cache,
+            sizeof(g_viewer_breakout_symbol_cache) / sizeof(g_viewer_breakout_symbol_cache[0]))) {
+        goto cleanup;
+    }
+    slot_items[0].id = g_viewer_kw_game;
     slot_items[0].scene_atom = (CljAtom *)scene_atom;
     slot_items[0].scene = scene;
     RETAIN(scene);
@@ -252,7 +285,7 @@ static bool viewer_load_breakout_host_config_fast(EvalState *st,
     out_bundle->slot_count = 1u;
     out_bundle->game_slot_index = 0u;
     out_bundle->has_game_slot = true;
-    out_bundle->entry = intern_symbol_global(":tiny-breakout");
+    out_bundle->entry = g_viewer_kw_tiny_breakout;
     out_bundle->startup_callback = startup_callback;
     startup_callback = NULL;
     out_bundle->spatial_callback = spatial_callback;
@@ -317,27 +350,17 @@ bool viewer_load_game_demo_config(EvalState *st,
     if (!is_map(cfg)) {
         goto cleanup_invalid_map;
     }
-    static CljSymbol *k_slots = NULL;
-    static CljSymbol *k_entry = NULL;
-    static CljSymbol *k_prepare_callback = NULL;
-    static CljSymbol *k_startup_callback = NULL;
-    static CljSymbol *k_spatial_callback = NULL;
-    static CljSymbol *k_game_scene_atom = NULL;
-    k_slots = intern_symbol_global(":slots");
-    k_entry = intern_symbol_global(":entry");
-    k_prepare_callback = intern_symbol_global(":prepare-callback");
-    k_startup_callback = intern_symbol_global(":startup-callback");
-    k_spatial_callback = intern_symbol_global(":spatial-callback");
-    k_game_scene_atom = intern_symbol_global(":game-scene-atom");
-    if (!k_slots || !k_entry || !k_prepare_callback || !k_startup_callback || !k_spatial_callback || !k_game_scene_atom) {
+    if (!id_symbol_cache_init_global(
+            g_viewer_host_config_symbol_cache,
+            sizeof(g_viewer_host_config_symbol_cache) / sizeof(g_viewer_host_config_symbol_cache[0]))) {
         goto cleanup_missing_keys;
     }
-    ID slots = map_get_sentinel(cfg, k_slots, NULL);
-    ID entry = map_get_sentinel(cfg, k_entry, NULL);
-    ID prepare_callback = map_get_sentinel(cfg, k_prepare_callback, NULL);
-    ID startup_callback = map_get_sentinel(cfg, k_startup_callback, NULL);
-    ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
-    ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
+    ID slots = map_get_sentinel(cfg, g_viewer_kw_slots, NULL);
+    ID entry = map_get_sentinel(cfg, g_viewer_kw_entry, NULL);
+    ID prepare_callback = map_get_sentinel(cfg, g_viewer_kw_prepare_callback, NULL);
+    ID startup_callback = map_get_sentinel(cfg, g_viewer_kw_startup_callback, NULL);
+    ID spatial_callback = map_get_sentinel(cfg, g_viewer_kw_spatial_callback, NULL);
+    ID game_scene_atom = map_get_sentinel(cfg, g_viewer_kw_game_scene_atom, NULL);
     if (prepare_callback) {
         unsigned char prepare_tag = TAG(prepare_callback);
         if ((prepare_tag != CLJ_FUNC && prepare_tag != CLJ_CLOSURE)) {
