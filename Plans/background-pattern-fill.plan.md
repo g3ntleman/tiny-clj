@@ -1,27 +1,36 @@
 ---
 name: Background Pattern Fill
-overview: Ersetze den pixelweisen Solid-Clear durch einen schnellen Pattern-Fill, der aus 1-2 Eingabefarben eine 8er-Palette mit engem Spread ableitet und per geglaetteten 1D-Noise-Arrays mit Warp (kein Tartan) ein sanftes, organisches Hintergrundmuster erzeugt. Optimiert auch den bestehenden Solid-Clear auf 32-Bit-Writes.
+overview: "Neues Pattern-Record in gfx-records.clj, Rename :erase-color -> :background in FrameScene/Scene, parametrischer Hintergrund-Effekt mit Integer-only Arithmetik, SIN[256] LUT, 16er-Palette aus 2 Farben, Single-Pass mit 32-Bit-Writes."
 todos:
+  - id: choose-effect
+    content: "Effekt aus der Kandidatenliste auswaehlen (via HTML-Preview experimentieren)"
+    status: pending
+  - id: pattern-record
+    content: "Pattern-Record in gfx-records.clj definieren (effect-type, color-a, color-b, freq, phase, spread) + C-Overlay in tiny_fx_gfx.h"
+    status: pending
+  - id: rename-erase-to-background
+    content: ":erase-color -> :background in FrameScene/Scene (gfx-records.clj, tiny_fx_gfx.h/.c, scene.c, tests, breakout, game-demo)"
+    status: pending
   - id: optimize-solid-clear
     content: vg_framebuffer_clear und vg_framebuffer_clear_rect auf 32-Bit-Writes umstellen
     status: pending
+  - id: sin-lut
+    content: "SIN_LUT[256] (int8) + ATAN_LUT[65] (uint8) beim Startup mit sinf/atanf erzeugen"
+    status: pending
   - id: palette-derivation
-    content: "RGB565-Palette[8] aus 1-2 Eingabefarben ableiten: Mittelpunkt berechnen, 8 Stufen symmetrisch mit konfigurierbarem Spread (default 25%) um Mitte verteilen"
+    content: "RGB565-Palette[16] aus Pattern-Record ableiten: Mittelpunkt + symmetrische Stufen mit Spread"
     status: pending
-  - id: noise-arrays
-    content: "1D-Noise-Array-Generierung mit Hash + Glaettung (laufender Mittelwert, konfigurierbarer Radius, default 8)"
-    status: pending
-  - id: pattern-fill
-    content: "vg_framebuffer_pattern_rect: Single-Pass, 32-Bit-Writes, 1D-Warp (noiseX[(x + noiseY[y]) & mask]), palette[8]"
+  - id: effect-render
+    content: "Effekt-Render-Funktion: pro Pixel Integer-only (SIN-Lookups, idist, shifts, imul), Single-Pass 32-Bit-Writes"
     status: pending
   - id: scene-integration
-    content: "erase_color Typ-Dispatch in scene.c: Fixnum -> Solid, Vector -> Pattern; VgRenderSlot erweitern"
+    content: ":background Typ-Dispatch: Fixnum -> Solid, Pattern-Record -> Effekt-Render; VgRenderSlot erweitern"
     status: pending
   - id: breakout-scene
-    content: Breakout-Szene auf Pattern-Hintergrund umstellen
+    content: "Breakout-Szene auf :background mit Pattern-Record umstellen"
     status: pending
   - id: unit-tests
-    content: Tests fuer Solid-Clear-Optimierung, Pattern-Fill, Palette-Ableitung
+    content: Tests fuer Solid-Clear-Optimierung, Effekt-Render, Palette-Ableitung, Rename-Kompatibilitaet
     status: pending
   - id: cleanup
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
@@ -31,112 +40,110 @@ isProject: false
 
 # Background Pattern Fill
 
-Live-Preview: [experiments/pattern-preview.html](experiments/pattern-preview.html)
+Live-Preview: [experiments/plasma-preview.html](experiments/plasma-preview.html) (20 Effekte zum Ausprobieren)
 
-## Kernidee
+## Constraints
 
-Zwei geglaettete 1D-Noise-Arrays mit **Warp** (nicht Addition) erzeugen ein organisches Muster ohne Tartan-Artefakte. Eine enge **8er-Palette** (aus 1-2 Farben abgeleitet, default 25% Spread) sorgt fuer sanfte Uebergaenge statt harter Pixelspruenge. Kein Tile-Buffer, keine Wiederholung, Single-Pass mit 32-Bit-Writes.
+- **Integer-only** im Hot-Loop (pro Pixel, pro Frame): kein float, kein sqrt, kein atan2
+- **Kleine Tabellen**: SIN[256] (256 B) + ATAN[65] (65 B) = max 321 B; Tabellen per `sinf()`/`atanf()` beim Startup erzeugt
+- **RAM-Budget**: max 2 KB fuer Tabellen + Palette
+- **Palette**: 16 Farben (RGB565, 32 B), aus 2 Eingabefarben mit konfigurierbarem Spread abgeleitet
+- **32-Bit-Writes**: Zwei RGB565-Pixel pro Store fuer schnellere Framebuffer-Zugriffe
+- **Pro Frame live berechnet** (kein Precompute-Buffer)
 
-```mermaid
-flowchart LR
-    Input["1-2 Farben + Seed + Spread"] --> Palette["palette[8] ableiten"]
-    Input --> NoiseGen["noiseX[320], noiseY[240]\nhash + smooth(radius)"]
-    Palette --> FillLoop["Pattern Fill Loop\nnoiseX[(x + noiseY[y]) & mask]\n>> 5 & 7 -> palette idx"]
-    NoiseGen --> FillLoop
-    FillLoop --> FB["Framebuffer\n32-bit writes"]
-```
+## Effekt-Kandidaten
 
-## 1. Solid-Clear optimieren (32-Bit-Writes)
+### Organisch / Natuerlich
 
-Aktuell in [src/vector_scene_graph.c](src/vector_scene_graph.c) (Zeile 56-63 und 592-607): pixelweiser 16-Bit-Store. Ersetzen durch 32-Bit-Writes (zwei Pixel pro Store). Betrifft `vg_framebuffer_clear` und `vg_framebuffer_clear_rect`.
+| Effekt | Ops/px | Tabellen | Beschreibung |
+|--------|--------|----------|-------------|
+| **Plasma** | 3 imul + 4 SIN | SIN[256] | 4 Sinus-Summen + Integer-Distanz, weiche Kreisformen |
+| **Interference** | 3 imul + 3 SIN + 3 idist | SIN[256] | 3 Punktquellen-Wellen ueberlagert |
+| **Clouds** | 8 imul + 8 SIN | SIN[256] | Multi-Oktav Rauschen (4 Stufen, halbierende Amplitude) |
+| **Domain Warp** | 6 imul + 6 SIN | SIN[256] | IQ-Style rekursive Sinus-Verzerrung, 2 Warp-Layer |
+| **Caustics** | 3 imul + 3 SIN + 3 abs | SIN[256] | 3 Wellenfronten, invertiertes abs = Lichtbrechung |
+| **XOR Warp** | 2 imul + 2 SIN + 1 XOR | SIN[256] | XOR-Muster mit Sinus-Verzerrung beider Achsen |
+| **Lava** | 3 imul + 4 SIN + 4 abs | SIN[256] | Plasma + abs() = scharfe Risse/Kanten |
 
-## 2. Palette-Ableitung aus 1-2 Farben (RGB565)
+### Geometrisch / Strukturiert
 
-Neue Funktion `vg_pattern_build_palette` in [src/vector_scene_graph.c](src/vector_scene_graph.c):
+| Effekt | Ops/px | Tabellen | Beschreibung |
+|--------|--------|----------|-------------|
+| **Moire** | 2 imul + 1 XOR + 2 idist | keine | XOR von 2 Integer-Distanzen, billigster Effekt |
+| **Voronoi** | N*idist + min | keine LUT | Manhattan-Distanz zu N Seedpunkten, Zell-Muster |
+| **Diamonds** | 2 mod + 1 SIN | SIN[256] | 45-Grad Rautengitter + Sinus-Modulation |
+| **Hex Grid** | 2 div + idist + hash | keine LUT | Hexagonale Zellen mit Hash-Farbvariation |
+| **Rotozoom** | 4 imul + 1 XOR | SIN[256] | Rotiertes XOR-Schachbrett via sin/cos-LUT |
+| **Crosshatch** | 3 imul + 3 SIN + 2 mul | SIN[256] | 3 Lagen diagonaler Linien, Multiply-Blend |
+| **Scales** | 2 div + 1 SIN + idist | SIN[256] | Ueberlappende Boegen (Fischschuppen) |
 
-- **Eingabe**: `color_a`, `color_b` (RGB565), `spread` (0-100, default 25)
-- **Algorithmus**: Mittelpunkt `mid = lerp(ca, cb, 0.5)` berechnen, dann 8 Stufen symmetrisch verteilen. Jede Stufe interpoliert zwischen `mid` und der naeheren Endfarbe, skaliert mit `spread/100`.
-- **Ergebnis**: `uint16_t palette[8]`
-- Enge Spreizung (25%) ergibt sanfte Uebergaenge, kein Schwarz, kein Weiss.
+### Radial / Zentral
 
-Wird einmal pro Szenenwechsel aufgerufen, nicht pro Frame.
+| Effekt | Ops/px | Tabellen | Beschreibung |
+|--------|--------|----------|-------------|
+| **Nova** | 2 imul + 3 SIN + 1 ATAN + 1 idiv | SIN+ATAN | Radialer Glow + Winkel-Modulation |
+| **Wood** | 2 imul + 4 SIN + 1 idist | SIN[256] | Konzentrische Ringe + Sinus-Turbulenz |
+| **Spiral** | 1 imul + 1 SIN + 1 ATAN + 1 idiv | SIN+ATAN | Spiralarme aus Winkel + Distanz |
+| **Metaballs** | 3 idiv + 3 idist | keine LUT | 3 Blob-Zentren, Summe von 1/dist |
 
-## 3. 1D-Noise-Arrays generieren (mit Glaettung)
+### Richtungsbasiert
 
-Neue Funktion `vg_pattern_generate`, einmal pro Szenenwechsel:
+| Effekt | Ops/px | Tabellen | Beschreibung |
+|--------|--------|----------|-------------|
+| **Marble** | 3 imul + 4 SIN | SIN[256] | Diagonale Adern mit Sinus-Turbulenz |
 
-1. **Roh-Hash**: `raw[i] = hash1d(i, seed) & 0xFF` fuer beide Arrays
-2. **Glaettung**: Laufender Mittelwert mit konfigurierbarem Radius (default 8). Erzeugt zusammenhaengende Farbklumpen statt Pixel-Rauschen.
+### Automaton (nur Precompute)
+
+| Effekt | Ops/px | Tabellen | Beschreibung |
+|--------|--------|----------|-------------|
+| **Fire** | 4 add + 1 shift (N Passes) | buf[76800] | Pixel-Averaging-Automaton, eingefrorenes Feuer |
+
+## Integer-Hilfsfunktionen (fuer alle Effekte)
 
 ```c
-static uint8_t noise_x[320];
-static uint8_t noise_y[240];
-```
-
-Speicherbedarf: **560 Bytes** (plus temporaer 560 Bytes fuer Roh-Arrays beim Generieren). Kein Tile-Buffer.
-
-## 4. Pattern-Fill-Funktion (Single Pass, 32-Bit-Writes)
-
-Neue Funktion `vg_framebuffer_pattern_rect` in [src/vector_scene_graph.c](src/vector_scene_graph.c):
-
-**Warp-Ansatz** (nicht Addition, kein Tartan):
-
-```c
-void vg_framebuffer_pattern_rect(VgFrameBuffer *fb, VgClipRect rect,
-                                  const uint16_t palette[8],
-                                  const uint8_t *noise_x, uint16_t noise_x_len,
-                                  const uint8_t *noise_y) {
-    uint16_t x_mask = noise_x_len - 1;  // power-of-2
-    for (int y = y0; y < y1; y++) {
-        uint8_t vy = noise_y[y];
-        uint16_t *row = &fb->pixels[y * fb->width + x0];
-        for (int x = x0; x < x1; x += 2) {
-            uint8_t idx0 = (noise_x[(x     + vy) & x_mask] >> 5) & 7;
-            uint8_t idx1 = (noise_x[(x + 1 + vy) & x_mask] >> 5) & 7;
-            *(uint32_t *)row = palette[idx0] | ((uint32_t)palette[idx1] << 16);
-            row += 2;
-        }
-    }
+// Integer-Distanz: max(|a|,|b|) + 3*min/8 (~3.5% Fehler vs sqrt)
+static inline int idist(int dx, int dy) {
+    int ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    int mn = ax < ay ? ax : ay, mx = ax > ay ? ax : ay;
+    return mx + ((mn * 3) >> 3);
 }
 ```
 
-Pro Pixel: **1 Array-Lookup + 1 Add + 1 AND + 1 Shift + 1 Palette-Lookup**. `vy` konstant pro Zeile. 32-Bit-Writes. Nahezu identische Kosten wie optimierter Solid-Clear.
+## Pattern-Record
 
-## 5. Szenen-Integration (minimale Aenderung)
+```clojure
+(defrecord Pattern [effect color-a color-b freq phase spread])
+```
 
-`:erase-color` Typ-Dispatch: Fixnum -> Solid-Clear, Vektor -> Pattern-Fill.
+- `effect` – Keyword (`:plasma`, `:nova`, etc.) waehlt den Render-Algorithmus
+- `color-a`, `color-b` – RGB565 Eingabefarben
+- `freq` – Frequenz-Multiplikator (1-24)
+- `phase` – Phase/Seed (0-255)
+- `spread` – Palettenspreizung in % (5-100)
 
-- **Fixnum** (wie bisher): `vg_framebuffer_clear_rect(fb, rect, color)`
-- **Vektor** `[color-a color-b seed]` oder `[color-a color-b seed spread]`: Pattern-Fill
+## Rename :erase-color -> :background
 
-`VgRenderSlot` in [src/vector_scene_graph.h](src/vector_scene_graph.h) erweitern:
+Betroffene Dateien:
+- `libs/tiny-fx/gfx-records.clj`: FrameScene + Scene defrecord
+- `src/tiny_fx_gfx.h/.c`: DEFRECORD, Symbol, Schema
+- `src/scene.c`: decode_scene_fields, vg_decode_frame_slot_record
+- `libs/tiny-breakout/scene.clj`: Szenen-Definition
+- `src/tests/test_vector_scene_graph.c`: Teststrings
+
+## Szenen-Integration
+
+`VgRenderSlot` erweitern:
 
 ```c
 typedef struct {
     // ... bestehende Felder ...
     uint16_t clear_color;
     bool has_pattern;
-    uint16_t pattern_palette[8];
-    uint32_t pattern_seed;
+    uint8_t pattern_effect;      // enum: EFFECT_PLASMA, EFFECT_NOVA, ...
+    uint16_t pattern_palette[16];
+    uint8_t pattern_freq;
+    uint8_t pattern_phase;
 } VgRenderSlot;
 ```
 
-Aenderungen in [src/scene.c](src/scene.c) bei `vg_decode_frame_slot_record` und den beiden Clear-Stellen (Zeile 1686, 1874): Typ von `erase_color` pruefen, Vektor-Felder auslesen, Palette + Noise-Arrays erzeugen.
-
-## 6. Breakout-Szene anpassen
-
-In [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj) statt `:erase-color 0`:
-
-```clojure
-:erase-color [0xC3A0 0xE600 42]  ;; warmes Gold, seed 42
-```
-
-## 7. Unit-Tests
-
-In [src/tests/test_vector_scene_graph.c](src/tests/test_vector_scene_graph.c):
-
-- Test: optimierter Solid-Clear erzeugt gleiche Ergebnisse wie vorher
-- Test: Pattern-Fill-Pixel sind alle aus `palette[0..7]`, korrekte Rect-Grenzen
-- Test: Palette-Ableitung aus 1 bzw. 2 Farben mit verschiedenen Spread-Werten
-- Test: 1D-Warp erzeugt keine Tartan-Struktur (Zeilenvergleich)
-
+`:background` Typ-Dispatch: Fixnum -> Solid, Pattern-Record -> Effekt-Render.
