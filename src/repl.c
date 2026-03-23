@@ -1525,7 +1525,7 @@ int main(int argc, char **argv) {
   };
   if (repl_should_launch_tiny_fx_host_app(&bundle_launch)) {
 #if defined(TINYCLJ_TINY_FX_HOST_APP_AVAILABLE) && TINYCLJ_TINY_FX_HOST_APP_AVAILABLE
-    cleanup_and_exit(cli.eval_args, tinyclj_tiny_fx_host_app_run());
+    cleanup_and_exit(cli.eval_args, viewer_host_app_run());
 #else
     cleanup_and_exit(cli.eval_args, 1);
 #endif

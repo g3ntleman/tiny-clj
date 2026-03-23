@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: remove-shipping-debug-noise
     content: Remove or isolate non-shipping debug instrumentation, absolute-path logging, and host-only diagnostics from sound and Breakout-adjacent runtime code
-    status: pending
+    status: completed
   - id: thread-ownership-contract
     content: Define and enforce which threads may touch subjective-memory objects, retain/release APIs, eval APIs, and event payload construction
     status: pending
@@ -19,7 +19,7 @@ todos:
     status: pending
   - id: breakout-runtime-hotpath
     content: Remove avoidable runtime.clj/runtime-play.clj hot-path allocations and repeated require/eval lookups from input, publish-state, and collision handling
-    status: pending
+    status: in_progress
   - id: collision-event-shape
     content: Reduce collision dispatch allocation cost and simplify the event bridge by keeping raw hit data compact until the interpreter thread materializes higher-level objects
     status: pending
@@ -40,7 +40,7 @@ todos:
     status: pending
   - id: intern-symbol-caching
     content: Cache repeatedly called intern_symbol_global lookups in collision dispatch and scene bridge into static module-level variables initialized once, instead of repeated hash-table probes per frame or per hit
-    status: pending
+    status: completed
   - id: atom-swap-malloc
     content: Replace the per-call CLJ_MALLOC in atom_swap for the fn_args array with a small fixed-size stack buffer (covers the common 1-3 extra-args case) and only fall back to heap for rare large-arity swaps
     status: pending
@@ -81,11 +81,17 @@ Make the Breakout deployment path safe and maintainable for ESP32 shipment:
 
 The current codebase already contains strong regression coverage around startup, heap budgets, runloop behavior, collision dispatch, and render-loop integration. That is a good base. The largest remaining deployment risks are structural:
 
-1. The sound tick path still crosses into Clj-object ownership and event creation from non-interpreter callback contexts.
+1. The sound tick path still crosses into Clj-object ownership and finished-event creation from the engine side, even though the old absolute-path debug logging has been removed.
 2. The render thread still dereferences and retains/releases Clj scene objects directly.
-3. The Breakout runtime still performs repeated dynamic work in hot paths (`require`, `eval`, scene rebuilding, timer-spec construction).
-4. Host-only debug helpers and one-off instrumentation have leaked into shipping-adjacent files, increasing risk, noise, and code size.
-5. Breakout runtime logic is split across two highly similar namespaces, which increases maintenance cost and obscures the actual hot path.
+3. The Breakout runtime still performs repeated dynamic work in hot paths (`require`, `eval`, full scene rebuilding, timer-spec construction).
+4. Breakout runtime logic is still split across `runtime.clj` and `runtime-play.clj`, which increases maintenance cost and obscures the actual hot path.
+5. The fast host config path still uses multiple `eval_string` lookups and a breakout-specific contract in C, even though symbol caching and schema loading are now cleaner.
+
+### Already improved since the initial review
+
+- Absolute-path debug file logging in the sound path has been removed from shipping-adjacent code.
+- Collision symbol caching is implemented via `IdSymbolCacheEntry` tables in `viewer_collision_scene_bridge.c` and `viewer_collision_dispatch.c`.
+- The tiny-fx record schema now comes from `libs/tiny-fx/gfx-records.clj`; C validates/loads that schema explicitly instead of registering fallback records on demand.
 
 ## Files that matter most
 
@@ -144,6 +150,13 @@ The current sound files contain ad-hoc file logging and hypothesis-specific inst
    - plain integer counters
    - allocation-free
    - readable from a safe control thread
+
+### Status update
+
+Completed:
+
+- The old absolute-path debug file writers have been removed from `src/sound_engine.c` and `src/sound_backend_host.c`.
+- The remaining host sound diagnostics are integer/atomic based and no longer write ad-hoc files from shipping-adjacent code.
 
 ### Review gate
 
@@ -280,6 +293,14 @@ The current Breakout runtime performs repeated dynamic work in paths that are hi
    - state transition path
    - scene materialization path
    - event/audio emission path
+
+### Status update
+
+Partially completed:
+
+- `timeline-kick-timer-spec` is already stable/reusable.
+- `runtime-play.clj` has extracted a chunk of direct input/runtime glue out of `runtime.clj`, which improved structure but did not remove the `runtime-play-call!` indirection.
+- The hot path still contains dynamic namespace work (`runtime-play-call!` does `require` + `eval`), so this workstream remains open.
 
 ### Review gate
 
@@ -468,9 +489,17 @@ Every `event_loop_enqueue_ingress_call` allocates a `CljPersistentMap` via `task
 
 ### Measures
 
-1. Add a `viewer_collision_init()` function that caches all collision-related keywords into static module-level `CljSymbol *` variables (same pattern as `event_loop_init`).
+1. Add a cache helper that hoists all collision-related keywords/symbols into static module-level IDs initialized once.
 2. Replace all inline `intern_symbol_global` calls with the cached statics.
-3. Call `viewer_collision_init()` from `event_loop_init` or `runtime_init`.
+3. Reuse the same cache pattern for other modules with repeated global symbol lookups where it materially improves hot paths.
+
+### Status update
+
+Completed:
+
+- `viewer_collision_scene_bridge.c` and `viewer_collision_dispatch.c` now use static `IdSymbolCacheEntry` tables with one-time initialization.
+- The generic `IdSymbolCacheEntry` / `id_symbol_cache_init_global` pattern was pushed into shared symbol infrastructure and reused more broadly across the codebase.
+- The old per-hit/per-dispatch `intern_symbol_global` churn in the collision bridge/dispatch path is gone.
 
 ### Review gate
 
@@ -521,7 +550,7 @@ Every `event_loop_enqueue_ingress_call` allocates a `CljPersistentMap` via `task
 
 ### Problem
 
-`runtime.clj` and `runtime-play.clj` share duplicated helper functions (`scene-record`, `button-down-event?`, collision-dispatch patterns). `runtime-play.clj` is loaded via a dynamic `(require 'tiny-breakout.runtime-play)` followed by an `(eval (symbol ...))` call in `runtime-play-call!`, adding both latency and code size.
+`runtime.clj` and `runtime-play.clj` still share too much semantic surface, and `runtime-play.clj` is still reached via dynamic `(require 'tiny-breakout.runtime-play)` plus `(eval (symbol ...))` in `runtime-play-call!`, adding latency and code size. The namespace split improved clarity somewhat, but did not yet eliminate the hot-path indirection.
 
 ### Measures
 
@@ -541,7 +570,7 @@ Every `event_loop_enqueue_ingress_call` allocates a `CljPersistentMap` via `task
 
 ### Problem
 
-`viewer_load_breakout_host_config_fast` uses 4+ separate `eval_string` calls to resolve `scene*`, `bootstrap-runtime!`, `start-runtime!`, and `on-spatial-event!`. Each `eval_string` parses, compiles, and evaluates a full Clojure expression.
+`viewer_load_breakout_host_config_fast` still uses multiple `eval_string` calls to resolve `scene*`, `bootstrap-runtime!`, `start-runtime!`, and `on-spatial-event!`. Each `eval_string` parses, compiles, and evaluates a full Clojure expression.
 
 ### Measures
 
@@ -584,7 +613,7 @@ To keep review manageable, split implementation into these PR-sized slices:
 3. Audio callback detox.
 4. Render-thread snapshot handoff.
 5. Breakout runtime hot-path cleanup (includes runtime namespace merge + startup eval reduction).
-6. Collision-event shape reduction + intern_symbol caching + static sizing.
+6. Collision-event shape reduction + static sizing.
 7. Ingress task-map + named-timer + atom_swap heap elimination.
 8. Scene rebuild reduction.
 9. Code-size/readability refactor + CMake cleanup + final regression/size pass.

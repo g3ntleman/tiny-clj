@@ -1,4 +1,4 @@
-#include "viewer_collision_bridge.h"
+#include "viewer_spatial_bridge.h"
 
 #include <pthread.h>
 #include <string.h>
@@ -8,7 +8,7 @@
 #include "runtime.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
-#include "viewer_host_slots.h"
+#include "viewer_config_loader.h"
 
 static ID g_viewer_collision_kw_prototype;
 static ID g_viewer_collision_sym_aabb;
@@ -265,8 +265,8 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
     if (!viewer_collision_scene_descriptors_ready()) {
         return NULL;
     }
-    if (!bundle || !policy || !bundle->game_scene || !bundle->has_game_slot ||
-        bundle->game_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
+    if (!bundle || !policy || !bundle->primary_scene || !bundle->has_primary_slot ||
+        bundle->primary_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
         return NULL;
     }
     ID self_aabb_rec = viewer_make_aabb_record(self_box);
@@ -276,10 +276,10 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
         RELEASE(other_aabb_rec);
         return NULL;
     }
-    ID entity_index = viewer_collision_scene_entity_map(bundle->game_scene);
+    ID entity_index = viewer_collision_scene_entity_map(bundle->primary_scene);
     ID self_entity = entity_index ? map_get_sentinel(entity_index, policy->self_entity_id, NULL) : NULL;
     ID other_entity = entity_index ? map_get_sentinel(entity_index, policy->other_entity_id, NULL) : NULL;
-    ID slot_id = policy->slot_id ? policy->slot_id : bundle->slots[bundle->game_slot_index].id;
+    ID slot_id = policy->slot_id ? policy->slot_id : bundle->slots[bundle->primary_slot_index].id;
     ID values[17] = {
         g_viewer_collision_kw_source_spatial,
         policy->rule_id,
@@ -310,21 +310,21 @@ ID viewer_collision_make_spatial_event(const ViewerSceneBundle *bundle,
 /**
  * @brief Expands scene-level spatial rules into concrete host collision policies.
  *
- * @param game_scene Scene whose `:collision-rules` should be expanded.
+ * @param scene Scene whose `:collision-rules` should be expanded.
  * @param io_rule_set Rule set updated in place on success.
  * @return `true` when the scene publishes a valid collision rule shape.
  */
-bool viewer_collision_load_rules_from_scene(FrameScene *game_scene,
+bool viewer_collision_load_rules_from_scene(FrameScene *scene,
                                             ViewerSpatialRuleSet *io_rule_set) {
     if (!viewer_collision_scene_symbols_ready()) {
         return false;
     }
-    if (!game_scene || !io_rule_set) {
+    if (!scene || !io_rule_set) {
         return false;
     }
     bool ok = true;
     uint32_t next_version = viewer_next_rule_set_version(io_rule_set);
-    ID rules = tiny_fx_gfx_get_field((ID)game_scene, g_viewer_collision_kw_collision_rules, NULL);
+    ID rules = tiny_fx_gfx_get_field((ID)scene, g_viewer_collision_kw_collision_rules, NULL);
     if (!rules) {
         destroy_spatial_rule_set(io_rule_set);
         io_rule_set->version = next_version;
@@ -372,7 +372,7 @@ bool viewer_collision_load_rules_from_scene(FrameScene *game_scene,
             ok = false;
             break;
         }
-        ID entity_index = viewer_collision_scene_entity_map(game_scene);
+        ID entity_index = viewer_collision_scene_entity_map(scene);
         if (!entity_index || !is_map(entity_index)) {
             destroy_spatial_rule_set(&next_rule_set);
             ok = false;

@@ -13,7 +13,7 @@
 #include "record.h"
 #include "value.h"
 #include "gpio.h"
-#include "viewer_collision_bridge.h"
+#include "viewer_spatial_bridge.h"
 #include "mini_format.h"
 #include <stdbool.h>
 #include <stdarg.h>

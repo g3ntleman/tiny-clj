@@ -277,9 +277,9 @@ set(TINYCLJ_FX_COMMON_SOURCES
 set(TINYCLJ_FX_HOST_SOURCES
     src/sound_backend_host.c
     src/viewer_host_runloop.c
-    src/viewer_host_slots.c
-    src/viewer_collision_scene_bridge.c
-    src/viewer_collision_dispatch.c
+    src/viewer_config_loader.c
+    src/viewer_spatial_scene_bridge.c
+    src/viewer_spatial_dispatch.c
 )
 
 set(TINYCLJ_FX_ESP32_SOURCES
@@ -424,7 +424,7 @@ if(APPLE)
         src/repl.c
         src/platform_macos.c
         src/line_editor.c
-        src/game_demo_minifb.c
+        src/viewer_host_app.c
         src/game_demo_macos_menu.m
         src/tiny_fx_macos_app.m
         ${SOURCES}

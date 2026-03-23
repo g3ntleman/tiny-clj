@@ -1,4 +1,4 @@
-#include "viewer_collision_bridge.h"
+#include "viewer_spatial_bridge.h"
 
 #include <pthread.h>
 #include <string.h>
@@ -6,7 +6,7 @@
 #include "event_loop.h"
 #include "memory.h"
 #include "rendered_state_snapshot.h"
-#include "viewer_host_slots.h"
+#include "viewer_config_loader.h"
 
 #define VIEWER_COLLISION_EVENT_HEADROOM_BYTES (4u * 1024u)
 #define VIEWER_COLLISION_EVENT_MAX_PENDING 48u
@@ -231,14 +231,14 @@ bool viewer_collision_detect_step(ViewerSceneBundle *bundle,
                                   uint32_t now_ms,
                                   const VgClipRect *dirty_rects,
                                   size_t dirty_rect_count) {
-    if (!bundle || !rule_set || !bundle->game_scene || !bundle->has_game_slot) {
+    if (!bundle || !rule_set || !bundle->primary_scene || !bundle->has_primary_slot) {
         return false;
     }
 
     (void)now_ms;
     bool use_dirty_filter = dirty_rects && dirty_rect_count > 0u;
     bool any_triggered = false;
-    uint8_t game_slot = bundle->game_slot_index;
+    uint8_t primary_slot = bundle->primary_slot_index;
     typedef struct {
         ID entity_id;
         bool resolved;
@@ -268,7 +268,7 @@ bool viewer_collision_detect_step(ViewerSceneBundle *bundle,
             }
         }
         if (!found_self) {
-            have_self = vg_rendered_state_query_entity(game_slot,
+            have_self = vg_rendered_state_query_entity(primary_slot,
                                                        (uintptr_t)policy->self_entity_id,
                                                        &self_state);
             if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {
@@ -293,7 +293,7 @@ bool viewer_collision_detect_step(ViewerSceneBundle *bundle,
             }
         }
         if (!found_other) {
-            have_other = vg_rendered_state_query_entity(game_slot,
+            have_other = vg_rendered_state_query_entity(primary_slot,
                                                         (uintptr_t)policy->other_entity_id,
                                                         &other_state);
             if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {

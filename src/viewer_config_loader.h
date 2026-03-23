@@ -1,5 +1,5 @@
-#ifndef TINY_CLJ_VIEWER_HOST_SLOTS_H
-#define TINY_CLJ_VIEWER_HOST_SLOTS_H
+#ifndef TINY_CLJ_VIEWER_CONFIG_LOADER_H
+#define TINY_CLJ_VIEWER_CONFIG_LOADER_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -28,27 +28,27 @@ typedef struct ViewerSceneBundle {
     ID slots_root;
     ViewerConfiguredSlot *slots;
     uint8_t slot_count;
-    uint8_t game_slot_index;
-    bool has_game_slot;
+    uint8_t primary_slot_index;
+    bool has_primary_slot;
     ID entry;
     ID startup_callback;
     ID spatial_callback;
-    CljAtom *game_scene_atom;
-    FrameScene *game_scene;
+    CljAtom *primary_scene_atom;
+    FrameScene *primary_scene;
 } ViewerSceneBundle;
 
 FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom);
 void destroy_scene_bundle(ViewerSceneBundle *bundle);
-ViewerConfigSource viewer_selected_config_source(void);
-size_t viewer_tiny_fx_host_heap_limit_bytes(void);
-void viewer_tiny_fx_host_apply_heap_limit(void);
-bool viewer_load_game_demo_config(EvalState *st,
-                                  ViewerConfigSource config_source,
-                                  ViewerSceneBundle *out_bundle,
-                                  struct ViewerSpatialRuleSet *out_rule_set);
+ViewerConfigSource viewer_default_config_source(void);
+size_t tiny_fx_host_heap_limit_bytes(void);
+void tiny_fx_host_apply_heap_limit(void);
+bool viewer_load_deployment_config(EvalState *st,
+                                   ViewerConfigSource config_source,
+                                   ViewerSceneBundle *out_bundle,
+                                   struct ViewerSpatialRuleSet *out_rule_set);
 void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
                                   struct ViewerSpatialRuleSet *rule_set,
                                   VgSlotChangeTracker *slot_change_tracker,
                                   bool publish_changes);
 
-#endif /* TINY_CLJ_VIEWER_HOST_SLOTS_H */
+#endif /* TINY_CLJ_VIEWER_CONFIG_LOADER_H */

@@ -1,5 +1,5 @@
-#ifndef TINY_CLJ_VIEWER_COLLISION_BRIDGE_H
-#define TINY_CLJ_VIEWER_COLLISION_BRIDGE_H
+#ifndef TINY_CLJ_VIEWER_SPATIAL_BRIDGE_H
+#define TINY_CLJ_VIEWER_SPATIAL_BRIDGE_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -48,7 +48,7 @@ ID viewer_collision_make_spatial_event(const struct ViewerSceneBundle *bundle,
                                        uint32_t snapshot_gen,
                                        const VgAabb *self_box,
                                        const VgAabb *other_box);
-bool viewer_collision_load_rules_from_scene(FrameScene *game_scene,
+bool viewer_collision_load_rules_from_scene(FrameScene *scene,
                                             ViewerSpatialRuleSet *io_rule_set);
 bool viewer_collision_detect_step(struct ViewerSceneBundle *bundle,
                                   ViewerSpatialRuleSet *rule_set,
@@ -56,4 +56,4 @@ bool viewer_collision_detect_step(struct ViewerSceneBundle *bundle,
                                   const VgClipRect *dirty_rects,
                                   size_t dirty_rect_count);
 
-#endif /* TINY_CLJ_VIEWER_COLLISION_BRIDGE_H */
+#endif /* TINY_CLJ_VIEWER_SPATIAL_BRIDGE_H */

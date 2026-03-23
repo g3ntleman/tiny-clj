@@ -26,8 +26,8 @@
 #include "panel.h"
 #include "panel_backend.h"
 #include "viewer_host_runloop.h"
-#include "viewer_host_slots.h"
-#include "viewer_collision_bridge.h"
+#include "viewer_config_loader.h"
+#include "viewer_spatial_bridge.h"
 #include "platform.h"
 #include "gpio.h"
 #include "atom.h"
@@ -1262,7 +1262,7 @@ static void viewer_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRunti
 }
 #endif
 
-int tinyclj_tiny_fx_host_app_run(void) {
+int viewer_host_app_run(void) {
 #if !defined(TINYCLJ_WITH_MINIFB)
     fprintf(stderr, "MiniFB support is disabled for this build.\n");
     return 1;
@@ -1310,7 +1310,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     event_loop_init();
     vg_rendered_state_reset_all();
     viewer_seed_gpio_key_levels();
-    viewer_tiny_fx_host_apply_heap_limit();
+    tiny_fx_host_apply_heap_limit();
     EvalState *viewer_eval_state = evalstate_new(true);
     if (!viewer_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
@@ -1322,9 +1322,9 @@ int tinyclj_tiny_fx_host_app_run(void) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    ViewerConfigSource config_source = viewer_selected_config_source();
+    ViewerConfigSource config_source = viewer_default_config_source();
     TRY {
-        if (!viewer_load_game_demo_config(viewer_eval_state, config_source, &demo_bundle, &spatial_rules)) {
+        if (!viewer_load_deployment_config(viewer_eval_state, config_source, &demo_bundle, &spatial_rules)) {
             fprintf(stderr, "Failed to load viewer config from %s\n", config_source.display_name);
             goto cleanup;
         }
@@ -1340,7 +1340,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     direct_launch_arg = RETAIN(eval_string("{:launch true}", viewer_eval_state));
     direct_pause_arg = RETAIN(eval_string("{:pause true}", viewer_eval_state));
     if (!direct_input_fn || !direct_launch_arg || !direct_pause_arg) {
-        fprintf(stderr, "Failed to resolve direct breakout input actions\n");
+        fprintf(stderr, "Failed to resolve direct runtime input actions\n");
         goto cleanup;
     }
     if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
@@ -1443,7 +1443,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         bool pause_pressed = viewer_key_pressed_once(keys, KB_KEY_Y, &runtime_flags.pause_key_was_down);
         if (!viewer_enqueue_direct_input_action(fire_pressed, (CljObject *)direct_input_fn, direct_launch_arg) ||
             !viewer_enqueue_direct_input_action(pause_pressed, (CljObject *)direct_input_fn, direct_pause_arg)) {
-            fprintf(stderr, "Failed to enqueue direct breakout input action\n");
+            fprintf(stderr, "Failed to enqueue direct runtime input action\n");
             break;
         }
         viewer_simulate_gpio_keys(keys, &runtime_flags);
