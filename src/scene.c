@@ -26,7 +26,7 @@ typedef struct {
 
 static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
 static CljSymbol *g_ns_tiny_fx_scene = NULL;
-static CljSymbol *g_kw_root_entity = NULL;
+static CljSymbol *g_kw_root = NULL;
 static CljSymbol *g_kw_timeline_ease = NULL;
 static CljSymbol *g_kw_timeline_easing = NULL;
 static const SymbolCacheEntry g_scene_symbol_cache[] = {
@@ -41,7 +41,7 @@ static inline void scene_ensure_symbol_cache(void) {
             sizeof(g_scene_symbol_cache) / sizeof(g_scene_symbol_cache[0]));
     }
     g_ns_tiny_fx_scene = intern_symbol_global("tiny-fx.scene");
-    g_kw_root_entity = g_ns_tiny_fx_scene ? intern_symbol(g_ns_tiny_fx_scene, ":root-entity") : NULL;
+    g_kw_root = g_ns_tiny_fx_scene ? intern_symbol(g_ns_tiny_fx_scene, ":root") : NULL;
 }
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
@@ -154,7 +154,7 @@ static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID en
 
 static inline bool vg_scene_root_is_canonical(ID root_field) {
     scene_ensure_symbol_cache();
-    return root_field == (ID)g_kw_root_entity;
+    return root_field == (ID)g_kw_root;
 }
 
 static inline uint32_t record_type_hash(ID obj) {

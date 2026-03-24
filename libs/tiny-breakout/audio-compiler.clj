@@ -136,14 +136,3 @@
           (recur (+ i 1)))
         a))))
 
-(defn compiled-cue-specs
-  "Returns cue-id -> {:track-id kw :track-bytes byte-array}."
-  []
-  (reduce-kv
-   (fn [out cue-id descriptor]
-     (assoc out cue-id
-            {:track-id (:track-id descriptor)
-             :track-bytes (compile-track-bytes (:steps descriptor)
-                                               (:opts descriptor))}))
-   {}
-   cue-dsl))

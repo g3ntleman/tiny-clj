@@ -695,8 +695,8 @@ TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_ru
         "  (require 'tiny-fx.gfx) "
         "  (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote FrameScene) ["
-        "    :tiny-fx.scene/root-entity "
-        "    {:tiny-fx.scene/root-entity (->Line :tiny-fx.scene/root-entity nil (->Style 65535 1 true false 0 false 0) true 0 0 1 1 nil)} "
+        "    :tiny-fx.scene/root "
+        "    {:tiny-fx.scene/root (->Line :tiny-fx.scene/root nil (->Style 65535 1 true false 0 false 0) true 0 0 1 1 nil)} "
         "    [0 0 320 240] "
         "    0 true true 0 0 nil]))",
         ctx.st);

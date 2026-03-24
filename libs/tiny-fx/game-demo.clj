@@ -10,7 +10,7 @@
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
-(def root-entity-id :tiny-fx.scene/root-entity)
+(def root-entity-id :tiny-fx.scene/root)
 (def starwars-title-track-id :starwars-title-2v)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-data* (atom nil))

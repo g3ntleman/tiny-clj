@@ -129,32 +129,32 @@
     100
     (quot (+ (- core/playfield-width (overlay-text-width overlay)) 1) 2)))
 
-(def ^:private overlay-fade-duration-ms 880)
-(def ^:private overlay-fade-dark-gray 24)
-(def ^:private overlay-fade-light-gray 255)
-(def ^:private overlay-fade-stop-count 11)
+(def ^:private overlay-ease-in-duration-ms 880)
+(def ^:private overlay-ease-in-dark-gray 24)
+(def ^:private overlay-ease-in-light-gray 255)
+(def ^:private overlay-ease-in-stop-count 11)
 
-(defn- overlay-fade-stop-times
+(defn- overlay-ease-in-stop-times
   []
   (mapv (fn [step]
-          (quot (* overlay-fade-duration-ms step) overlay-fade-stop-count))
-        (range 0 (+ overlay-fade-stop-count 1))))
+          (quot (* overlay-ease-in-duration-ms step) overlay-ease-in-stop-count))
+        (range 0 (+ overlay-ease-in-stop-count 1))))
 
-(defn- overlay-fade-gray-rgb565
+(defn- overlay-ease-in-gray-rgb565
   [offset-ms]
-  (let [gray (+ overlay-fade-dark-gray
-                (quot (* (- overlay-fade-light-gray overlay-fade-dark-gray) offset-ms)
-                      overlay-fade-duration-ms))]
+  (let [gray (+ overlay-ease-in-dark-gray
+                (quot (* (- overlay-ease-in-light-gray overlay-ease-in-dark-gray) offset-ms)
+                      overlay-ease-in-duration-ms))]
     (gfx/color gray gray gray)))
 
-(defn overlay-fade-keyframes
+(defn overlay-ease-in-keyframes
   "Compiles explicit grayscale stops into duplicated-timestamp keyframes so the
   shared timeline path stays in Clojure and never interpolates packed RGB565 values."
   [start-ms]
   (let [stops (mapv (fn [offset-ms]
                       [(+ start-ms offset-ms)
-                       (overlay-fade-gray-rgb565 offset-ms)])
-                    (overlay-fade-stop-times))]
+                       (overlay-ease-in-gray-rgb565 offset-ms)])
+                    (overlay-ease-in-stop-times))]
     (if (empty? stops)
       []
       (reduce (fn [keyframes [next-ms next-value]]
@@ -172,7 +172,7 @@
     (let [start-ms (get state :overlay-start-ms)
           stroke-color (if (number? start-ms)
                          (record-create 'Timeline
-                                        [(overlay-fade-keyframes start-ms)
+                                        [(overlay-ease-in-keyframes start-ms)
                                          false
                                          false])
                          (gfx/color 0xffffff))]
@@ -292,10 +292,10 @@
              child-ids (transient base-child-ids)]
         (if (>= i (count bricks))
           (let [child-ids (persistent! child-ids)
-                root-node (->Group :tiny-fx.scene/root-entity nil nil true child-ids nil)]
+                root-node (->Group :tiny-fx.scene/root nil nil true child-ids nil)]
             {:type :FrameScene
-             :root :tiny-fx.scene/root-entity
-             :index (assoc entities :tiny-fx.scene/root-entity root-node)
+             :root :tiny-fx.scene/root
+             :index (assoc entities :tiny-fx.scene/root root-node)
              :clip-rect [0 0 core/playfield-width core/playfield-height]
              :z 0
              :visible true

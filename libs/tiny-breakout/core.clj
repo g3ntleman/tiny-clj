@@ -77,12 +77,6 @@
                             :ball-vy launch-speed-y)
                      now-ms))
 
-(defn skip-title-launch-state
-  "Same domain state as after :fire on the title screen: level 0, :play, first ball segment.
-  now-ms is used for segment timing (use `current-time-ms` from the host)."
-  [now-ms]
-  (launch-from-serve (fresh-game-state (init-state)) now-ms))
-
 (defn init-state
   "Returns deterministic baseline game-state for one-screen breakout."
   []
