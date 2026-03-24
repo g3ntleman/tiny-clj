@@ -403,5 +403,10 @@
   "Plays the full fast William Tell finale once, based on notation instead of the truncated demo MIDI."
   []
   (require 'tiny-fx.sound)
-  (let [demo (build-william-tell-finale-demo)]
-    (tiny-fx.sound/play-steps! (:track-id demo) (:steps demo) (:opts demo))))
+  (require 'tiny-fx.trk1)
+  (let [demo (build-william-tell-finale-demo)
+        prepared ((var tiny-fx.trk1/prepare-track) (:steps demo) (:opts demo))]
+    {:status (if ((var tiny-fx.sound/sound-play-music!) (:track-id demo) (:track-bytes prepared) 1)
+               :playing
+               :stopped)
+     :duration-ms (:duration-ms prepared)}))

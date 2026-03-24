@@ -109,7 +109,7 @@ Shipping-critical or shared-path files:
 Deployment-adjacent host files that should still be cleaned up because they shape architecture, tests, and regressions:
 
 - `src/game_demo_minifb.c`
-- `src/viewer_host_runloop.c`
+- `src/fx_host_runloop.c`
 - `src/viewer_host_slots.c`
 - `src/tests/test_breakout_runtime_startup.c`
 

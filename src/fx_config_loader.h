@@ -1,5 +1,5 @@
-#ifndef TINY_CLJ_VIEWER_CONFIG_LOADER_H
-#define TINY_CLJ_VIEWER_CONFIG_LOADER_H
+#ifndef TINY_CLJ_FX_CONFIG_LOADER_H
+#define TINY_CLJ_FX_CONFIG_LOADER_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -37,18 +37,18 @@ typedef struct ViewerSceneBundle {
     FrameScene *primary_scene;
 } ViewerSceneBundle;
 
-FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom);
+FrameScene *fx_frame_scene_from_atom(CljAtom *scene_atom);
 void destroy_scene_bundle(ViewerSceneBundle *bundle);
-ViewerConfigSource viewer_default_config_source(void);
+ViewerConfigSource fx_default_config_source(void);
 size_t tiny_fx_host_heap_limit_bytes(void);
 void tiny_fx_host_apply_heap_limit(void);
-bool viewer_load_deployment_config(EvalState *st,
+bool fx_load_deployment_config(EvalState *st,
                                    ViewerConfigSource config_source,
                                    ViewerSceneBundle *out_bundle,
                                    struct ViewerSpatialRuleSet *out_rule_set);
-void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
+void fx_sync_configured_slots(ViewerSceneBundle *bundle,
                                   struct ViewerSpatialRuleSet *rule_set,
                                   VgSlotChangeTracker *slot_change_tracker,
                                   bool publish_changes);
 
-#endif /* TINY_CLJ_VIEWER_CONFIG_LOADER_H */
+#endif /* TINY_CLJ_FX_CONFIG_LOADER_H */

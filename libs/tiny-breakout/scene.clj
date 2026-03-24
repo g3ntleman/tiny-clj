@@ -28,77 +28,52 @@
   []
   (concrete-spatial-rule :ball-vs-paddle :ball :paddle))
 
-(defn brick-rule-target-id
-  [rule]
-  (if (and (= :ball-vs-brick (:id rule))
-           (= :ball (:self rule))
-           (number? (:other rule)))
-    (:other rule)
-    nil))
+(defn- visible-brick-ids
+  [bricks]
+  (loop [remaining bricks
+         seen {}
+         out []]
+    (if (empty? remaining)
+      out
+      (let [brick-id (:id (first remaining))]
+        (if (or (not (number? brick-id))
+                (get seen brick-id))
+          (recur (rest remaining) seen out)
+          (recur (rest remaining)
+                 (assoc seen brick-id true)
+                 (conj out brick-id)))))))
 
-(defn rule-targets
-  [rules]
-  (loop [i 0
-         known {}]
-    (if (>= i (count rules))
-      known
-      (let [rule (nth rules i)
-            brick-id (brick-rule-target-id rule)]
-        (recur (inc i)
-               (if brick-id
-                 (assoc known brick-id true)
-                 known))))))
-
-(defn- rule-target-cache-valid?
-  [state rules]
-  (and (map? (:collision-rule-targets state))
-       (vector? (:collision-rule-targets-for state))
-       (identical? (:collision-rule-targets-for state) rules)))
+(defn- build-collision-rules
+  [brick-ids]
+  (loop [remaining brick-ids
+         rules [(paddle-rule)]]
+    (if (empty? remaining)
+      rules
+      (recur (rest remaining)
+             (conj rules
+                   (concrete-spatial-rule :ball-vs-brick :ball (first remaining)))))))
 
 (defn with-expanded-collision-rules
-  "Ensures breakout state carries an append-only concrete rule vector.
+  "Ensures breakout state carries the active concrete collision rules for the
+  currently visible bricks.
 
-  Existing brick rules stay in place so removed bricks become inert via the
-  scene index instead of forcing eager recompaction.
-  After one cache warm-up, returns state unchanged when all rules already
-  present (zero allocation on the steady-state path)."
+  The rule set is rebuilt when the visible brick ids change so it stays within
+  the host collision capacity across level transitions. When the active brick
+  ids are unchanged, returns the state unchanged to avoid steady-state churn."
   [state]
-  (let [bricks (visible-bricks state)
+  (let [brick-ids (visible-brick-ids (visible-bricks state))
         existing-rules (let [rules (:collision-rules state)]
                          (if (vector? rules) rules []))
-        base-rules (if (some (fn [rule]
-                               (= :ball-vs-paddle (:id rule)))
-                             existing-rules)
-                     existing-rules
-                     (into [(paddle-rule)] existing-rules))
-        has-target-cache? (rule-target-cache-valid? state base-rules)
-        known-targets (if has-target-cache?
-                        (:collision-rule-targets state)
-                        (rule-targets base-rules))]
-    (loop [remaining bricks
-           known known-targets
-           rules (transient base-rules)
-           added? (not (identical? base-rules existing-rules))]
-      (if (empty? remaining)
-        (let [rules-out (if added?
-                          (persistent! rules)
-                          base-rules)]
-          (if (or added? (not has-target-cache?))
-            (assoc state
-                   :collision-rules rules-out
-                   :collision-rule-targets known
-                   :collision-rule-targets-for rules-out)
-            state))
-        (let [brick (first remaining)
-              brick-id (:id brick)]
-          (if (or (not (number? brick-id))
-                  (get known brick-id))
-            (recur (rest remaining) known rules added?)
-            (recur (rest remaining)
-                   (assoc known brick-id true)
-                   (conj! rules
-                          (concrete-spatial-rule :ball-vs-brick :ball brick-id))
-                   true)))))))
+        cached-brick-ids (:collision-rule-brick-ids state)
+        reusable? (and (vector? cached-brick-ids)
+                       (= cached-brick-ids brick-ids)
+                       (= (+ 1 (count brick-ids)) (count existing-rules))
+                       (= :ball-vs-paddle (:id (first existing-rules))))]
+    (if reusable?
+      state
+      (assoc (dissoc state :collision-rule-targets :collision-rule-targets-for)
+             :collision-rules (build-collision-rules brick-ids)
+             :collision-rule-brick-ids brick-ids))))
 
 (defn overlay-text
   "Returns the shared centered overlay label for one breakout phase."

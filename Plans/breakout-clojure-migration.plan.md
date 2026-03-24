@@ -67,17 +67,17 @@ Der naechste Umbau sollte `extract-generic-c-runtime` praktisch beginnen und zwe
 
 Diese Umbenennungen sollen den naechsten Schnitt begleiten:
 
-- `src/game_demo_minifb.c` -> `src/viewer_host_app.c`
-- `src/viewer_host_slots.c` -> `src/viewer_config_loader.c`
-- `src/viewer_host_slots.h` -> `src/viewer_config_loader.h`
-- `src/viewer_collision_bridge.h` -> `src/viewer_spatial_bridge.h`
-- `src/viewer_collision_scene_bridge.c` -> `src/viewer_spatial_scene_bridge.c`
-- `src/viewer_collision_dispatch.c` -> `src/viewer_spatial_dispatch.c`
+- `src/game_demo_minifb.c` -> `src/fx_host_app.c`
+- `src/viewer_host_slots.c` -> `src/fx_config_loader.c`
+- `src/viewer_host_slots.h` -> `src/fx_config_loader.h`
+- `src/viewer_collision_bridge.h` -> `src/fx_spatial_bridge.h`
+- `src/viewer_collision_scene_bridge.c` -> `src/fx_spatial_scene_bridge.c`
+- `src/viewer_collision_dispatch.c` -> `src/fx_spatial_dispatch.c`
 
 Bewusste Nicht-Ziele fuer diesen Schritt:
 
-- `src/viewer_collision.c` muss nicht sofort umbenannt werden, solange dort bereits klar generische Spatial-/Collision-Infrastruktur liegt.
-- `src/viewer_host_runloop.c` kann vorerst bleiben; der groesste irrefuehrende Name ist aktuell `game_demo_minifb.c`.
+- `src/fx_collision.c` muss nicht sofort umbenannt werden, solange dort bereits klar generische Spatial-/Collision-Infrastruktur liegt.
+- `src/fx_host_runloop.c` kann vorerst bleiben; der groesste irrefuehrende Name ist aktuell `game_demo_minifb.c`.
 
 ### Konkrete inhaltliche Schritte im selben PR-Slice
 
@@ -105,7 +105,7 @@ Bewusste Nicht-Ziele fuer diesen Schritt:
 - Breakout-spezifisch in Clojure:
 [libs/tiny-breakout/core.clj](libs/tiny-breakout/core.clj), [libs/tiny-breakout/runtime.clj](libs/tiny-breakout/runtime.clj), [libs/tiny-breakout/runtime-play.clj](libs/tiny-breakout/runtime-play.clj), [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj), [libs/tiny-breakout/audio.clj](libs/tiny-breakout/audio.clj) plus optional spaeter ein explizites Modul fuer Collision-Event-Uebersetzung.
 - Generisch in C:
-[src/scene.c](src/scene.c), [src/vector_scene_graph.c](src/vector_scene_graph.c), [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c), [src/viewer_collision.c](src/viewer_collision.c), [src/event_loop.c](src/event_loop.c), [src/renderer_lifecycle.c](src/renderer_lifecycle.c) und die generischen Teile aus [src/game_demo_minifb.c](src/game_demo_minifb.c), die in Host-/Viewer-/Spatial-Library-Code ueberfuehrt werden.
+[src/scene.c](src/scene.c), [src/vector_scene_graph.c](src/vector_scene_graph.c), [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c), [src/fx_collision.c](src/fx_collision.c), [src/event_loop.c](src/event_loop.c), [src/renderer_lifecycle.c](src/renderer_lifecycle.c) und die generischen Teile aus [src/game_demo_minifb.c](src/game_demo_minifb.c), die in Host-/Viewer-/Spatial-Library-Code ueberfuehrt werden.
 
 ```mermaid
 flowchart LR

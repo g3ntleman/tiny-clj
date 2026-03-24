@@ -5,10 +5,13 @@
 #include "../source_resolver.h"
 #include "../vector_scene_graph.h"
 
-TEST(test_breakout_contract_audio_namespace_does_not_autoload_tiny_fx_sound) {
+TEST(test_breakout_contract_audio_namespace_loads_tiny_fx_sound_runtime) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
+    (void)eval_string("(ns-unload 'tiny-breakout.audio)", g_test_eval_state);
+    (void)eval_string("(ns-unload 'tiny-fx.sound)", g_test_eval_state);
     CljNamespace *sound_ns_before = ns_find("tiny-fx.sound");
+    TEST_ASSERT_NULL(sound_ns_before);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.audio :reload) "
@@ -18,8 +21,8 @@ TEST(test_breakout_contract_audio_namespace_does_not_autoload_tiny_fx_sound) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 
     CljNamespace *sound_ns_after = ns_find("tiny-fx.sound");
-    TEST_ASSERT_TRUE_MESSAGE(sound_ns_after == sound_ns_before,
-                             "tiny-breakout.audio must not require tiny-fx.sound while resolving/playing breakout SFX");
+    TEST_ASSERT_NOT_NULL_MESSAGE(sound_ns_after,
+                                 "tiny-breakout.audio should load tiny-fx.sound for runtime SFX playback");
 }
 
 TEST(test_breakout_contract_runtime_namespace_reload_is_reclaimable) {

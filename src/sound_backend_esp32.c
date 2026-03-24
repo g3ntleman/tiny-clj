@@ -104,7 +104,7 @@ static void sound_timer_callback(void *arg) {
      * - no retain/release or event payload construction
      *
      * Finished notifications stay POD-only here; the interpreter thread drains
-     * them later via sound_engine_drain_finished_notifications().
+     * them later into event-loop ingress callbacks from the sound thread.
      */
     if (atomic_exchange_explicit(&g_sound_tick_in_callback, true, memory_order_acq_rel)) {
         g_sound_engine.telemetry.tick_overrun_count++;

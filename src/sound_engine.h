@@ -91,8 +91,10 @@ typedef enum {
 
 typedef struct {
     SoundCmdType type;
-    ID           track_id;       /* interned symbol/keyword (not retained in queue) */
-    int32_t      int_param;      /* repeat count or volume */
+    ID           track_id;        /* interned symbol/keyword for stop/finished callbacks */
+    ID           retained_obj;    /* retained CljByteArray for play commands */
+    Trk1Header   header;          /* parsed header for play commands */
+    int32_t      int_param;       /* repeat count or volume */
 } SoundCmd;
 
 typedef struct {
@@ -108,18 +110,6 @@ typedef struct {
     SoundFinishedNotification slots[SOUND_FINISHED_QUEUE_CAP];
     LockFreeSpscQueue spsc;
 } SoundFinishedQueue;
-
-/* ========================================================================= */
-/* Track registry                                                            */
-/* ========================================================================= */
-
-#define SOUND_MAX_TRACKS 8
-
-typedef struct {
-    ID       track_id;       /* interned symbol/keyword; pointer comparison */
-    ID       retained_obj;   /* retained CljByteArray */
-    Trk1Header header;
-} SoundTrackEntry;
 
 /* ========================================================================= */
 /* Stream cursor (active playback)                                           */
@@ -142,6 +132,7 @@ typedef struct {
     uint8_t  track_volume;      /* 0..255 */
     bool     active;
     ID       track_id;          /* for finished notification */
+    ID       retained_obj;      /* kept alive while the stream is active */
     const uint8_t *stream_start; /* for repeat/loop rewind */
     SoundEnvelope envelope;
 } SoundStream;
@@ -199,10 +190,6 @@ typedef struct {
 /* ========================================================================= */
 
 typedef struct {
-    /* Track registry */
-    SoundTrackEntry tracks[SOUND_MAX_TRACKS];
-    int             track_count;
-
     /* Active music stream (one at a time for MVP) */
     SoundStream     music_stream;
 
@@ -254,17 +241,9 @@ void sound_engine_init(int voice_count);
 /* Shutdown and release all resources. */
 void sound_engine_shutdown(void);
 
-/* Load a track into the registry. Validates header, retains byte array.
- * Returns true on success. */
-bool sound_engine_load_track(ID track_id, ID byte_array_obj);
-
-/* Unload a track. Stops if playing, releases byte array.
- * Returns true if track was found and unloaded. */
-bool sound_engine_unload_track(ID track_id);
-
-/* Enqueue play command.
+/* Enqueue a music play command from TRK1 bytes.
  * repeat: 0 = infinite, 1 = once, 2 = twice, etc. */
-bool sound_engine_play_music(ID track_id, int32_t repeat);
+bool sound_engine_play_music(ID track_id, ID byte_array_obj, int32_t repeat);
 
 /* Enqueue stop command for a specific track (no finished callback). */
 bool sound_engine_stop_track(ID track_id);
@@ -272,8 +251,8 @@ bool sound_engine_stop_track(ID track_id);
 /* Enqueue stop-all-music command. */
 void sound_engine_stop_music(void);
 
-/* Enqueue SFX play command. Returns false if queue full. */
-bool sound_engine_play_sfx(ID sfx_id);
+/* Enqueue SFX play command from TRK1 bytes. Returns false if queue full. */
+bool sound_engine_play_sfx(ID sfx_id, ID byte_array_obj);
 
 /* Enqueue stop-all command. */
 void sound_engine_stop_all(void);
@@ -287,8 +266,6 @@ void sound_engine_set_music_volume(int32_t vol);
 /* Register on-finished callback. Retains fn, releases previous.
  * Callback receives {:source :audio :kind :finished :track-id ...}. */
 void sound_engine_on_finished(ID callback_fn);
-bool sound_engine_has_pending_finished_notifications(void);
-void sound_engine_drain_finished_notifications(void);
 
 /* ========================================================================= */
 /* Tick (called from timer ISR or host test harness)                         */

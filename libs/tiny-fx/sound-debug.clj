@@ -36,7 +36,10 @@
 
 ^#^{:doc "DEBUG-only thrust demo using the regular DSL/SFX path instead of host-only play-test-noise!."}
 (defn play-thrust-demo! []
-  (sound/play-sfx! thrust-demo-track-id thrust-demo-steps thrust-demo-opts))
+  (require 'tiny-fx.trk1)
+  (let [prepared ((var tiny-fx.trk1/prepare-track) thrust-demo-steps thrust-demo-opts)]
+    {:status (if (sound/sound-play-sfx! thrust-demo-track-id (:track-bytes prepared)) :playing :dropped)
+     :duration-ms (:duration-ms prepared)}))
 
 ^#^{:doc "DEBUG-only piu demo: short up-ramp then down-ramp ending low (host bending). Not for production."}
 (defn play-piu-demo! []

@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 #include "vector_scene_graph.h"
-#include "viewer_collision.h"
+#include "fx_collision.h"
 
 #if defined(ESP32_BUILD)
 #define VG_RENDERED_STATE_MAX_SLOTS 3u

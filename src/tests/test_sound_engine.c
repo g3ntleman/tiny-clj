@@ -1,8 +1,8 @@
 /*
  * Sound Engine Tests
  *
- * Tests for trk1 format parsing, SPSC queue, track registry,
- * streaming engine, native API wiring, and ownership contracts.
+ * Tests for trk1 format parsing, SPSC queue, streaming playback,
+ * native API wiring, and ownership contracts.
  */
 
 #include "tests_common.h"
@@ -581,61 +581,64 @@ TEST(test_sound_cmd_queue_wraparound) {
 }
 
 /* ========================================================================= */
-/* Track registry + ownership tests                                          */
+/* Playback ownership tests                                                  */
 /* ========================================================================= */
 
-TEST(test_sound_load_unload_contract) {
+TEST(test_sound_music_stream_retains_bytes_only_while_active) {
   sound_engine_init(2);
 
   ID track_sym = (ID)intern_symbol_global(":test-track");
-  ID ba = make_test_trk1(69, 100, 2, 0);
+  ID ba = make_test_trk1_with_delay(69, 3, 5, 1);
 
-  /* Load: retain count should increase */
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_EQUAL_INT(1, g_sound_engine.track_count);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+  sound_engine_tick();
+  TEST_ASSERT_TRUE(g_sound_engine.music_stream.active);
+  TEST_ASSERT_NOT_NULL(g_sound_engine.music_stream.retained_obj);
 
-  /* Unload: should release */
-  TEST_ASSERT_TRUE(sound_engine_unload_track(track_sym));
-  TEST_ASSERT_EQUAL_INT(0, g_sound_engine.track_count);
-
-  /* Unload non-existent: false */
-  TEST_ASSERT_FALSE(sound_engine_unload_track(track_sym));
+  for (int i = 0; i < 8; i++) {
+    sound_engine_tick();
+  }
+  TEST_ASSERT_FALSE(g_sound_engine.music_stream.active);
+  TEST_ASSERT_NULL(g_sound_engine.music_stream.retained_obj);
 
   RELEASE(ba);
   sound_engine_shutdown();
 }
 
-TEST(test_sound_load_invalid_data) {
+TEST(test_sound_play_music_invalid_data) {
   sound_engine_init(2);
 
   ID track_sym = (ID)intern_symbol_global(":bad-track");
 
   /* Non-byte-array should fail */
-  TEST_ASSERT_FALSE(sound_engine_load_track(track_sym, fixnum(42)));
+  TEST_ASSERT_FALSE(sound_engine_play_music(track_sym, fixnum(42), 1));
 
   /* Short data should fail */
   CljByteArray *short_ba = make_byte_array(5);
-  TEST_ASSERT_FALSE(sound_engine_load_track(track_sym, (ID)short_ba));
+  TEST_ASSERT_FALSE(sound_engine_play_music(track_sym, (ID)short_ba, 1));
   RELEASE(short_ba);
 
   /* NULL args should fail */
-  TEST_ASSERT_FALSE(sound_engine_load_track(NULL, NULL));
+  TEST_ASSERT_FALSE(sound_engine_play_music(NULL, NULL, 1));
+  TEST_ASSERT_FALSE(sound_engine_play_sfx(track_sym, NULL));
 
   sound_engine_shutdown();
 }
 
-TEST(test_sound_load_replaces_existing) {
+TEST(test_sound_play_music_restarts_active_track_with_new_bytes) {
   sound_engine_init(2);
 
   ID track_sym = (ID)intern_symbol_global(":replace-track");
   ID ba1 = make_test_trk1(60, 100, 1, 0);
   ID ba2 = make_test_trk1(72, 200, 1, 0);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba1));
-  TEST_ASSERT_EQUAL_INT(1, g_sound_engine.track_count);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba1, 1));
+  sound_engine_tick();
+  TEST_ASSERT_EQUAL_UINT16(262, g_sound_engine.voices[0].freq_hz);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba2));
-  TEST_ASSERT_EQUAL_INT(1, g_sound_engine.track_count);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba2, 1));
+  sound_engine_tick();
+  TEST_ASSERT_EQUAL_UINT16(523, g_sound_engine.voices[0].freq_hz);
 
   RELEASE(ba1);
   RELEASE(ba2);
@@ -652,8 +655,7 @@ TEST(test_sound_play_and_tick_basic) {
   ID track_sym = (ID)intern_symbol_global(":tick-test");
   ID ba = make_test_trk1(69, 5, 1, 0); /* A4, gate=5 ticks */
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   /* First tick: drains command, parses NOTE + END, sets voice.
    * NOTE has no delay, so END is parsed in the same tick.
@@ -682,8 +684,7 @@ TEST(test_sound_play_with_delay) {
   ID track_sym = (ID)intern_symbol_global(":delay-test");
   ID ba = make_test_trk1_with_delay(69, 3, 5, 1); /* note=A4, gate=3, delay=5 before END */
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick(); /* drains play command, parses NOTE (delay=5 before next event) */
   TEST_ASSERT_TRUE(g_sound_engine.music_stream.active);
@@ -711,8 +712,7 @@ TEST(test_sound_legato_hold_preserves_voice_until_next_note) {
   ID track_sym = (ID)intern_symbol_global(":legato-runtime-test");
   ID ba = make_test_trk1_two_note_ex_track(60, TRK1_NOTE_FLAG_LEGATO, 3, 3, 62, 0, 3);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
   sound_engine_tick();
@@ -739,8 +739,7 @@ TEST(test_sound_same_note_without_retrigger_keeps_attack_generation) {
   ID track_sym = (ID)intern_symbol_global(":repeat-no-retrigger-test");
   ID ba = make_test_trk1_two_note_ex_track(69, TRK1_NOTE_FLAG_LEGATO, 3, 3, 69, 0, 3);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
   sound_engine_tick();
@@ -762,8 +761,7 @@ TEST(test_sound_same_note_with_retrigger_advances_attack_generation) {
   ID ba = make_test_trk1_two_note_ex_track(69, TRK1_NOTE_FLAG_LEGATO, 3, 3, 69,
                                            TRK1_NOTE_FLAG_RETRIGGER, 3);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
   sound_engine_tick();
@@ -785,8 +783,7 @@ TEST(test_sound_track_envelope_reduces_voice_volume_in_tail_segment) {
   ID track_sym = (ID)intern_symbol_global(":envelope-tail-test");
   ID ba = make_test_trk1_with_envelope_and_two_notes(envelope, 5u, 69, 10, 20, 72, 10);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
   TEST_ASSERT_EQUAL_UINT8(255u, g_sound_engine.voices[0].volume);
@@ -811,8 +808,7 @@ TEST(test_sound_track_envelope_resets_repeated_note_volume_without_retrigger_fla
   ID track_sym = (ID)intern_symbol_global(":envelope-repeat-test");
   ID ba = make_test_trk1_with_envelope_and_two_notes(envelope, 5u, 69, 10, 10, 69, 10);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
   for (int i = 0; i < 7; i++) {
@@ -840,8 +836,7 @@ TEST(test_sound_track_envelope_emits_only_two_nonzero_backend_updates_per_note) 
   ID track_sym = (ID)intern_symbol_global(":envelope-update-count-test");
   ID ba = make_test_trk1_with_envelope_and_note(envelope, 5u, 69, 10);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   for (int i = 0; i < 12; i++) {
     sound_engine_tick();
@@ -868,8 +863,7 @@ TEST(test_sound_repeat_infinite) {
   ID track_sym = (ID)intern_symbol_global(":repeat-test");
   ID ba = make_test_trk1(60, 2, 1, 0); /* C4, gate=2 */
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 0)); /* 0 = infinite */
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 0)); /* 0 = infinite */
 
   sound_engine_tick(); /* drains command, parses NOTE + END -> loop rewind */
   TEST_ASSERT_TRUE(g_sound_engine.music_stream.active);
@@ -890,8 +884,7 @@ TEST(test_sound_stop_track_no_finished_callback) {
   ID track_sym = (ID)intern_symbol_global(":stop-test");
   ID ba = make_test_trk1(60, 100, 1, 0);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 0));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 0));
 
   sound_engine_tick(); /* start playing */
   TEST_ASSERT_TRUE(g_sound_engine.music_stream.active);
@@ -910,8 +903,7 @@ TEST(test_sound_set_track_volume_during_playback) {
   ID track_sym = (ID)intern_symbol_global(":vol-test");
   ID ba = make_test_trk1(69, 100, 1, 0);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 0));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 0));
 
   sound_engine_tick(); /* start */
   TEST_ASSERT_EQUAL_UINT8(255, g_sound_engine.music_stream.track_volume);
@@ -935,8 +927,7 @@ TEST(test_sound_sfx_oneshot) {
   /* Use delay so SFX lasts multiple ticks: NOTE(gate=10) + delay=5 + END */
   ID ba = make_test_trk1_with_delay(80, 10, 5, 1);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(sfx_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
+  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym, ba));
 
   sound_engine_tick(); /* drains SFX command, parses NOTE (delay=5 before END) */
 
@@ -969,15 +960,14 @@ TEST(test_sound_sfx_last_start_wins_when_all_slots_busy) {
   ID sfx_sym = (ID)intern_symbol_global(":sfx-drop");
   ID ba = make_test_trk1_with_delay(80, 100, 30, 1);
 
-  TEST_ASSERT_TRUE(sound_engine_load_track(sfx_sym, ba));
   g_sound_engine.telemetry.sfx_drop_count = 0;
 
-  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
+  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym, ba));
   sound_engine_tick();
-  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
+  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym, ba));
   sound_engine_tick();
 
-  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
+  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym, ba));
   TEST_ASSERT_EQUAL_UINT32(0, g_sound_engine.telemetry.sfx_drop_count);
 
   RELEASE(ba);
@@ -992,8 +982,6 @@ TEST(test_sound_finished_callback_runs_via_event_loop) {
 
   ID track_sym = (ID)intern_symbol_global(":finish-test");
   ID ba = make_test_trk1(69, 2, 1, 0);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-
   ID atom_def = eval_string("(def sound-finished-track (atom nil))", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(atom_def);
   ID cb_def = eval_string(
@@ -1007,11 +995,11 @@ TEST(test_sound_finished_callback_runs_via_event_loop) {
   TEST_ASSERT_NOT_NULL(cb_fn);
 
   sound_engine_on_finished(cb_fn);
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick();
-  TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
-                            "sound tick should not enqueue finished callbacks directly into ingress");
+  TEST_ASSERT_TRUE_MESSAGE(event_loop_ingress_has_pending(),
+                           "sound tick should push finished callbacks into ingress without scheduler polling");
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 
@@ -1030,13 +1018,11 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
 
   ID track_sym = (ID)intern_symbol_global(":finish-shape-test");
   ID ba = make_test_trk1(72, 2, 1, 0);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-
   ID setup = eval_string(
       "(do "
       "  (def sound-finished-shape (atom nil)) "
-      "  (require 'tiny-fx.sound-native) "
-      "  (tiny-fx.sound-native/sound-on-finished! "
+      "  (require 'tiny-fx.sound) "
+      "  (tiny-fx.sound/sound-on-finished! "
       "    (fn [event] "
       "      (reset! sound-finished-shape "
       "              [(map? event) (:source event) (:kind event) (:track-id event)]) "
@@ -1045,7 +1031,7 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
       g_test_eval_state);
   TEST_ASSERT_NOT_NULL(setup);
 
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
   sound_engine_tick();
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
@@ -1065,16 +1051,18 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
 TEST(test_sound_native_lookup) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  /* High-level sound namespace should stay minimal. */
   const char *names[] = {
-      "tiny-fx.sound/note->midi",
-      "tiny-fx.sound/track-duration-ms",
-      "tiny-fx.sound/compile-track",
-      "tiny-fx.sound/play-steps!",
-      "tiny-fx.sound/play-sfx!",
+      "tiny-fx.sound/sound-play-music!",
+      "tiny-fx.sound/sound-stop-track!",
+      "tiny-fx.sound/sound-stop-music!",
+      "tiny-fx.sound/sound-play-sfx!",
+      "tiny-fx.sound/sound-stop-all!",
+      "tiny-fx.sound/sound-set-track-volume!",
+      "tiny-fx.sound/sound-set-music-volume!",
+      "tiny-fx.sound/sound-on-finished!",
   };
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 8; i++) {
     char buf[192];
     test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound) (fn? %s))", names[i]);
     ID result = NULL;
@@ -1091,25 +1079,20 @@ TEST(test_sound_native_lookup) {
   }
 }
 
-TEST(test_sound_native_low_level_lookup) {
+TEST(test_sound_trk1_lookup) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   const char *names[] = {
-      "tiny-fx.sound-native/sound-load-track!",
-      "tiny-fx.sound-native/sound-unload-track!",
-      "tiny-fx.sound-native/sound-play-music!",
-      "tiny-fx.sound-native/sound-stop-track!",
-      "tiny-fx.sound-native/sound-stop-music!",
-      "tiny-fx.sound-native/sound-play-sfx!",
-      "tiny-fx.sound-native/sound-stop-all!",
-      "tiny-fx.sound-native/sound-set-track-volume!",
-      "tiny-fx.sound-native/sound-set-music-volume!",
-      "tiny-fx.sound-native/sound-on-finished!",
+      "tiny-fx.trk1/note->midi",
+      "tiny-fx.trk1/track-duration-ms",
+      "tiny-fx.trk1/compile-track",
+      "tiny-fx.trk1/prepare-track",
+      "tiny-fx.trk1/compile-simple-note-hz-track",
   };
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 5; i++) {
     char buf[192];
-    test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound-native) (fn? %s))", names[i]);
+    test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.trk1) (fn? %s))", names[i]);
     ID result = NULL;
     TRY {
       result = eval_string(buf, g_test_eval_state);
@@ -1192,21 +1175,20 @@ TEST(test_sound_demos_lookup) {
   }
 }
 
-TEST(test_sound_demo_song_can_be_played_directly_via_play) {
+TEST(test_sound_demo_song_can_be_played_directly_via_sound_demos_play_demo) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
         "(do "
-        "  (require 'tiny-fx.sound) "
         "  (require 'tiny-fx.sound-demos) "
-        "  (let [ret (tiny-fx.sound/play! (tiny-fx.sound-demos/load-song :rocket-launch-sfx))] "
+        "  (let [ret (tiny-fx.sound-demos/play-demo! :rocket-launch-sfx)] "
         "    (and (map? ret) (contains? ret :status) (contains? ret :duration-ms))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play! should accept song descriptor from tiny-fx.sound-demos/load-song");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-demo! should compile and play a demo descriptor");
   }
   END_TRY
 
@@ -1220,7 +1202,7 @@ TEST(test_sound_high_level_namespace_excludes_debug_and_native_helpers) {
   ID result = eval_string(
       "(do "
       "  (require 'tiny-fx.sound) "
-      "  [(try (do tiny-fx.sound/sound-load-track! false) (catch Exception e true)) "
+      "  [(try (do tiny-fx.sound/sound-play-music! false false false) (catch Exception e true)) "
       "   (try (do tiny-fx.sound/sound-on-finished! false) (catch Exception e true)) "
       "   (try (do tiny-fx.sound/play-test-tone! false) (catch Exception e true)) "
       "   (try (do tiny-fx.sound/host-status! false) (catch Exception e true))])",
@@ -1244,11 +1226,12 @@ TEST(test_sound_native_play_music_initializes_engine_if_needed) {
   ID result = eval_string(
         "(do "
         "  (require 'tiny-fx.sound) "
-        "  (let [ret (tiny-fx.sound/play-steps! :lazy-init "
-        "              [{:notes [:G5 :D5] :duration :s}] "
-        "              {:channel-count 2 :volumes [0 0] :tempo-bpm 120})] "
-        "    (and (= :playing (:status ret)) "
-        "         (= 125 (:duration-ms ret)))))",
+        "  (require 'tiny-fx.trk1) "
+        "  (let [prepared (tiny-fx.trk1/prepare-track "
+        "                   [{:notes [:G5 :D5] :duration :s}] "
+        "                   {:channel-count 2 :volumes [0 0] :tempo-bpm 120})] "
+        "    (and (tiny-fx.sound/sound-play-music! :lazy-init (:track-bytes prepared) 1) "
+        "         (= 125 (:duration-ms prepared)))))",
         g_test_eval_state);
 
   TEST_ASSERT_TRUE(result == clj_true);
@@ -1939,36 +1922,65 @@ TEST(test_sound_tiny_fx_sound_rest_with_dur_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_tiny_fx_sound_track_duration_ms_accepts_integer_rest) {
+TEST(test_sound_tiny_fx_trk1_track_duration_ms_accepts_integer_rest) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
+        "(do (require 'tiny-fx.trk1) "
         "    (= 210 "
-        "       (tiny-fx.sound/track-duration-ms "
+        "       (tiny-fx.trk1/track-duration-ms "
         "         [{:notes [:G5] :duration 120} "
         "          {:rest 90}] "
         "         {:channel-count 1 :volumes [0]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/track-duration-ms should accept integer duration and rest");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/track-duration-ms should accept integer duration and rest");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_sound_tiny_fx_sound_invalid_articulation_throws) {
+TEST(test_sound_tiny_fx_trk1_prepare_track_matches_compile_track) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.trk1) "
+        "    (let [steps [{:melody :C4 :backing :G3maj :duration :q :articulation :legato} "
+        "                 {:melody :D4 :backing :A3maj :duration :e :rearticulate true}] "
+        "          opts {:melody {:volume 0} :backing {:volume 0} :tempo-bpm 120} "
+        "          a (tiny-fx.trk1/compile-track steps opts) "
+        "          b (:track-bytes (tiny-fx.trk1/prepare-track steps opts))] "
+        "      (and (= (alength a) (alength b)) "
+        "           (loop [i 0] "
+        "             (if (< i (alength a)) "
+        "               (if (= (aget a i) (aget b i)) "
+        "                 (recur (+ i 1)) "
+        "                 false) "
+        "               true)))))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/prepare-track should match tiny-fx.trk1/compile-track");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_sound_tiny_fx_trk1_invalid_articulation_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:C4] :duration :q :articulation :accent}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
@@ -1981,14 +1993,14 @@ TEST(test_sound_tiny_fx_sound_invalid_articulation_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_tiny_fx_sound_non_boolean_rearticulate_throws) {
+TEST(test_sound_tiny_fx_trk1_non_boolean_rearticulate_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:C4] :duration :q :rearticulate :yes}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
@@ -2001,43 +2013,43 @@ TEST(test_sound_tiny_fx_sound_non_boolean_rearticulate_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_tiny_fx_sound_track_duration_ms_is_invariant_under_articulation_metadata) {
+TEST(test_sound_tiny_fx_trk1_track_duration_ms_is_invariant_under_articulation_metadata) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
+        "(do (require 'tiny-fx.trk1) "
         "    (= 750 "
-        "       (tiny-fx.sound/track-duration-ms "
+        "       (tiny-fx.trk1/track-duration-ms "
         "         [{:notes [:C4] :duration :q :articulation :legato} "
         "          {:notes [:C4] :duration :e :rearticulate true}] "
         "         {:channel-count 1 :volumes [0] :tempo-bpm 120})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/track-duration-ms should ignore articulation metadata");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/track-duration-ms should ignore articulation metadata");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_sound_tiny_fx_sound_compile_track_emits_legato_flag) {
+TEST(test_sound_tiny_fx_trk1_compile_track_emits_legato_flag) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:C4] :duration :q :articulation :legato} "
         "       {:notes [:D4] :duration :q}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept :articulation :legato");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should accept :articulation :legato");
   }
   END_TRY
 
@@ -2050,21 +2062,21 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_legato_flag) {
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt1.note_flags);
 }
 
-TEST(test_sound_tiny_fx_sound_compile_track_emits_retrigger_flag_for_same_follow_tone) {
+TEST(test_sound_tiny_fx_trk1_compile_track_emits_retrigger_flag_for_same_follow_tone) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:A4] :duration :q :articulation :legato} "
         "       {:notes [:A4] :duration :q :rearticulate true}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept :rearticulate true");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should accept :rearticulate true");
   }
   END_TRY
 
@@ -2074,21 +2086,21 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_retrigger_flag_for_same_follow
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_RETRIGGER, evt2.note_flags);
 }
 
-TEST(test_sound_tiny_fx_sound_compile_track_melody_backing_preserves_articulation_flags) {
+TEST(test_sound_tiny_fx_trk1_compile_track_melody_backing_preserves_articulation_flags) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:melody :C4 :backing :G3maj :duration :q :articulation :legato} "
         "       {:melody :D4 :backing :A3maj :duration :q}] "
         "      {:melody {:volume 0} :backing {:volume 0} :tempo-bpm 120}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track melody/backing articulation should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track melody/backing articulation should not throw");
   }
   END_TRY
 
@@ -2098,21 +2110,21 @@ TEST(test_sound_tiny_fx_sound_compile_track_melody_backing_preserves_articulatio
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt2.note_flags);
 }
 
-TEST(test_sound_tiny_fx_sound_compile_track_emits_track_envelope_once) {
+TEST(test_sound_tiny_fx_trk1_compile_track_emits_track_envelope_once) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:A4] :duration :q} {:notes [:A4] :duration :q}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120 "
         "       :envelope [1.0 1.0 1.0 1.0 0.1]}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept a per-track :envelope");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should accept a per-track :envelope");
   }
   END_TRY
 
@@ -2124,20 +2136,20 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_track_envelope_once) {
   TEST_ASSERT_EQUAL_UINT8(26u, evt0.envelope_levels[4]);
 }
 
-TEST(test_sound_tiny_fx_sound_compile_track_uses_default_track_envelope) {
+TEST(test_sound_tiny_fx_trk1_compile_track_uses_default_track_envelope) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [:A4] :duration :q}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should apply the default :envelope when omitted");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should apply the default :envelope when omitted");
   }
   END_TRY
 
@@ -2148,6 +2160,36 @@ TEST(test_sound_tiny_fx_sound_compile_track_uses_default_track_envelope) {
   TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
   TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[1]);
   TEST_ASSERT_EQUAL_UINT8(51u, evt0.envelope_levels[2]);
+}
+
+TEST(test_sound_tiny_breakout_audio_compiler_preserves_legacy_track_bytes) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-breakout.audio-compiler) "
+        "    (let [track (tiny-breakout.audio-compiler/compile-track-bytes "
+        "                  [{:notes [1040] :duration 20} "
+        "                   {:notes [1320] :duration 24}] "
+        "                  {:channel-count 1 :gate-percent 72 :volumes [180]}) "
+        "          expected [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 "
+        "                    16 180 176 16 4 20 20 176 40 5 20 24 32]] "
+        "      (and (= (alength track) (count expected)) "
+        "           (loop [i 0] "
+        "             (if (< i (count expected)) "
+        "               (if (= (aget track i) (nth expected i)) "
+        "                 (recur (+ i 1)) "
+        "                 false) "
+        "               true)))))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-breakout.audio-compiler should preserve legacy TRK1 bytes");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST(test_sound_tiny_fx_sound_nonpositive_integer_duration_throws) {
@@ -2196,22 +2238,22 @@ TEST(test_sound_tiny_fx_sound_bend_duration_ms_returns_status_map) {
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_sound_tiny_fx_sound_track_duration_ms_preserves_bend_duration) {
+TEST(test_sound_tiny_fx_trk1_track_duration_ms_preserves_bend_duration) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
+        "(do (require 'tiny-fx.trk1) "
         "    (= 210 "
-        "       (tiny-fx.sound/track-duration-ms "
+        "       (tiny-fx.trk1/track-duration-ms "
         "         [{:notes [220] :bend [440] :duration 120} "
         "          {:notes [440] :duration 90}] "
         "         {:channel-count 1 :volumes [0]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/track-duration-ms should preserve bend duration");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/track-duration-ms should preserve bend duration");
   }
   END_TRY
 
@@ -2403,20 +2445,20 @@ TEST(test_sound_tiny_fx_sound_noise_rejects_melody_without_backing_channel) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_tiny_fx_sound_noise_compile_track_size_is_bounded) {
+TEST(test_sound_tiny_fx_trk1_noise_compile_track_size_is_bounded) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/compile-track "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
         "      [{:notes [220] :noise true :duration 5000}] "
         "      {:channel-count 1 :volumes [0]}))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track with bounded noise should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track with bounded noise should not throw");
   }
   END_TRY
 
@@ -2638,14 +2680,14 @@ TEST(test_sound_tiny_fx_sound_play_melody_backing_rejects_legacy_volume_levels_o
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_tiny_fx_sound_track_duration_ms_rejects_legacy_dur_step_key) {
+TEST(test_sound_tiny_fx_trk1_track_duration_ms_rejects_legacy_dur_step_key) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/track-duration-ms "
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/track-duration-ms "
         "      [{:notes [:G5] :dur :q}] "
         "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
         g_test_eval_state);
@@ -2658,20 +2700,20 @@ TEST(test_sound_tiny_fx_sound_track_duration_ms_rejects_legacy_dur_step_key) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_sound_native_load_unload_via_eval) {
+TEST(test_sound_native_play_music_via_engine_releases_after_finish) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  /* Initialize sound engine for this test */
   sound_engine_init(2);
 
-  /* Create a trk1 byte array and load it via the engine directly
-   * (eval_string can't easily create binary data) */
   ID track_sym = (ID)intern_symbol_global(":eval-track");
-  ID ba = make_test_trk1(69, 10, 2, 0);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_EQUAL_INT(1, g_sound_engine.track_count);
-  TEST_ASSERT_TRUE(sound_engine_unload_track(track_sym));
-  TEST_ASSERT_EQUAL_INT(0, g_sound_engine.track_count);
+  ID ba = make_test_trk1_with_delay(69, 3, 4, 1);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+  sound_engine_tick();
+  TEST_ASSERT_NOT_NULL(g_sound_engine.music_stream.retained_obj);
+  for (int i = 0; i < 8; i++) {
+    sound_engine_tick();
+  }
+  TEST_ASSERT_NULL(g_sound_engine.music_stream.retained_obj);
 
   RELEASE(ba);
   sound_engine_shutdown();
@@ -2732,9 +2774,7 @@ TEST(test_sound_tick_starts_on_play) {
 
   ID track_sym = (ID)intern_symbol_global(":lifecycle-test");
   ID ba = make_test_trk1(60, 2, 1, 0);
-  sound_engine_load_track(track_sym, ba);
-
-  sound_engine_play_music(track_sym, 1);
+  sound_engine_play_music(track_sym, ba, 1);
   TEST_ASSERT_TRUE(g_sound_engine.tick_running);
 
   /* Tick until stream ends */
@@ -2754,8 +2794,7 @@ TEST(test_sound_tick_stays_running_while_voice_gate_active) {
 
   ID track_sym = (ID)intern_symbol_global(":gate-lifecycle-test");
   ID ba = make_test_trk1(60, 30, 1, 0); /* NOTE + END same tick, gate remains */
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick(); /* parses NOTE + END; stream ends, voice gate still active */
   TEST_ASSERT_FALSE(g_sound_engine.music_stream.active);
@@ -2777,8 +2816,7 @@ TEST(test_sound_engine_ticks_until_deadline_reports_gate_tail) {
 
   ID track_sym = (ID)intern_symbol_global(":deadline-gate-test");
   ID ba = make_test_trk1(60, 30, 1, 0);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick(); /* NOTE + END same tick; remaining gate tail stays active */
   TEST_ASSERT_FALSE(g_sound_engine.music_stream.active);
@@ -2793,8 +2831,7 @@ TEST(test_sound_engine_ticks_until_deadline_reports_delayed_event) {
 
   ID track_sym = (ID)intern_symbol_global(":deadline-delay-test");
   ID ba = make_test_trk1_with_delay(69, 1, 5, 1);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick(); /* parses NOTE, gate expires, END is delayed */
   TEST_ASSERT_TRUE(g_sound_engine.music_stream.active);
@@ -2809,8 +2846,7 @@ TEST(test_sound_engine_advance_ticks_fast_forwards_gate_tail_to_idle) {
 
   ID track_sym = (ID)intern_symbol_global(":advance-gate-test");
   ID ba = make_test_trk1(60, 30, 1, 0);
-  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
-  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
 
   sound_engine_tick(); /* NOTE + END same tick */
   TEST_ASSERT_TRUE(g_sound_engine.tick_running);
@@ -2830,8 +2866,7 @@ TEST(test_sound_stop_all_silences_voices) {
 
   ID track_sym = (ID)intern_symbol_global(":stopall-test");
   ID ba = make_test_trk1(69, 1000, 1, 0);
-  sound_engine_load_track(track_sym, ba);
-  sound_engine_play_music(track_sym, 0);
+  sound_engine_play_music(track_sym, ba, 0);
 
   sound_engine_tick(); /* start */
   TEST_ASSERT_TRUE(g_sound_engine.voices[0].freq_hz > 0);

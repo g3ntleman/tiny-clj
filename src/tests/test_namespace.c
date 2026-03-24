@@ -1386,10 +1386,11 @@ TEST(test_find_ns_does_not_create_tiny_fx_namespaces) {
 
     int before_count = map_count(g_runtime.ns_registry);
 
-    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
-    CljObject *sound_ns = eval_string("(find-ns 'tiny-fx.sound-native)", g_test_eval_state);
+    (void)eval_string("(ns-unload 'tiny-fx.sound)", g_test_eval_state);
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound"));
+    CljObject *sound_ns = eval_string("(find-ns 'tiny-fx.sound)", g_test_eval_state);
     TEST_ASSERT_NIL(sound_ns);
-    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound"));
 
 #ifdef DEBUG
     TEST_ASSERT_NULL(ns_find("tiny-fx.sound-debug"));

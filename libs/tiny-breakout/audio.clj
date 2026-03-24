@@ -1,5 +1,5 @@
 (ns tiny-breakout.audio
-  (:require [tiny-fx.sound-native :as sound-native]))
+  (:require [tiny-fx.sound :as sound]))
 
 ;; Runtime audio keeps only precompiled TRK1 payloads.
 ;; The DSL compiler lives in tiny-breakout.audio-compiler and is intentionally
@@ -33,15 +33,6 @@
    {:track-id :tiny-breakout/wall-hit
     :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32])}})
 
-(def ^:private known-cues
-  [:sfx/paddle-hit
-   :sfx/brick-hit
-   :sfx/life-lost
-   :sfx/level-clear
-   :sfx/game-over
-   :sfx/victory
-   :sfx/wall-hit])
-
 (defn- event->cue
   [event-id]
   (cond
@@ -55,6 +46,7 @@
     :else nil))
 
 (defn events->cues
+  "Maps gameplay event ids to breakout cue ids and drops unknown events."
   [events]
   (loop [remaining (seq events)
          out []]
@@ -64,62 +56,33 @@
                (if cue (conj out cue) out)))
       out)))
 
-(def ^:private loaded-tracks* (atom #{}))
-
 (defn- cue-spec
   [cue-id]
   (get cue-specs cue-id))
 
-(defn- ensure-cue-loaded!
-  [cue-id]
-  (when (not (contains? @loaded-tracks* cue-id))
-    (let [spec (cue-spec cue-id)
-          track-id (:track-id spec)
-          track-bytes (:track-bytes spec)]
-      (when (and track-id track-bytes)
-        (try
-          (sound-native/sound-load-track! track-id track-bytes)
-          (swap! loaded-tracks* conj cue-id)
-          (catch RuntimeException _
-            nil)
-          (catch Exception _
-            nil)))))
-  nil)
-
 (defn preload-tracks!
+  "Compatibility no-op. Breakout cues are now played directly from their bytes."
   []
-  (loop [remaining known-cues]
-    (when (seq remaining)
-      (ensure-cue-loaded! (first remaining))
-      (recur (next remaining))))
   nil)
 
 (defn unload-tracks!
+  "Compatibility no-op. Cue bytes are no longer retained across plays."
   []
-  (loop [remaining known-cues]
-    (when (seq remaining)
-      (let [cue-id (first remaining)
-            spec (cue-spec cue-id)
-            track-id (:track-id spec)]
-        (when track-id
-          (sound-native/sound-unload-track! track-id))
-        (recur (next remaining)))))
-  (reset! loaded-tracks* #{})
   nil)
 
 (defn- play-cue!
   [cue-id]
   (let [spec (cue-spec cue-id)]
     (when (map? spec)
-      (ensure-cue-loaded! cue-id)
       (try
-        (sound-native/sound-play-sfx! (:track-id spec))
+        (sound/sound-play-sfx! (:track-id spec) (:track-bytes spec))
         (catch RuntimeException _
           nil)
         (catch Exception _
           nil)))))
 
 (defn play-events!
+  "Plays all known breakout cue events as one-shot SFX."
   [events]
   (loop [remaining (seq events)]
     (when (seq remaining)

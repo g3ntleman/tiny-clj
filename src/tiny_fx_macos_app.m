@@ -343,12 +343,12 @@ mfb_key tinyfx_macos_key_from_virtual_key(unsigned short key_code) {
     if ([app delegate] != self) {
         [app setDelegate:self];
     }
-    macos_viewer_install_menu();
-    macos_viewer_register_window_callbacks();
-    macos_viewer_restore_window_position();
+    macos_fx_install_menu();
+    macos_fx_register_window_callbacks();
+    macos_fx_restore_window_position();
     [self.window makeKeyAndOrderFront:nil];
     [self.window makeFirstResponder:self.view];
-    macos_viewer_activate_app_window();
+    macos_fx_activate_app_window();
     return YES;
 }
 

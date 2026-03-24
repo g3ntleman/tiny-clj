@@ -48,7 +48,7 @@ brew install cmake
 
 ### Sound Engine
 - **Piezo-Focused Playback:** Embedded-first sound runtime for piezo buzzers with matching desktop simulation on macOS
-- **Step Sequencer API:** `tiny-fx.sound/play-steps!` compiles note/rest step lists into efficient runtime tracks
+- **Composable Sound Pipeline:** `tiny-fx.trk1/prepare-track` compiles note/rest step lists into TRK1 bytes that `tiny-fx.sound` plays directly from memory
 - **Musical Timing:** Supports millisecond durations plus musical values such as `:q`, `:e`, `:h`, dotted notes, and tempo-driven playback
 - **Melody/Backing Roles:** Lead voice plus backing voices can be described declaratively with per-role channel and volume settings
 - **Host Debugging Hooks:** Desktop status/debug helpers make it easy to validate audio behavior without ESP32 hardware

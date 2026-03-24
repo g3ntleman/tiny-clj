@@ -6,7 +6,7 @@
 #include "../tiny_fx_gfx.h"
 #include "../rendered_state_snapshot.h"
 #include "../renderer_lifecycle.h"
-#include "../viewer_collision.h"
+#include "../fx_collision.h"
 #include "../event_loop.h"
 #include "callbacks.h"
 #include "record.h"

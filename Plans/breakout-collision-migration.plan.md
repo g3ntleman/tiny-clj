@@ -95,7 +95,7 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
 - [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj): baut aktuell `->Group`-Root und setzt `:collision-rules nil`; das muss auf collision-faehige Entities mit Prototypen umgestellt werden.
 - [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj): `breakout-host-spatial-callback!` ist aktuell ein No-op; hier muss die echte Breakout-Collision-Dispatch-Schicht entstehen.
 - [src/game_demo_minifb.c](src/game_demo_minifb.c): ist aktuell weiterhin der native Hostpfad hinter `tiny-fx.app`, nutzt aber noch direkte `viewer_breakout_rect_overlap(...)`-Checks, haelt eine eigene Breakout-Runtime als Gameplay-Quelle, expandiert Rules selbst und stept den Ball frameweise; das passt nicht zum neuen Modell.
-- [src/viewer_collision.c](src/viewer_collision.c): bestaetigt, dass Prototyp-Selektoren per struktureller Gleichheit funktionieren; darauf kann der Brick-Prototyp aufbauen.
+- [src/fx_collision.c](src/fx_collision.c): bestaetigt, dass Prototyp-Selektoren per struktureller Gleichheit funktionieren; darauf kann der Brick-Prototyp aufbauen.
 - [src/tiny_fx_gfx.c](src/tiny_fx_gfx.c): registriert `SpatialEvent`; hier muss das Event-Schema fuer echte Kollisions-Snapshots der beteiligten Objekte erweitert werden.
 - [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c) und [src/builtins_tiny_fx_gfx.c](src/builtins_tiny_fx_gfx.c): enthalten bereits Timeline-Zustand und Runtime-Abfragen; hier bietet sich ein leichter Opt-in-Pfad fuer Timeline-End-Erkennung an.
 

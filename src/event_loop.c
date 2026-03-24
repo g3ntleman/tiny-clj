@@ -13,8 +13,6 @@
 #include "record.h"
 #include "value.h"
 #include "gpio.h"
-#include "sound_engine.h"
-#include "viewer_spatial_bridge.h"
 #include "mini_format.h"
 #include <stdbool.h>
 #include <stdarg.h>
@@ -86,10 +84,19 @@ static int        g_timer_count = 0;
  * by dumping unbounded work into the regular task queue in one tick.
  */
 #define EVENT_LOOP_INGRESS_DRAIN_BUDGET 1u
+typedef enum {
+    EVENT_LOOP_INGRESS_KIND_CLOJURE = 0,
+    EVENT_LOOP_INGRESS_KIND_NATIVE = 1,
+} EventLoopIngressKind;
+
 typedef struct {
+    EventLoopIngressKind kind;
     ID fn;
     ID arg;
     bool has_arg;
+    EventLoopNativeIngressFn native_callback;
+    EventLoopNativeIngressCleanupFn native_cleanup;
+    void *native_ctx;
 } EventLoopIngressSlot;
 
 static EventLoopIngressSlot g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
@@ -152,6 +159,31 @@ static inline void event_loop_ingress_lock_release(void) {
 
 static inline bool event_loop_value_equals(ID a, ID b) {
     return (a == b) || (a && b && clj_equal(a, b));
+}
+
+static bool event_loop_ingress_slot_valid(const EventLoopIngressSlot *slot) {
+    if (!slot) {
+        return false;
+    }
+    if (slot->kind == EVENT_LOOP_INGRESS_KIND_NATIVE) {
+        return slot->native_callback != NULL;
+    }
+    return slot->fn != NULL;
+}
+
+static void event_loop_ingress_slot_cleanup(EventLoopIngressSlot *slot) {
+    if (!slot) {
+        return;
+    }
+    if (slot->kind == EVENT_LOOP_INGRESS_KIND_NATIVE) {
+        if (slot->native_cleanup) {
+            slot->native_cleanup(slot->native_ctx);
+        }
+    } else {
+        RELEASE(slot->arg);
+        RELEASE(slot->fn);
+    }
+    memset(slot, 0, sizeof(*slot));
 }
 
 static ID event_loop_value_get_sentinel(ID value, ID key, ID not_found) {
@@ -302,7 +334,8 @@ static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
 static bool event_loop_ingress_entry_matches_payload(const EventLoopIngressSlot *entry,
                                                      ID fn_one_arity,
                                                      ID candidate_arg) {
-    if (!entry || !entry->fn || !fn_one_arity || !candidate_arg) {
+    if (!entry || entry->kind != EVENT_LOOP_INGRESS_KIND_CLOJURE ||
+        !entry->fn || !fn_one_arity || !candidate_arg) {
         return false;
     }
     if (!event_loop_value_equals(entry->fn, fn_one_arity)) {
@@ -326,7 +359,7 @@ typedef enum {
 static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(EventLoopIngressSlot entry,
                                                                            ID coalesce_fn,
                                                                            ID coalesce_arg) {
-    if (!entry.fn) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
+    if (!event_loop_ingress_slot_valid(&entry)) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
     bool coalescing_enabled = coalesce_fn && coalesce_arg;
 
     event_loop_ingress_lock_acquire();
@@ -388,22 +421,64 @@ static void event_loop_ingress_drop_head(void) {
     event_loop_ingress_lock_release();
 }
 
-static void event_loop_ingress_drain(void) {
+static bool event_loop_run_native_ingress_callback(EventLoopNativeIngressFn callback,
+                                                   void *ctx,
+                                                   EvalState *st) {
+    if (!callback) {
+        return false;
+    }
+
+    bool ok = true;
+    char eval_task_stack_anchor;
+    TRY {
+        eval_bind_task_stack_anchor(&eval_task_stack_anchor);
+        WITH_AUTORELEASE_POOL({
+            callback(ctx, st);
+        });
+    } CATCH(ex) {
+        ok = false;
+        if (ex) {
+            event_loop_mini_fprintf(stderr,
+                                    "[runloop] native ingress callback threw while executing deferred work\n");
+            print_exception(ex);
+            fflush(stderr);
+        }
+    } END_TRY
+    return ok;
+}
+
+static bool event_loop_ingress_drain(EventLoopIngressSlot *out_native_slot,
+                                     bool allow_immediate_native) {
+    if (out_native_slot) {
+        memset(out_native_slot, 0, sizeof(*out_native_slot));
+    }
     uint32_t drained = 0u;
     while (drained < EVENT_LOOP_INGRESS_DRAIN_BUDGET) {
         EventLoopIngressSlot slot = {0};
-        if (!event_loop_ingress_peek(&slot) || !slot.fn) {
-            return;
+        if (!event_loop_ingress_peek(&slot) || !event_loop_ingress_slot_valid(&slot)) {
+            return false;
+        }
+        if (slot.kind == EVENT_LOOP_INGRESS_KIND_NATIVE) {
+            if (!allow_immediate_native) {
+                return false;
+            }
+            event_loop_ingress_drop_head();
+            if (out_native_slot) {
+                *out_native_slot = slot;
+            } else {
+                event_loop_ingress_slot_cleanup(&slot);
+            }
+            return true;
         }
         if (slot.has_arg) {
             CljPersistentMap *task_map = task_to_map(slot.fn, NULL, slot.arg, true);
             if (!task_map) {
-                return;
+                return false;
             }
             CljTransientVector *task_vec = task_queue_get();
             if (!task_vec) {
                 RELEASE(task_map);
-                return;
+                return false;
             }
             vector_push(task_vec, task_map);
             RELEASE(task_map);
@@ -411,10 +486,10 @@ static void event_loop_ingress_drain(void) {
             event_loop_enqueue(slot.fn, NULL);
         }
         event_loop_ingress_drop_head();
-        RELEASE(slot.arg);
-        RELEASE(slot.fn);
+        event_loop_ingress_slot_cleanup(&slot);
         drained++;
     }
+    return false;
 }
 
 // Go-block task map helpers (tasks WITH result channel)
@@ -660,12 +735,11 @@ void event_loop_clear(void) {
 
     while (true) {
         EventLoopIngressSlot slot = {0};
-        if (!event_loop_ingress_peek(&slot) || !slot.fn) {
+        if (!event_loop_ingress_peek(&slot) || !event_loop_ingress_slot_valid(&slot)) {
             break;
         }
         event_loop_ingress_drop_head();
-        RELEASE(slot.arg);
-        RELEASE(slot.fn);
+        event_loop_ingress_slot_cleanup(&slot);
     }
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
@@ -673,7 +747,6 @@ void event_loop_clear(void) {
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
     g_runloop_last_warn_ns = 0u;
-    viewer_collision_reset_dispatch_state();
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -699,6 +772,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     if (!fn_zero_arity) return false;
     EventLoopIngressSlot slot = {
+        .kind = EVENT_LOOP_INGRESS_KIND_CLOJURE,
         .fn = RETAIN(fn_zero_arity),
         .arg = NULL,
         .has_arg = false,
@@ -716,6 +790,7 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
     bool can_coalesce = event_loop_payload_supports_coalescing(arg);
     EventLoopIngressSlot slot = {
+        .kind = EVENT_LOOP_INGRESS_KIND_CLOJURE,
         .fn = RETAIN(fn_one_arity),
         .arg = RETAIN(arg),
         .has_arg = true,
@@ -740,6 +815,40 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     RELEASE(slot.arg);
     RELEASE(slot.fn);
     return false;
+}
+
+bool event_loop_enqueue_ingress_native(EventLoopNativeIngressFn callback,
+                                       void *ctx,
+                                       EventLoopNativeIngressCleanupFn cleanup) {
+    if (!callback) {
+        return false;
+    }
+    EventLoopIngressSlot slot = {
+        .kind = EVENT_LOOP_INGRESS_KIND_NATIVE,
+        .native_callback = callback,
+        .native_cleanup = cleanup,
+        .native_ctx = ctx,
+    };
+    EventLoopIngressPushResult push_result =
+        event_loop_ingress_push_with_coalescing(slot, NULL, NULL);
+    return push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
+}
+
+bool event_loop_dispatch_native(EventLoopNativeIngressFn callback,
+                                void *ctx,
+                                EventLoopNativeIngressCleanupFn cleanup) {
+    if (!callback) {
+        return false;
+    }
+    if (!subjective_c_has_interpreter_thread() || subjective_c_is_interpreter_thread()) {
+        EvalState *st = get_global_eval_state();
+        bool ok = event_loop_run_native_ingress_callback(callback, ctx, st);
+        if (cleanup) {
+            cleanup(ctx);
+        }
+        return ok;
+    }
+    return event_loop_enqueue_ingress_native(callback, ctx, cleanup);
 }
 
 bool event_loop_ingress_has_pending(void) {
@@ -777,7 +886,6 @@ bool event_loop_ingress_stats(EventLoopIngressStats *out_stats) {
 
 bool event_loop_has_pending_tasks(void) {
     if (event_loop_ingress_has_pending()) return true;
-    if (sound_engine_has_pending_finished_notifications()) return true;
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec || !task_vec->backing) return false;
     return vector_count(task_vec->backing) > 0;
@@ -812,20 +920,34 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
 
-    sound_engine_drain_finished_notifications();
-
     // Promote ISR-raised drain requests into regular event-loop tasks.
     gpio_poll_drain();
 
-    // Promote raw UI-thread collision hits into runloop-safe ingress calls.
-    (void)viewer_collision_poll_drain();
+    CljTransientVector *task_vec = task_queue_get();
+    size_t preexisting_task_count =
+        (task_vec && task_vec->backing) ? vector_count(task_vec->backing) : 0u;
 
     // Consume cross-thread callback ingress before timer/task processing.
-    event_loop_ingress_drain();
+    EventLoopIngressSlot native_slot = {0};
+    bool have_native_slot =
+        event_loop_ingress_drain(&native_slot, preexisting_task_count == 0u);
 
     timer_process();
 
-    CljTransientVector *task_vec = task_queue_get();
+    if (have_native_slot) {
+        bool ran_native =
+            event_loop_run_native_ingress_callback(native_slot.native_callback,
+                                                   native_slot.native_ctx,
+                                                   st);
+        event_loop_ingress_slot_cleanup(&native_slot);
+        uint64_t tick_end_ns = event_loop_monotonic_now_ns();
+        if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
+            event_loop_warn_if_slow_tick(tick_end_ns - tick_start_ns, tick_end_ns);
+        }
+        return ran_native;
+    }
+
+    task_vec = task_queue_get();
     if (!task_vec) return false;
     if (!task_vec->backing || vector_count(task_vec->backing) == 0u) {
         return false;

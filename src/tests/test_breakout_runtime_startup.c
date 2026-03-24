@@ -13,25 +13,25 @@ static void breakout_reset_macos_watchdog_counters(void) {
     g_macos_runloop_watchdog_stop_calls = 0;
 }
 
-void macos_viewer_install_menu(void) {}
-void macos_viewer_set_window_title(const char *title) { (void)title; }
-void macos_viewer_register_window_callbacks(void) {}
-void macos_viewer_restore_window_position(void) {}
-void macos_viewer_save_window_position(void) {}
-void macos_viewer_activate_app_window(void) {}
-bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h) {
+void macos_fx_install_menu(void) {}
+void macos_fx_set_window_title(const char *title) { (void)title; }
+void macos_fx_register_window_callbacks(void) {}
+void macos_fx_restore_window_position(void) {}
+void macos_fx_save_window_position(void) {}
+void macos_fx_activate_app_window(void) {}
+bool macos_fx_get_content_size(unsigned *out_w, unsigned *out_h) {
     (void)out_w;
     (void)out_h;
     return false;
 }
-void macos_viewer_begin_performance_activity(void) {}
-void macos_viewer_end_performance_activity(void) {}
-void macos_viewer_start_runloop_watchdog(void) { g_macos_runloop_watchdog_start_calls++; }
-void macos_viewer_stop_runloop_watchdog(void) { g_macos_runloop_watchdog_stop_calls++; }
+void macos_fx_begin_performance_activity(void) {}
+void macos_fx_end_performance_activity(void) {}
+void macos_fx_start_runloop_watchdog(void) { g_macos_runloop_watchdog_start_calls++; }
+void macos_fx_stop_runloop_watchdog(void) { g_macos_runloop_watchdog_stop_calls++; }
 #endif
-#include "../viewer_spatial_bridge.h"
-#define main tinyclj_viewer_host_app_test_main
-#include "../viewer_host_app.c"
+#include "../fx_spatial_bridge.h"
+#define main tinyclj_fx_host_app_test_main
+#include "../fx_host_app.c"
 #undef main
 #include "../tiny_clj.h"
 #include "unity/src/unity.h"
@@ -55,7 +55,7 @@ static ViewerCollisionPolicy *breakout_find_policy_by_id(ViewerSpatialRuleSet *r
     return NULL;
 }
 
-static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
+static bool breakout_fx_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
                                                                bool apply_host_heap_budget) {
     if (!ctx) {
         return false;
@@ -73,7 +73,7 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     event_loop_init();
     event_loop_clear();
     vg_rendered_state_reset_all();
-    viewer_seed_gpio_key_levels();
+    fx_seed_gpio_key_levels();
     if (apply_host_heap_budget) {
         tiny_fx_host_apply_heap_limit();
     }
@@ -87,14 +87,13 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
         !tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
-    if (!viewer_load_deployment_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
+    if (!fx_load_deployment_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
         return false;
     }
-    viewer_collision_set_dispatch_context(&ctx->bundle, &ctx->spatial_rules);
     return true;
 }
 
-static bool breakout_viewer_test_context_init_with_heap_limit(BreakoutViewerTestContext *ctx,
+static bool breakout_fx_test_context_init_with_heap_limit(BreakoutViewerTestContext *ctx,
                                                               size_t heap_limit_bytes) {
     if (!ctx) {
         return false;
@@ -112,7 +111,7 @@ static bool breakout_viewer_test_context_init_with_heap_limit(BreakoutViewerTest
     event_loop_init();
     event_loop_clear();
     vg_rendered_state_reset_all();
-    viewer_seed_gpio_key_levels();
+    fx_seed_gpio_key_levels();
     memory_set_heap_limit_bytes(heap_limit_bytes);
 
     ctx->st = evalstate_new(true);
@@ -124,24 +123,22 @@ static bool breakout_viewer_test_context_init_with_heap_limit(BreakoutViewerTest
         !tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
-    if (!viewer_load_deployment_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
+    if (!fx_load_deployment_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
         return false;
     }
-    viewer_collision_set_dispatch_context(&ctx->bundle, &ctx->spatial_rules);
     return true;
 }
 
-static bool breakout_viewer_test_context_init(BreakoutViewerTestContext *ctx) {
-    return breakout_viewer_test_context_init_with_heap_budget(ctx, false);
+static bool breakout_fx_test_context_init(BreakoutViewerTestContext *ctx) {
+    return breakout_fx_test_context_init_with_heap_budget(ctx, false);
 }
 
-static void breakout_viewer_test_context_destroy(BreakoutViewerTestContext *ctx) {
+static void breakout_fx_test_context_destroy(BreakoutViewerTestContext *ctx) {
     if (!ctx) {
         return;
     }
     stop_runloop_thread();
     event_loop_clear();
-    viewer_collision_reset_dispatch_state();
     destroy_scene_bundle(&ctx->bundle);
     destroy_spatial_rule_set(&ctx->spatial_rules);
     evalstate_free(ctx->st);
@@ -158,7 +155,7 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
 
     TEST_ASSERT_EQUAL_UINT64(614400u, host_limit);
     TRY {
-        init_ok = breakout_viewer_test_context_init_with_heap_budget(&ctx, true);
+        init_ok = breakout_fx_test_context_init_with_heap_budget(&ctx, true);
     } CATCH(ex) {
         caught = true;
         caught_ex = ex;
@@ -166,7 +163,7 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     memory_set_heap_limit_bytes(previous_limit);
 
     if (init_ok) {
-        breakout_viewer_test_context_destroy(&ctx);
+        breakout_fx_test_context_destroy(&ctx);
     }
     TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under 640KB total heap budget" : "");
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
@@ -184,7 +181,7 @@ TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
     MemoryStats stats = {0};
 
     TRY {
-        init_ok = breakout_viewer_test_context_init_with_heap_limit(&ctx, startup_limit);
+        init_ok = breakout_fx_test_context_init_with_heap_limit(&ctx, startup_limit);
     } CATCH(ex) {
         caught = true;
         caught_ex = ex;
@@ -193,7 +190,7 @@ TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
     memory_set_heap_limit_bytes(previous_limit);
 
     if (init_ok) {
-        breakout_viewer_test_context_destroy(&ctx);
+        breakout_fx_test_context_destroy(&ctx);
     }
     TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under a 400KB startup budget with 2KB reserved headroom" : "");
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside a 400KB startup budget while preserving 2KB free");
@@ -210,7 +207,7 @@ TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
     ID launched = NULL;
 
     TRY {
-        init_ok = breakout_viewer_test_context_init_with_heap_budget(&ctx, true);
+        init_ok = breakout_fx_test_context_init_with_heap_budget(&ctx, true);
         if (init_ok) {
             launched = eval_string(
                 "(do "
@@ -226,7 +223,7 @@ TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
     memory_set_heap_limit_bytes(previous_limit);
 
     if (init_ok) {
-        breakout_viewer_test_context_destroy(&ctx);
+        breakout_fx_test_context_destroy(&ctx);
     }
 
     TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "first breakout launch should not OOM under 640KB total heap budget" : "");
@@ -243,7 +240,7 @@ TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {
     ID total = NULL;
     ID peak = NULL;
 
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
 
     stats = eval_string(
         "(do "
@@ -280,7 +277,7 @@ TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {
                              "direct first-launch apply-input path should stay below 96KB local peak");
 
     memory_set_heap_limit_bytes(previous_limit);
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit_before_clojure_bootstrap) {
@@ -306,7 +303,7 @@ TEST(test_breakout_runtime_startup_tolerates_host_sound_init_failure_during_audi
     setenv(env_name, "component-find", 1);
 
     TRY {
-        init_ok = breakout_viewer_test_context_init(&ctx);
+        init_ok = breakout_fx_test_context_init(&ctx);
     } CATCH(ex) {
         caught = true;
         caught_ex = ex;
@@ -320,7 +317,7 @@ TEST(test_breakout_runtime_startup_tolerates_host_sound_init_failure_during_audi
     }
 
     if (init_ok) {
-        breakout_viewer_test_context_destroy(&ctx);
+        breakout_fx_test_context_destroy(&ctx);
     }
 
     TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should tolerate host audio init failures" : "");
@@ -333,7 +330,7 @@ TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
     char *saved_copy = saved_env ? strdup(saved_env) : NULL;
 
     unsetenv(env_name);
-    ViewerConfigSource config_source = viewer_default_config_source();
+    ViewerConfigSource config_source = fx_default_config_source();
 
     if (saved_copy) {
         setenv(env_name, saved_copy, 1);
@@ -407,37 +404,74 @@ TEST(test_breakout_runtime_startup_runloop_thread_registers_interpreter_thread) 
 }
 
 TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_resets_cleanly) {
-    viewer_runloop_liveness_reset();
+    fx_runloop_liveness_reset();
 
-    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(9ull * 1000ull * 1000ull * 1000ull);
+    ViewerRunloopLivenessSnapshot snapshot = fx_runloop_liveness_snapshot(9ull * 1000ull * 1000ull * 1000ull);
 
     TEST_ASSERT_EQUAL_UINT64(0u, snapshot.last_tick_ns);
     TEST_ASSERT_EQUAL_UINT64(0u, snapshot.iteration_count);
     TEST_ASSERT_EQUAL_UINT64(0u, snapshot.age_ns);
-    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
+    TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
 }
 
 TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_tracks_progress) {
-    viewer_runloop_liveness_reset();
-    viewer_runloop_liveness_note_progress_for_tests(2ull * 1000ull * 1000ull * 1000ull);
-    viewer_runloop_liveness_note_progress_for_tests(3ull * 1000ull * 1000ull * 1000ull);
+    fx_runloop_liveness_reset();
+    fx_runloop_liveness_note_progress_for_tests(2ull * 1000ull * 1000ull * 1000ull);
+    fx_runloop_liveness_note_progress_for_tests(3ull * 1000ull * 1000ull * 1000ull);
 
-    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(4ull * 1000ull * 1000ull * 1000ull);
+    ViewerRunloopLivenessSnapshot snapshot = fx_runloop_liveness_snapshot(4ull * 1000ull * 1000ull * 1000ull);
 
     TEST_ASSERT_EQUAL_UINT64(3ull * 1000ull * 1000ull * 1000ull, snapshot.last_tick_ns);
     TEST_ASSERT_EQUAL_UINT64(2u, snapshot.iteration_count);
     TEST_ASSERT_EQUAL_UINT64(1ull * 1000ull * 1000ull * 1000ull, snapshot.age_ns);
-    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
+    TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
 }
 
 TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_flags_stalls_after_threshold) {
-    viewer_runloop_liveness_reset();
-    viewer_runloop_liveness_note_progress_for_tests(1ull * 1000ull * 1000ull * 1000ull);
+    fx_runloop_liveness_reset();
+    fx_runloop_liveness_note_progress_for_tests(1ull * 1000ull * 1000ull * 1000ull);
 
-    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(7ull * 1000ull * 1000ull * 1000ull);
+    ViewerRunloopLivenessSnapshot snapshot = fx_runloop_liveness_snapshot(7ull * 1000ull * 1000ull * 1000ull);
 
     TEST_ASSERT_EQUAL_UINT64(6ull * 1000ull * 1000ull * 1000ull, snapshot.age_ns);
-    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_STALLED, snapshot.state);
+    TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_STALLED, snapshot.state);
+}
+
+TEST(test_breakout_runtime_startup_host_keys_drive_gpio_levels_for_fire_and_y) {
+    ViewerRuntimeFlags flags = {0};
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+
+    gpio_runtime_reset_state();
+    fx_seed_gpio_key_levels();
+
+    ID fire_idle = gpio_runtime_read_digital_level(13);
+    ID y_idle = gpio_runtime_read_digital_level(15);
+    TEST_ASSERT_TRUE(is_fixnum(fire_idle));
+    TEST_ASSERT_TRUE(is_fixnum(y_idle));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(fire_idle));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(y_idle));
+
+    keys[KB_KEY_SPACE] = 1u;
+    fx_simulate_gpio_keys(keys, &flags);
+    ID fire_down = gpio_runtime_read_digital_level(13);
+    TEST_ASSERT_TRUE(is_fixnum(fire_down));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(fire_down));
+
+    keys[KB_KEY_SPACE] = 0u;
+    keys[KB_KEY_Y] = 1u;
+    fx_simulate_gpio_keys(keys, &flags);
+    ID fire_up = gpio_runtime_read_digital_level(13);
+    ID y_down = gpio_runtime_read_digital_level(15);
+    TEST_ASSERT_TRUE(is_fixnum(fire_up));
+    TEST_ASSERT_TRUE(is_fixnum(y_down));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(fire_up));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(y_down));
+
+    keys[KB_KEY_Y] = 0u;
+    fx_simulate_gpio_keys(keys, &flags);
+    ID y_up = gpio_runtime_read_digital_level(15);
+    TEST_ASSERT_TRUE(is_fixnum(y_up));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(y_up));
 }
 
 #if defined(__APPLE__)
@@ -456,7 +490,7 @@ TEST(test_breakout_runtime_startup_host_window_open_starts_macos_runloop_watchdo
     breakout_reset_macos_watchdog_counters();
 
     ViewerHostWindow *window =
-        viewer_host_window_open_with_backend(breakout_test_open_host_window, "tiny-fx", 640u, 480u);
+        fx_host_window_open_with_backend(breakout_test_open_host_window, "tiny-fx", 640u, 480u);
 
     TEST_ASSERT_NOT_NULL(window);
     TEST_ASSERT_EQUAL_INT(1, g_macos_runloop_watchdog_start_calls);
@@ -466,16 +500,16 @@ TEST(test_breakout_runtime_startup_host_window_open_starts_macos_runloop_watchdo
 TEST(test_breakout_runtime_startup_host_window_close_stops_macos_runloop_watchdog) {
     breakout_reset_macos_watchdog_counters();
 
-    viewer_host_window_close_with_backend((ViewerHostWindow *)(uintptr_t)0x1, breakout_test_close_host_window);
+    fx_host_window_close_with_backend((ViewerHostWindow *)(uintptr_t)0x1, breakout_test_close_host_window);
 
     TEST_ASSERT_EQUAL_INT(0, g_macos_runloop_watchdog_start_calls);
     TEST_ASSERT_EQUAL_INT(1, g_macos_runloop_watchdog_stop_calls);
 }
 #endif
 
-TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_viewer_bundle) {
+TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_fx_bundle) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
     TEST_ASSERT_NOT_NULL(ctx.bundle.startup_callback);
@@ -486,37 +520,37 @@ TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_viewe
     TEST_ASSERT_EQUAL_PTR(ctx.bundle.primary_scene, ctx.bundle.slots[ctx.bundle.primary_slot_index].scene);
     TEST_ASSERT_TRUE(ctx.spatial_rules.count >= 1u);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_retain_slot_scenes_independently_of_scene_atoms) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
     TEST_ASSERT_NOT_NULL(ctx.bundle.primary_scene);
     TEST_ASSERT_TRUE(((CljObject *)ctx.bundle.primary_scene)->rc > 1);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_spatial_events_include_entity_snapshots) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.spatial_rules.count > 0u);
 
-    FrameScene *scene = viewer_frame_scene_from_atom(ctx.bundle.primary_scene_atom);
+    FrameScene *scene = fx_frame_scene_from_atom(ctx.bundle.primary_scene_atom);
     TEST_ASSERT_NOT_NULL(scene);
 
     ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[0];
-    ID expected_self = map_get_sentinel(viewer_collision_scene_entity_map(scene), policy->self_entity_id, NULL);
-    ID expected_other = map_get_sentinel(viewer_collision_scene_entity_map(scene), policy->other_entity_id, NULL);
+    ID expected_self = map_get_sentinel(fx_collision_scene_entity_map(scene), policy->self_entity_id, NULL);
+    ID expected_other = map_get_sentinel(fx_collision_scene_entity_map(scene), policy->other_entity_id, NULL);
     TEST_ASSERT_NOT_NULL(expected_self);
     TEST_ASSERT_NOT_NULL(expected_other);
 
     VgAabb self_box = {.min_x = 1, .min_y = 2, .max_x = 3, .max_y = 4};
     VgAabb other_box = {.min_x = 5, .min_y = 6, .max_x = 7, .max_y = 8};
-    ID event = viewer_collision_make_spatial_event(&ctx.bundle,
+    ID event = fx_collision_make_spatial_event(&ctx.bundle,
                                                    policy,
                                                    intern_symbol_global(":enter"),
                                                    17u,
@@ -532,12 +566,12 @@ TEST(test_breakout_runtime_startup_spatial_events_include_entity_snapshots) {
     TEST_ASSERT_EQUAL_PTR(expected_other, tiny_fx_gfx_get_field(event, k_other_entity, NULL));
 
     RELEASE(event);
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_watchers) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     ID ok = eval_string(
         "(do "
@@ -554,12 +588,12 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_restarts_title_overlay_fade_on_runtime_start) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     ID ok = eval_string(
         "(do "
@@ -572,12 +606,12 @@ TEST(test_breakout_runtime_startup_restarts_title_overlay_fade_on_runtime_start)
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_bootstrap_title_overlay_starts_fade_immediately) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     ID ok = eval_string(
         "(do "
@@ -592,12 +626,12 @@ TEST(test_breakout_runtime_startup_bootstrap_title_overlay_starts_fade_immediate
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     ID state = eval_string(
         "(do "
@@ -637,13 +671,203 @@ TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve
     TEST_ASSERT_TRUE(is_vector(bricks));
     TEST_ASSERT_TRUE(vector_count(as_vector(bricks)) > 0);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_level_clear_direct_launch_ingress_advances_to_serve) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+
+    ID resolved = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  [tiny-breakout.runtime/apply-input! {:launch true}])",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *resolved_vec = as_vector(resolved);
+    TEST_ASSERT_NOT_NULL(resolved_vec);
+    TEST_ASSERT_EQUAL_UINT(2u, vector_count(resolved_vec));
+
+    ID input_fn = vector_nth(resolved_vec, 0u);
+    ID launch_arg = vector_nth(resolved_vec, 1u);
+    TEST_ASSERT_NOT_NULL(input_fn);
+    TEST_ASSERT_NOT_NULL(launch_arg);
+
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/publish-state! "
+        "    (assoc @tiny-breakout.runtime/state* "
+        "      :phase :level-clear "
+        "      :level-index 0 "
+        "      :events [] "
+        "      :ball-segment nil)) "
+        "  true)",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)input_fn, launch_arg));
+
+    bool advanced = false;
+    for (int i = 0; i < 120; i++) {
+        usleep(10000);
+        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
+        if (state && is_map(state)) {
+            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
+            if (phase == intern_symbol_global(":serve") &&
+                level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
+                advanced = true;
+                break;
+            }
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_fx_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(advanced,
+                             "direct host launch ingress should advance level-clear to the next serve state");
+}
+
+TEST(test_breakout_runtime_startup_advancing_to_third_level_keeps_spatial_rules_within_capacity) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+
+    ID counts = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/publish-state! "
+        "    (assoc @tiny-breakout.runtime/state* "
+        "      :phase :level-clear "
+        "      :level-index 0 "
+        "      :events [] "
+        "      :ball-segment nil)) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (tiny-breakout.runtime/publish-state! "
+        "    (assoc @tiny-breakout.runtime/state* "
+        "      :phase :level-clear "
+        "      :events [] "
+        "      :ball-segment nil)) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  [(count (:collision-rules @tiny-breakout.runtime/state*)) "
+        "   (:level-index @tiny-breakout.runtime/state*)])",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(counts);
+    TEST_ASSERT_TRUE(TAG(counts) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *counts_vec = as_vector(counts);
+    TEST_ASSERT_NOT_NULL(counts_vec);
+    TEST_ASSERT_EQUAL_UINT(2u, vector_count(counts_vec));
+    ID rule_count = vector_nth(counts_vec, 0u);
+    ID level_index = vector_nth(counts_vec, 1u);
+    TEST_ASSERT_TRUE(is_fixnum(rule_count));
+    TEST_ASSERT_TRUE(is_fixnum(level_index));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(level_index));
+    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(rule_count) <= FX_MAX_SPATIAL_RULES,
+                             "advancing to the third level must not exceed FX_MAX_SPATIAL_RULES");
+
+    fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)AS_FIXNUM(rule_count), ctx.spatial_rules.count);
+
+    breakout_fx_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_last_brick_level_clear_then_direct_launch_advances) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
+
+    ID resolved = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  [tiny-breakout.runtime/apply-input! {:launch true}])",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *resolved_vec = as_vector(resolved);
+    TEST_ASSERT_NOT_NULL(resolved_vec);
+    TEST_ASSERT_EQUAL_UINT(2u, vector_count(resolved_vec));
+    ID input_fn = vector_nth(resolved_vec, 0u);
+    ID launch_arg = vector_nth(resolved_vec, 1u);
+    TEST_ASSERT_NOT_NULL(input_fn);
+    TEST_ASSERT_NOT_NULL(launch_arg);
+
+    ID brick_event = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "    (tiny-breakout.runtime/publish-state! "
+        "      (assoc @tiny-breakout.runtime/state* "
+        "        :phase :play "
+        "        :bricks [b] "
+        "        :events [] "
+        "        :ball-segment nil)) "
+        "    {:source :spatial "
+        "     :id :ball-vs-brick "
+        "     :rule {:id :ball-vs-brick} "
+        "     :phase :enter "
+        "     :other (:id b) "
+        "     :self-aabb {:min-x (+ bx bw) :min-y (+ by 2) :max-x (+ bx bw 4) :max-y (+ by 6)} "
+        "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(brick_event);
+    TEST_ASSERT_TRUE(is_map(brick_event));
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    ID retained_event = RETAIN(brick_event);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
+    RELEASE(retained_event);
+
+    bool saw_level_clear = false;
+    for (int i = 0; i < 120; i++) {
+        usleep(10000);
+        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
+        if (state && is_map(state)) {
+            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+            if (phase == intern_symbol_global(":level-clear")) {
+                saw_level_clear = true;
+                break;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(saw_level_clear,
+                             "last brick collision should drive the runtime into :level-clear on the runloop path");
+
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)input_fn, launch_arg));
+
+    bool advanced = false;
+    for (int i = 0; i < 120; i++) {
+        usleep(10000);
+        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
+        if (state && is_map(state)) {
+            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
+            if (phase == intern_symbol_global(":serve") &&
+                level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
+                advanced = true;
+                break;
+            }
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_fx_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(advanced,
+                             "after the last brick triggers :level-clear, direct launch ingress should advance to the next serve state");
 }
 
 TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
     BreakoutViewerTestContext ctx = {0};
     size_t previous_limit = memory_get_heap_limit_bytes();
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
 
     ID stats = eval_string(
         "(do "
@@ -681,12 +905,12 @@ TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
                              "fire button path should stay below 128KB local peak");
 
     memory_set_heap_limit_bytes(previous_limit);
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_rules_safely) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
     TEST_ASSERT_TRUE(ctx.spatial_rules.count > 0u);
 
@@ -722,18 +946,18 @@ TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_ru
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, other_box);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
     TEST_ASSERT_EQUAL_PTR(replacement_scene, atom_reset(ctx.bundle.primary_scene_atom, replacement_scene));
 
-    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+    fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
     TEST_ASSERT_EQUAL_UINT32(0u, ctx.spatial_rules.count);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapshot_entities) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
 
     ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
@@ -767,11 +991,11 @@ TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapsh
     vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
     vg_rendered_state_capture_begin(slot, 2u, 0u);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_FALSE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_FALSE(fx_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
     vg_rendered_state_capture_begin(slot, 3u, 0u);
     vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
@@ -779,14 +1003,14 @@ TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapsh
     vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_rects) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
 
     ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
@@ -817,25 +1041,25 @@ TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_re
     vg_rendered_state_capture_commit();
 
     VgClipRect far_dirty = {.x = 0, .y = 0, .w = 16, .h = 16};
-    TEST_ASSERT_FALSE(viewer_collision_detect_step(&ctx.bundle,
+    TEST_ASSERT_FALSE(fx_collision_detect_step(&ctx.bundle,
                                                    &single_rule_set,
                                                    0u,
                                                    &far_dirty,
                                                    1u));
 
     VgClipRect hit_dirty = {.x = 150, .y = 216, .w = 40, .h = 20};
-    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle,
+    TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle,
                                                   &single_rule_set,
                                                   0u,
                                                   &hit_dirty,
                                                   1u));
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
-TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collision_drain) {
+TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_immediately) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
 
     ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
@@ -855,8 +1079,6 @@ TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collisio
     TEST_ASSERT_NOT_NULL(callback);
     RELEASE(ctx.bundle.spatial_callback);
     ctx.bundle.spatial_callback = RETAIN(callback);
-
-    viewer_collision_set_dispatch_context(&ctx.bundle, &single_rule_set);
 
     uint8_t slot = ctx.bundle.primary_slot_index;
     VgTransformFixed world_t = {
@@ -878,12 +1100,7 @@ TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collisio
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
-    TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
-    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
-    TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
-
-    TEST_ASSERT_TRUE(viewer_collision_poll_drain());
+    TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
     TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
     TEST_ASSERT_TRUE(event_loop_ingress_has_pending());
     TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
@@ -894,14 +1111,12 @@ TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collisio
     TEST_ASSERT_TRUE(TAG(marker) == CLJ_VECTOR_PERSISTENT);
     ID marker_ok = eval_string("(= @breakout-collision-drain-marker [:enter :ball-vs-paddle])", ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
-
-    viewer_collision_reset_dispatch_state();
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_heap_limit_without_crashing) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
 
     ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
@@ -934,11 +1149,9 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     size_t prev_limit = memory_get_heap_limit_bytes();
     bool caught = false;
     bool triggered = false;
-    bool drained = false;
     TRY {
         memory_set_heap_limit_bytes(0u);
-        triggered = viewer_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
-        drained = viewer_collision_poll_drain();
+        triggered = fx_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
     } CATCH(ex) {
         (void)ex;
         caught = true;
@@ -947,10 +1160,9 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
 
     TEST_ASSERT_FALSE(caught);
     TEST_ASSERT_TRUE(triggered);
-    TEST_ASSERT_FALSE(drained);
     TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 #if defined(__APPLE__)
@@ -1022,14 +1234,14 @@ TEST(test_breakout_runtime_startup_spi_mib_conversion_matches_binary_units) {
 TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) {
     uint_fast32_t last_collision_frame_serial = 0u;
 
-    TEST_ASSERT_FALSE(viewer_should_run_collision_step(0u, &last_collision_frame_serial));
+    TEST_ASSERT_FALSE(fx_should_run_collision_step(0u, &last_collision_frame_serial));
     TEST_ASSERT_EQUAL_UINT64(0u, (uint64_t)last_collision_frame_serial);
 
-    TEST_ASSERT_TRUE(viewer_should_run_collision_step(1u, &last_collision_frame_serial));
+    TEST_ASSERT_TRUE(fx_should_run_collision_step(1u, &last_collision_frame_serial));
     TEST_ASSERT_EQUAL_UINT64(1u, (uint64_t)last_collision_frame_serial);
-    TEST_ASSERT_FALSE(viewer_should_run_collision_step(1u, &last_collision_frame_serial));
+    TEST_ASSERT_FALSE(fx_should_run_collision_step(1u, &last_collision_frame_serial));
 
-    TEST_ASSERT_TRUE(viewer_should_run_collision_step(2u, &last_collision_frame_serial));
+    TEST_ASSERT_TRUE(fx_should_run_collision_step(2u, &last_collision_frame_serial));
     TEST_ASSERT_EQUAL_UINT64(2u, (uint64_t)last_collision_frame_serial);
 }
 
@@ -1038,13 +1250,13 @@ TEST(test_breakout_runtime_startup_redraw_overlay_keeps_last_non_empty_transfer_
     TEST_ASSERT_EQUAL_INT(0, pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL));
 
     VgClipRect transfer_rect = {.x = 10, .y = 20, .w = 30, .h = 40};
-    viewer_store_last_transfer_result(5u, &transfer_rect, 1u, 123u);
-    viewer_store_last_transfer_result(0u, NULL, 0u, 0u);
+    fx_store_last_transfer_result(5u, &transfer_rect, 1u, 123u);
+    fx_store_last_transfer_result(0u, NULL, 0u, 0u);
 
     VgClipRect overlay_rects[4] = {0};
     uint_fast32_t last_presented_overlay_frame_serial = 0u;
     uint_fast32_t overlay_frame_serial = 0u;
-    size_t overlay_count = viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+    size_t overlay_count = fx_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
                                                              overlay_rects,
                                                              4u,
                                                              &overlay_frame_serial);
@@ -1053,9 +1265,9 @@ TEST(test_breakout_runtime_startup_redraw_overlay_keeps_last_non_empty_transfer_
     TEST_ASSERT_EQUAL_UINT64(5u, (uint64_t)overlay_frame_serial);
     TEST_ASSERT_EQUAL_UINT64(5u, (uint64_t)last_presented_overlay_frame_serial);
     TEST_ASSERT_TRUE(vg_clip_rect_equal(transfer_rect, overlay_rects[0]));
-    TEST_ASSERT_EQUAL_UINT(0u, viewer_copy_last_transfer_rects(overlay_rects, 4u));
+    TEST_ASSERT_EQUAL_UINT(0u, fx_copy_last_transfer_rects(overlay_rects, 4u));
     TEST_ASSERT_EQUAL_UINT(0u,
-                           viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+                           fx_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
                                                              overlay_rects,
                                                              4u,
                                                              &overlay_frame_serial));
@@ -1070,7 +1282,7 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     VgFrameBuffer fb = {0};
     VgRenderSlotState render_state = {0};
 
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
 
     ID state_atom_id = eval_string(
@@ -1121,7 +1333,7 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
 
     for (int i = 0; i < 600; i++) {
         usleep(16000);
-        viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+        fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
         ID snapshot = atom_deref_owned(ctx.bundle.primary_scene_atom);
         if (snapshot) {
             vg_rendered_state_capture_begin(ctx.bundle.primary_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
@@ -1181,7 +1393,7 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
                   "play loop leaked %zu bytes (limit 8192)", mem_growth);
     TEST_ASSERT_TRUE_MESSAGE(mem_growth <= 8192u, growth_msg);
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_limit) {
@@ -1193,7 +1405,7 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
     ID caught_ex = NULL;
 
     TRY {
-        TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+        TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
         memory_set_heap_limit_bytes(stricter_limit);
         TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
 
@@ -1216,8 +1428,8 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
 
         for (int i = 0; i < 90; i++) {
             usleep(16000);
-            viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
-            (void)viewer_collision_detect_step(&ctx.bundle,
+            fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+            (void)fx_collision_detect_step(&ctx.bundle,
                                                &ctx.spatial_rules,
                                                (uint32_t)platform_current_time_ms(),
                                                NULL,
@@ -1231,7 +1443,7 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
     memory_set_heap_limit_bytes(previous_limit);
     stop_runloop_thread();
     vg_slot_change_tracker_destroy(&slot_change_tracker);
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 
     if (caught_ex) {
         print_exception(caught_ex);
@@ -1244,7 +1456,7 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
 
 TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_scores_once) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
 
     ID state_atom_id = eval_string(
@@ -1300,7 +1512,7 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
     }
 
     stop_runloop_thread();
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 
     TEST_ASSERT_TRUE_MESSAGE(saw_brick_score,
                              "expected at least one brick-hit score update while runloop + collision dispatch are active");
@@ -1308,7 +1520,7 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
 
 TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks) {
     BreakoutViewerTestContext ctx = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
     ID counts = eval_string(
         "(do "
@@ -1327,10 +1539,10 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
     ID bottom_brick_id = vector_nth(counts_vec, 1u);
     TEST_ASSERT_TRUE(is_fixnum(expected_rule_count));
     TEST_ASSERT_TRUE(is_fixnum(bottom_brick_id));
-    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(expected_rule_count) <= VIEWER_MAX_SPATIAL_RULES,
-                             "test scene must fit inside VIEWER_MAX_SPATIAL_RULES");
+    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(expected_rule_count) <= FX_MAX_SPATIAL_RULES,
+                             "test scene must fit inside FX_MAX_SPATIAL_RULES");
 
-    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+    fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
 
     TEST_ASSERT_EQUAL_UINT32((uint32_t)AS_FIXNUM(expected_rule_count), ctx.spatial_rules.count);
     bool saw_bottom_brick_rule = false;
@@ -1344,7 +1556,7 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
         }
     }
 
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
     TEST_ASSERT_TRUE_MESSAGE(saw_bottom_brick_rule,
                              "expected collision policy set to include the last launched brick as a collision target");
 }
@@ -1354,7 +1566,7 @@ TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_u
     uint16_t pixels[320u * 240u] = {0};
     VgFrameBuffer fb = {0};
     VgRenderSlotState render_state = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
 
     ID state_atom_id = eval_string(
@@ -1483,7 +1695,7 @@ TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_u
     }
 
     stop_runloop_thread();
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 
     TEST_ASSERT_TRUE_MESSAGE(seq_before_new_frames == 2,
                              "stale at-end snapshot must not advance to a newer segment before renderer publishes a fresh frame");
@@ -1497,7 +1709,7 @@ TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segm
     uint16_t pixels[320u * 240u] = {0};
     VgFrameBuffer fb = {0};
     VgRenderSlotState render_state = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
     TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
 
@@ -1599,7 +1811,7 @@ TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segm
     }
 
     stop_runloop_thread();
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 
     TEST_ASSERT_TRUE_MESSAGE(saw_brick_score,
                              "expected to observe at least one scored brick hit");
@@ -1625,8 +1837,8 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
     ID final_phase = NULL;
 
     TRY {
-        TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
-        TEST_ASSERT_TRUE(viewer_init_slot_runtime_buffers(&ctx.bundle));
+        TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
+        TEST_ASSERT_TRUE(fx_init_slot_runtime_buffers(&ctx.bundle));
         TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
         memset(g_render_buffer, 0, sizeof(g_render_buffer));
         TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, VIEW_W, VIEW_H, g_render_buffer, VIEW_W * VIEW_H));
@@ -1643,8 +1855,8 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
         TEST_ASSERT_NOT_NULL(launch_arg);
         TEST_ASSERT_NOT_NULL(state_atom_id);
         TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
-        tiny_renderer_lifecycle_set_callbacks(viewer_renderer_start_callback,
-                                              viewer_renderer_stop_callback,
+        tiny_renderer_lifecycle_set_callbacks(fx_renderer_start_callback,
+                                              fx_renderer_stop_callback,
                                               &fb);
         TEST_ASSERT_TRUE(tiny_renderer_lifecycle_start(NULL));
         TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
@@ -1653,11 +1865,11 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
 
         for (int i = 0; i < 90; i++) {
             usleep(16000);
-            viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
-            ViewerFrameRenderResult render_result = viewer_poll_render_frame();
-            if (viewer_should_run_collision_step(render_result.frame_serial,
+            fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+            ViewerFrameRenderResult render_result = fx_poll_render_frame();
+            if (fx_should_run_collision_step(render_result.frame_serial,
                                                  &last_collision_frame_serial)) {
-                (void)viewer_collision_detect_step(&ctx.bundle,
+                (void)fx_collision_detect_step(&ctx.bundle,
                                                    &ctx.spatial_rules,
                                                    (uint32_t)platform_current_time_ms(),
                                                    NULL,
@@ -1680,12 +1892,12 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
     (void)tiny_renderer_lifecycle_stop();
     tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
     vg_slot_change_tracker_destroy(&slot_change_tracker);
-    viewer_destroy_slot_runtime_buffers();
+    fx_destroy_slot_runtime_buffers();
     RELEASE(startup_fn);
     RELEASE(launch_fn);
     RELEASE(launch_arg);
     RELEASE(state_atom_id);
-    breakout_viewer_test_context_destroy(&ctx);
+    breakout_fx_test_context_destroy(&ctx);
 
     if (caught_ex) {
         print_exception(caught_ex);

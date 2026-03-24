@@ -16,6 +16,9 @@ typedef struct {
     bool closed;
 } EventLoopIngressStats;
 
+typedef void (*EventLoopNativeIngressFn)(void *ctx, EvalState *st);
+typedef void (*EventLoopNativeIngressCleanupFn)(void *ctx);
+
 // Initialize event loop (idempotent)
 void event_loop_init(void);
 
@@ -33,6 +36,20 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
 // payload argument. Returns false when queue is full or input invalid.
 // Callback return values are ignored by the C event bridge.
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg);
+
+// Thread-safe generic ingress queue for native callbacks that must run on the
+// event-loop / interpreter thread. Returns false when queue is full or input invalid.
+// The optional cleanup runs after callback execution or when a queued entry is discarded.
+bool event_loop_enqueue_ingress_native(EventLoopNativeIngressFn callback,
+                                       void *ctx,
+                                       EventLoopNativeIngressCleanupFn cleanup);
+
+// Execute a native callback immediately when already on the interpreter thread
+// (or when no interpreter thread is registered yet), otherwise enqueue it through
+// the ingress queue. Returns false when enqueueing fails.
+bool event_loop_dispatch_native(EventLoopNativeIngressFn callback,
+                                void *ctx,
+                                EventLoopNativeIngressCleanupFn cleanup);
 
 // Returns true when the ingress queue has pending tasks.
 bool event_loop_ingress_has_pending(void);

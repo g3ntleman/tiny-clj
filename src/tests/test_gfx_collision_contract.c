@@ -4,7 +4,7 @@
 #include "../symbol.h"
 #include "../tiny_fx_gfx.h"
 #include "../vector.h"
-#include "../viewer_collision.h"
+#include "../fx_collision.h"
 
 TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

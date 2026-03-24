@@ -1,4 +1,4 @@
-#include "viewer_config_loader.h"
+#include "fx_config_loader.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -14,41 +14,41 @@
 #include "tiny_clj.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
-#include "viewer_spatial_bridge.h"
+#include "fx_spatial_bridge.h"
 
 #define TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES 614400u
 
-static ID g_viewer_kw_id = NULL;
-static ID g_viewer_kw_atom = NULL;
-static ID g_viewer_kw_game = NULL;
-static ID g_viewer_kw_tiny_breakout = NULL;
-static ID g_viewer_kw_slots = NULL;
-static ID g_viewer_kw_entry = NULL;
-static ID g_viewer_kw_prepare_callback = NULL;
-static ID g_viewer_kw_startup_callback = NULL;
-static ID g_viewer_kw_spatial_callback = NULL;
-static ID g_viewer_kw_primary_scene_atom = NULL;
+static ID g_fx_kw_id = NULL;
+static ID g_fx_kw_atom = NULL;
+static ID g_fx_kw_game = NULL;
+static ID g_fx_kw_tiny_breakout = NULL;
+static ID g_fx_kw_slots = NULL;
+static ID g_fx_kw_entry = NULL;
+static ID g_fx_kw_prepare_callback = NULL;
+static ID g_fx_kw_startup_callback = NULL;
+static ID g_fx_kw_spatial_callback = NULL;
+static ID g_fx_kw_primary_scene_atom = NULL;
 
-static const IdSymbolCacheEntry g_viewer_slot_extract_symbol_cache[] = {
-    {&g_viewer_kw_id, ":id"},
-    {&g_viewer_kw_atom, ":atom"},
+static const IdSymbolCacheEntry g_fx_slot_extract_symbol_cache[] = {
+    {&g_fx_kw_id, ":id"},
+    {&g_fx_kw_atom, ":atom"},
 };
 
-static const IdSymbolCacheEntry g_viewer_default_config_symbol_cache[] = {
-    {&g_viewer_kw_game, ":game"},
-    {&g_viewer_kw_tiny_breakout, ":tiny-breakout"},
+static const IdSymbolCacheEntry g_fx_default_config_symbol_cache[] = {
+    {&g_fx_kw_game, ":game"},
+    {&g_fx_kw_tiny_breakout, ":tiny-breakout"},
 };
 
-static const IdSymbolCacheEntry g_viewer_host_config_symbol_cache[] = {
-    {&g_viewer_kw_slots, ":slots"},
-    {&g_viewer_kw_entry, ":entry"},
-    {&g_viewer_kw_prepare_callback, ":prepare-callback"},
-    {&g_viewer_kw_startup_callback, ":startup-callback"},
-    {&g_viewer_kw_spatial_callback, ":spatial-callback"},
-    {&g_viewer_kw_primary_scene_atom, ":game-scene-atom"},
+static const IdSymbolCacheEntry g_fx_host_config_symbol_cache[] = {
+    {&g_fx_kw_slots, ":slots"},
+    {&g_fx_kw_entry, ":entry"},
+    {&g_fx_kw_prepare_callback, ":prepare-callback"},
+    {&g_fx_kw_startup_callback, ":startup-callback"},
+    {&g_fx_kw_spatial_callback, ":spatial-callback"},
+    {&g_fx_kw_primary_scene_atom, ":game-scene-atom"},
 };
 
-static inline uint32_t viewer_record_type_hash(ID obj) {
+static inline uint32_t fx_record_type_hash(ID obj) {
     if (!obj || TAG(obj) != CLJ_RECORD) {
         return 0u;
     }
@@ -56,7 +56,7 @@ static inline uint32_t viewer_record_type_hash(ID obj) {
     return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0u;
 }
 
-static ID viewer_slot_desc_field(ID slot_desc, ID key) {
+static ID fx_slot_desc_field(ID slot_desc, ID key) {
     if (!slot_desc || !key) {
         return NULL;
     }
@@ -69,7 +69,7 @@ static ID viewer_slot_desc_field(ID slot_desc, ID key) {
     return NULL;
 }
 
-FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom) {
+FrameScene *fx_frame_scene_from_atom(CljAtom *scene_atom) {
     if (!scene_atom) {
         return NULL;
     }
@@ -78,7 +78,7 @@ FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom) {
         return NULL;
     }
     const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!schema || viewer_record_type_hash(scene) != schema->h_frame_scene) {
+    if (!schema || fx_record_type_hash(scene) != schema->h_frame_scene) {
         return NULL;
     }
     return (FrameScene *)scene;
@@ -102,7 +102,7 @@ void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     memset(bundle, 0, sizeof(*bundle));
 }
 
-static bool viewer_fail_config_load(ViewerSceneBundle *bundle, const char *message) {
+static bool fx_fail_config_load(ViewerSceneBundle *bundle, const char *message) {
     if (bundle) {
         destroy_scene_bundle(bundle);
     }
@@ -110,7 +110,7 @@ static bool viewer_fail_config_load(ViewerSceneBundle *bundle, const char *messa
     return false;
 }
 
-ViewerConfigSource viewer_default_config_source(void) {
+ViewerConfigSource fx_default_config_source(void) {
     const char *host_demo = getenv("TINYCLJ_HOST_DEMO");
 #if defined(TINYCLJ_DEFAULT_HOST_DEMO)
     if (!host_demo || host_demo[0] == '\0') {
@@ -151,13 +151,13 @@ void tiny_fx_host_apply_heap_limit(void) {
     memory_set_heap_limit_bytes(host_heap_limit);
 }
 
-static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) {
+static bool fx_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) {
     if (!slots || !out_bundle || !is_vector(slots)) {
         return false;
     }
     if (!id_symbol_cache_init_global(
-            g_viewer_slot_extract_symbol_cache,
-            sizeof(g_viewer_slot_extract_symbol_cache) / sizeof(g_viewer_slot_extract_symbol_cache[0]))) {
+            g_fx_slot_extract_symbol_cache,
+            sizeof(g_fx_slot_extract_symbol_cache) / sizeof(g_fx_slot_extract_symbol_cache[0]))) {
         return false;
     }
     CljPersistentVector *vec = as_vector(slots);
@@ -175,8 +175,8 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     }
     for (uint32_t i = 0; i < raw_count; i++) {
         ID slot_desc = vector_nth(vec, i);
-        ID slot_id = viewer_slot_desc_field(slot_desc, g_viewer_kw_id);
-        ID slot_atom = viewer_slot_desc_field(slot_desc, g_viewer_kw_atom);
+        ID slot_id = fx_slot_desc_field(slot_desc, g_fx_kw_id);
+        ID slot_atom = fx_slot_desc_field(slot_desc, g_fx_kw_atom);
         if (!slot_id || !is_symbol(slot_id) || !slot_atom || TAG(slot_atom) != CLJ_ATOM) {
             CLJ_HOST_FREE(slot_items);
             return false;
@@ -187,7 +187,7 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
                 return false;
             }
         }
-        FrameScene *scene = viewer_frame_scene_from_atom((CljAtom *)slot_atom);
+        FrameScene *scene = fx_frame_scene_from_atom((CljAtom *)slot_atom);
         if (!scene) {
             CLJ_HOST_FREE(slot_items);
             return false;
@@ -204,7 +204,7 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     return true;
 }
 
-static bool viewer_load_deployment_config_fast(EvalState *st,
+static bool fx_load_deployment_config_fast(EvalState *st,
                                                ViewerSceneBundle *out_bundle,
                                                ViewerSpatialRuleSet *out_rule_set) {
     if (!st || !out_bundle || !out_rule_set) {
@@ -246,22 +246,22 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
     });
 
     if (!scene_atom || TAG(scene_atom) != CLJ_ATOM) {
-        viewer_fail_config_load(NULL, "deployment config scene atom is invalid");
+        fx_fail_config_load(NULL, "deployment config scene atom is invalid");
         goto cleanup;
     }
     if (!prepare_callback ||
         (TAG(prepare_callback) != CLJ_FUNC && TAG(prepare_callback) != CLJ_CLOSURE)) {
-        viewer_fail_config_load(NULL, "deployment prepare callback must be callable");
+        fx_fail_config_load(NULL, "deployment prepare callback must be callable");
         goto cleanup;
     }
     if (!startup_callback ||
         (TAG(startup_callback) != CLJ_FUNC && TAG(startup_callback) != CLJ_CLOSURE)) {
-        viewer_fail_config_load(NULL, "deployment startup callback must be callable");
+        fx_fail_config_load(NULL, "deployment startup callback must be callable");
         goto cleanup;
     }
     if (!spatial_callback ||
         (TAG(spatial_callback) != CLJ_FUNC && TAG(spatial_callback) != CLJ_CLOSURE)) {
-        viewer_fail_config_load(NULL, "deployment spatial callback must be callable");
+        fx_fail_config_load(NULL, "deployment spatial callback must be callable");
         goto cleanup;
     }
 
@@ -269,9 +269,9 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
         (void)eval_function_call(prepare_callback, NULL, 0, NULL, st);
     });
 
-    scene = viewer_frame_scene_from_atom((CljAtom *)scene_atom);
+    scene = fx_frame_scene_from_atom((CljAtom *)scene_atom);
     if (!scene) {
-        viewer_fail_config_load(NULL, "deployment scene atom must deref to a frame-scene");
+        fx_fail_config_load(NULL, "deployment scene atom must deref to a frame-scene");
         goto cleanup;
     }
 
@@ -281,11 +281,11 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
     }
 
     if (!id_symbol_cache_init_global(
-            g_viewer_default_config_symbol_cache,
-            sizeof(g_viewer_default_config_symbol_cache) / sizeof(g_viewer_default_config_symbol_cache[0]))) {
+            g_fx_default_config_symbol_cache,
+            sizeof(g_fx_default_config_symbol_cache) / sizeof(g_fx_default_config_symbol_cache[0]))) {
         goto cleanup;
     }
-    slot_items[0].id = g_viewer_kw_game;
+    slot_items[0].id = g_fx_kw_game;
     slot_items[0].scene_atom = (CljAtom *)scene_atom;
     slot_items[0].scene = scene;
     RETAIN(scene);
@@ -295,7 +295,7 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
     out_bundle->slot_count = 1u;
     out_bundle->primary_slot_index = 0u;
     out_bundle->has_primary_slot = true;
-    out_bundle->entry = g_viewer_kw_tiny_breakout;
+    out_bundle->entry = g_fx_kw_tiny_breakout;
     out_bundle->startup_callback = startup_callback;
     startup_callback = NULL;
     out_bundle->spatial_callback = spatial_callback;
@@ -304,8 +304,8 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
     out_bundle->primary_scene = scene;
     scene_atom = NULL;
 
-    if (!viewer_collision_load_rules_from_scene(out_bundle->primary_scene, out_rule_set)) {
-        viewer_fail_config_load(out_bundle, "deployment scene contains invalid spatial rules");
+    if (!fx_collision_load_rules_from_scene(out_bundle->primary_scene, out_rule_set)) {
+        fx_fail_config_load(out_bundle, "deployment scene contains invalid spatial rules");
         goto cleanup;
     }
 
@@ -325,13 +325,13 @@ cleanup:
     return ok;
 }
 
-bool viewer_load_deployment_config(EvalState *st,
+bool fx_load_deployment_config(EvalState *st,
                                    ViewerConfigSource config_source,
                                    ViewerSceneBundle *out_bundle,
                                    ViewerSpatialRuleSet *out_rule_set) {
     if (!st || !out_bundle || !out_rule_set) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "viewer_load_deployment_config requires eval state and output buffers",
+                        "fx_load_deployment_config requires eval state and output buffers",
                         __FILE__,
                         __LINE__,
                         0);
@@ -340,10 +340,10 @@ bool viewer_load_deployment_config(EvalState *st,
     memset(out_bundle, 0, sizeof(*out_bundle));
     memset(out_rule_set, 0, sizeof(*out_rule_set));
     if (!config_source.namespace_name || !config_source.config_expr) {
-        return viewer_fail_config_load(NULL, "viewer config source is incomplete");
+        return fx_fail_config_load(NULL, "viewer config source is incomplete");
     }
     if (strcmp(config_source.namespace_name, "tiny-clj.deployment") == 0) {
-        return viewer_load_deployment_config_fast(st, out_bundle, out_rule_set);
+        return fx_load_deployment_config_fast(st, out_bundle, out_rule_set);
     }
     bool require_ok = false;
     WITH_AUTORELEASE_POOL({
@@ -361,16 +361,16 @@ bool viewer_load_deployment_config(EvalState *st,
         goto cleanup_invalid_map;
     }
     if (!id_symbol_cache_init_global(
-            g_viewer_host_config_symbol_cache,
-            sizeof(g_viewer_host_config_symbol_cache) / sizeof(g_viewer_host_config_symbol_cache[0]))) {
+            g_fx_host_config_symbol_cache,
+            sizeof(g_fx_host_config_symbol_cache) / sizeof(g_fx_host_config_symbol_cache[0]))) {
         goto cleanup_missing_keys;
     }
-    ID slots = map_get_sentinel(cfg, g_viewer_kw_slots, NULL);
-    ID entry = map_get_sentinel(cfg, g_viewer_kw_entry, NULL);
-    ID prepare_callback = map_get_sentinel(cfg, g_viewer_kw_prepare_callback, NULL);
-    ID startup_callback = map_get_sentinel(cfg, g_viewer_kw_startup_callback, NULL);
-    ID spatial_callback = map_get_sentinel(cfg, g_viewer_kw_spatial_callback, NULL);
-    ID primary_scene_atom = map_get_sentinel(cfg, g_viewer_kw_primary_scene_atom, NULL);
+    ID slots = map_get_sentinel(cfg, g_fx_kw_slots, NULL);
+    ID entry = map_get_sentinel(cfg, g_fx_kw_entry, NULL);
+    ID prepare_callback = map_get_sentinel(cfg, g_fx_kw_prepare_callback, NULL);
+    ID startup_callback = map_get_sentinel(cfg, g_fx_kw_startup_callback, NULL);
+    ID spatial_callback = map_get_sentinel(cfg, g_fx_kw_spatial_callback, NULL);
+    ID primary_scene_atom = map_get_sentinel(cfg, g_fx_kw_primary_scene_atom, NULL);
     if (prepare_callback) {
         unsigned char prepare_tag = TAG(prepare_callback);
         if ((prepare_tag != CLJ_FUNC && prepare_tag != CLJ_CLOSURE)) {
@@ -380,7 +380,7 @@ bool viewer_load_deployment_config(EvalState *st,
             (void)eval_function_call(prepare_callback, NULL, 0, NULL, st);
         });
     }
-    if (!viewer_extract_scene_slots(slots, out_bundle)) {
+    if (!fx_extract_scene_slots(slots, out_bundle)) {
         goto cleanup_invalid_slots;
     }
     builtins_tiny_fx_gfx_register_slot_bindings(slots);
@@ -401,7 +401,7 @@ bool viewer_load_deployment_config(EvalState *st,
     out_bundle->startup_callback = RETAIN(startup_callback);
     out_bundle->spatial_callback = RETAIN(spatial_callback);
     out_bundle->primary_scene_atom = (CljAtom *)RETAIN(primary_scene_atom);
-    out_bundle->primary_scene = viewer_frame_scene_from_atom(out_bundle->primary_scene_atom);
+    out_bundle->primary_scene = fx_frame_scene_from_atom(out_bundle->primary_scene_atom);
     if (!out_bundle->primary_scene) {
         goto cleanup_invalid_game_scene;
     }
@@ -416,7 +416,7 @@ bool viewer_load_deployment_config(EvalState *st,
         goto cleanup_missing_game_slot;
     }
     out_bundle->primary_scene = out_bundle->slots[out_bundle->primary_slot_index].scene;
-    if (!viewer_collision_load_rules_from_scene(out_bundle->primary_scene, out_rule_set)) {
+    if (!fx_collision_load_rules_from_scene(out_bundle->primary_scene, out_rule_set)) {
         goto cleanup_invalid_rules;
     }
     ok = true;
@@ -426,70 +426,69 @@ cleanup:
     return ok;
 
 cleanup_invalid_map:
-        viewer_fail_config_load(NULL, "viewer config function must return a map");
+        fx_fail_config_load(NULL, "viewer config function must return a map");
     goto cleanup;
 
 cleanup_missing_keys:
-    viewer_fail_config_load(NULL, "viewer failed to intern required config keys");
+    fx_fail_config_load(NULL, "viewer failed to intern required config keys");
     goto cleanup;
 
 cleanup_invalid_slots:
-    viewer_fail_config_load(NULL, "viewer config contains invalid :slots data");
+    fx_fail_config_load(NULL, "viewer config contains invalid :slots data");
     goto cleanup;
 
 cleanup_missing_callbacks:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config must provide function :spatial-callback and atom :game-scene-atom");
     goto cleanup;
 
 cleanup_invalid_spatial_callback:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config :spatial-callback must be callable");
     goto cleanup;
 
 cleanup_invalid_prepare_callback:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config :prepare-callback must be callable");
     goto cleanup;
 
 cleanup_invalid_startup_callback:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config :startup-callback must be callable");
     goto cleanup;
 
 cleanup_invalid_game_scene:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config :game-scene-atom must deref to a frame-scene");
     goto cleanup;
 
 cleanup_missing_game_slot:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config must include :game-scene-atom in :slots");
     goto cleanup;
 
 cleanup_invalid_rules:
-    viewer_fail_config_load(
+    fx_fail_config_load(
         out_bundle,
         "viewer config primary scene contains invalid spatial rules");
     goto cleanup;
 }
 
-void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
+void fx_sync_configured_slots(ViewerSceneBundle *bundle,
                                   ViewerSpatialRuleSet *rule_set,
                                   VgSlotChangeTracker *slot_change_tracker,
                                   bool publish_changes) {
     if (!bundle || !bundle->slots) {
         return;
     }
-    viewer_collision_dispatch_state_lock();
     for (uint8_t i = 0; i < bundle->slot_count; i++) {
-        FrameScene *scene = viewer_frame_scene_from_atom(bundle->slots[i].scene_atom);
+        FrameScene *scene = fx_frame_scene_from_atom(bundle->slots[i].scene_atom);
         CLJ_ASSERT(scene && "configured slot atom must deref to FrameScene record");
         if (!scene || scene == bundle->slots[i].scene) {
             continue;
@@ -500,12 +499,11 @@ void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
         if (bundle->has_primary_slot && i == bundle->primary_slot_index) {
             bundle->primary_scene = scene;
             if (rule_set) {
-                (void)viewer_collision_load_rules_from_scene(scene, rule_set);
+                (void)fx_collision_load_rules_from_scene(scene, rule_set);
             }
         }
         if (publish_changes && slot_change_tracker) {
             (void)vg_slot_change_tracker_publish(slot_change_tracker, i, NULL);
         }
     }
-    viewer_collision_dispatch_state_unlock();
 }

@@ -531,8 +531,6 @@ DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 
 // Audio symbols
-DEFINE_EXTERN_SYMBOL(sym_sound_load_track_data, "sound-load-track!");
-DEFINE_EXTERN_SYMBOL(sym_sound_unload_track_data, "sound-unload-track!");
 DEFINE_EXTERN_SYMBOL(sym_sound_play_music_data, "sound-play-music!");
 DEFINE_EXTERN_SYMBOL(sym_sound_stop_track_data, "sound-stop-track!");
 DEFINE_EXTERN_SYMBOL(sym_sound_stop_music_data, "sound-stop-music!");

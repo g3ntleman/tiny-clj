@@ -4653,8 +4653,6 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
-    NATIVE_ENTRY(&sym_sound_load_track_data.sym, native_sound_load_track),
-    NATIVE_ENTRY(&sym_sound_unload_track_data.sym, native_sound_unload_track),
     NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
     NATIVE_ENTRY(&sym_sound_stop_track_data.sym, native_sound_stop_track),
     NATIVE_ENTRY(&sym_sound_stop_music_data.sym, native_sound_stop_music),

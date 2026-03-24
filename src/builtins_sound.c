@@ -1,8 +1,7 @@
 /*
  * Native sound builtins for Clojure API.
  *
- * sound-load-track!, sound-unload-track!, sound-play-music!,
- * sound-stop-track!, sound-stop-music!, sound-play-sfx!,
+ * sound-play-music!, sound-stop-track!, sound-stop-music!, sound-play-sfx!,
  * sound-stop-all!, sound-set-track-volume!, sound-set-music-volume!,
  * sound-on-finished!
  *
@@ -26,7 +25,7 @@
 #define TINYCLJ_WITH_TINY_FX 1
 #endif
 
-#define TINYCLJ_SOUND_NATIVE_NS "tiny-fx.sound-native"
+#define TINYCLJ_SOUND_NATIVE_NS "tiny-fx.sound"
 #define TINYCLJ_SOUND_DEBUG_NS "tiny-fx.sound-debug"
 
 /* ========================================================================= */
@@ -88,44 +87,14 @@ static void ensure_sound_engine_initialized(void) {
 #endif
 }
 
-ID native_sound_load_track(ID *args, unsigned int argc) {
-    if (!validate_arity(argc, 2, "sound-load-track!")) return NULL;
+ID native_sound_play_music(ID *args, unsigned int argc) {
+    if (!validate_arity(argc, 3, "sound-play-music!")) return NULL;
 
     ensure_sound_engine_initialized();
 
     ID track_id = args[0];
     ID bytes_obj = args[1];
-
-    if (!track_id) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "sound-load-track! track-id must not be nil",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    bool ok = sound_engine_load_track(track_id, bytes_obj);
-    return ok ? clj_true : clj_false;
-}
-
-ID native_sound_unload_track(ID *args, unsigned int argc) {
-    if (!validate_arity(argc, 1, "sound-unload-track!")) return NULL;
-
-    ensure_sound_engine_initialized();
-
-    ID track_id = args[0];
-    if (!track_id) return clj_false;
-
-    bool ok = sound_engine_unload_track(track_id);
-    return ok ? clj_true : clj_false;
-}
-
-ID native_sound_play_music(ID *args, unsigned int argc) {
-    if (!validate_arity(argc, 2, "sound-play-music!")) return NULL;
-
-    ensure_sound_engine_initialized();
-
-    ID track_id = args[0];
-    ID repeat_arg = args[1];
+    ID repeat_arg = args[2];
 
     if (!track_id) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -139,7 +108,7 @@ ID native_sound_play_music(ID *args, unsigned int argc) {
         repeat = (int32_t)as_fixnum((CljValue)repeat_arg);
     }
 
-    bool ok = sound_engine_play_music(track_id, repeat);
+    bool ok = sound_engine_play_music(track_id, bytes_obj, repeat);
     return ok ? clj_true : clj_false;
 }
 
@@ -166,11 +135,12 @@ ID native_sound_stop_music(ID *args, unsigned int argc) {
 }
 
 ID native_sound_play_sfx(ID *args, unsigned int argc) {
-    if (!validate_arity(argc, 1, "sound-play-sfx!")) return NULL;
+    if (!validate_arity(argc, 2, "sound-play-sfx!")) return NULL;
 
     ensure_sound_engine_initialized();
 
     ID sfx_id = args[0];
+    ID bytes_obj = args[1];
     if (!sfx_id) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "sound-play-sfx! sfx-id must not be nil",
@@ -178,7 +148,7 @@ ID native_sound_play_sfx(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    bool ok = sound_engine_play_sfx(sfx_id);
+    bool ok = sound_engine_play_sfx(sfx_id, bytes_obj);
     return ok ? clj_true : clj_false;
 }
 
@@ -386,11 +356,8 @@ ID native_sound_play_test_tone(ID *args, unsigned int argc) {
     builtins_sound_init_symbols();
     ID track_id = g_sound_kw_host_test_tone;
     ID ba_id = ba;
-    bool loaded = sound_engine_load_track(track_id, ba_id);
+    bool played = sound_engine_play_music(track_id, ba_id, 1);
     RELEASE(ba_id);
-    if (!loaded) return clj_false;
-
-    bool played = sound_engine_play_music(track_id, 1);
     return played ? clj_true : clj_false;
 }
 
@@ -560,8 +527,6 @@ static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
         return tinyclj_tiny_fx_disabled_error(display_name);     \
     }
 
-TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_load_track, "sound-load-track!")
-TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_unload_track, "sound-unload-track!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_music, "sound-play-music!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_stop_track, "sound-stop-track!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_stop_music, "sound-stop-music!")
@@ -618,8 +583,6 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
     }
     builtins_sound_init_symbols();
 #if TINYCLJ_WITH_TINY_FX
-    registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-load-track!", native_sound_load_track);
-    registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-unload-track!", native_sound_unload_track);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-play-music!", native_sound_play_music);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-track!", native_sound_stop_track);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-music!", native_sound_stop_music);

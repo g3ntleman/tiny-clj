@@ -4,7 +4,7 @@
             [tiny-fx.gfx-scene :refer [edn->scene]]
             [tiny-fx.gfx-collision :as collision]
             [tiny-fx.assets :as assets]
-            [tiny-fx.sound-native :as sound]
+            [tiny-fx.sound :as sound]
             [tiny-clj.gpio :as gpio]))
 
 (def player-entity-id 3002)
@@ -46,8 +46,7 @@ and game-demo startup."
   []
   (let [data (load-demo-data!)
         bytes (byte-array (:starwars-title-bytes data))]
-    (sound/sound-load-track! starwars-title-track-id bytes)
-    {:status (if (sound/sound-play-music! starwars-title-track-id 1) :playing :stopped)
+    {:status (if (sound/sound-play-music! starwars-title-track-id bytes 1) :playing :stopped)
      :duration-ms 8925}))
 
 (defn player-jump-timeline-for-state
@@ -133,8 +132,7 @@ return values."
         (swap! demo-melody-trigger-count* inc)
         (let [data (load-demo-data!)
               bytes (byte-array (:demo-melody-bytes data))]
-          (sound/sound-load-track! demo-melody-track-id bytes)
-          (sound/sound-play-music! demo-melody-track-id 1)))
+          (sound/sound-play-music! demo-melody-track-id bytes 1)))
       (not pressed?)
       (reset! demo-launch-pressed* false)
       :else nil))

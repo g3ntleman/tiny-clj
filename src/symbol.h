@@ -441,8 +441,6 @@ extern StaticSymbolData sym_slurp_data;
 extern StaticSymbolData sym_spit_data;
 
 // Audio symbols
-extern StaticSymbolData sym_sound_load_track_data;
-extern StaticSymbolData sym_sound_unload_track_data;
 extern StaticSymbolData sym_sound_play_music_data;
 extern StaticSymbolData sym_sound_stop_track_data;
 extern StaticSymbolData sym_sound_stop_music_data;

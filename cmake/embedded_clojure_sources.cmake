@@ -28,8 +28,8 @@ set(TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES
 )
 
 set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
+    "libs/tiny-fx/trk1.clj|tiny-fx.trk1.clj.inc"
     "libs/tiny-fx/sound.clj|tiny-fx.sound.clj.inc"
-    "libs/tiny-fx/sound-native.clj|tiny-fx.sound-native.clj.inc"
     "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
     "libs/tiny-fx/gfx-timeline.clj|tiny-fx.gfx-timeline.clj.inc"

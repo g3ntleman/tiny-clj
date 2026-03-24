@@ -25,13 +25,12 @@
 #include "rendered_state_snapshot.h"
 #include "panel.h"
 #include "panel_backend.h"
-#include "viewer_host_runloop.h"
-#include "viewer_config_loader.h"
-#include "viewer_spatial_bridge.h"
+#include "fx_host_runloop.h"
+#include "fx_config_loader.h"
+#include "fx_spatial_bridge.h"
 #include "platform.h"
 #include "gpio.h"
 #include "memory.h"
-#include "tiny_clj.h"
 #if !defined(__APPLE__)
 #include "MiniFB.h"
 #endif
@@ -40,22 +39,22 @@
 #include "tiny_fx_macos_app.h"
 #endif
 
-static bool viewer_perf_stderr_diag_enabled(void) {
-    const char *v = getenv("TINYCLJ_VIEWER_PERF_DIAG");
+static bool fx_perf_stderr_diag_enabled(void) {
+    const char *v = getenv("TINYCLJ_FX_PERF_DIAG");
     return v && v[0] != '\0' && v[0] != '0';
 }
 
 #define VIEW_W 320
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
-#define VIEWER_MAX_SLOTS VG_RENDERED_STATE_MAX_SLOTS
+#define FX_MAX_SLOTS VG_RENDERED_STATE_MAX_SLOTS
 #define TARGET_FPS              60u
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
-#define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
-#define VIEWER_DIRTY_BUFFER_BUDGET_BYTES (20u * 1024u)
-#define VIEWER_DIRTY_PIXEL_BUDGET (VIEWER_DIRTY_BUFFER_BUDGET_BYTES / RGB565_BYTES_PER_PIXEL)
-#define VIEWER_MAX_DIRTY_PLAN_RECTS (VIEWER_MAX_SLOTS * 16u)
+#define FX_ANIMATED_WAIT_TIMEOUT_MS 8u
+#define FX_DIRTY_BUFFER_BUDGET_BYTES (20u * 1024u)
+#define FX_DIRTY_PIXEL_BUDGET (FX_DIRTY_BUFFER_BUDGET_BYTES / RGB565_BYTES_PER_PIXEL)
+#define FX_MAX_DIRTY_PLAN_RECTS (FX_MAX_SLOTS * 16u)
 
 static uint64_t monotonic_now_ns(void);
 
@@ -65,21 +64,22 @@ typedef struct {
     bool active_low;
 } ViewerGpioKeyBinding;
 
-static const ViewerGpioKeyBinding g_viewer_gpio_key_bindings[] = {
+static const ViewerGpioKeyBinding g_fx_gpio_key_bindings[] = {
     {KB_KEY_1, 1, false}, {KB_KEY_2, 2, false}, {KB_KEY_3, 3, false}, {KB_KEY_4, 4, false},
     {KB_KEY_5, 5, false}, {KB_KEY_6, 6, false}, {KB_KEY_7, 7, false}, {KB_KEY_8, 8, false},
     {KB_KEY_9, 9, false}, {KB_KEY_0, 0, false},
     {KB_KEY_SPACE, 13, true}, {KB_KEY_ENTER, 13, true},
+    {KB_KEY_Y, 15, true},
     {KB_KEY_LEFT, 14, true}, {KB_KEY_RIGHT, 12, true}, {KB_KEY_UP, 26, true}, {KB_KEY_DOWN, 27, true},
 };
 
 enum {
-    VIEWER_GPIO_KEY_BINDING_COUNT =
-        (int)(sizeof(g_viewer_gpio_key_bindings) / sizeof(g_viewer_gpio_key_bindings[0]))
+    FX_GPIO_KEY_BINDING_COUNT =
+        (int)(sizeof(g_fx_gpio_key_bindings) / sizeof(g_fx_gpio_key_bindings[0]))
 };
 
 /* Handles immediate viewer exit shortcuts. */
-static bool viewer_should_exit_for_keys(const uint8_t *keys) {
+static bool fx_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
         return false;
     }
@@ -95,9 +95,7 @@ typedef struct {
     bool w_key_was_down;
     bool r_key_was_down;
     bool redraw_overlay_enabled;
-    bool fire_key_was_down;
-    bool pause_key_was_down;
-    bool gpio_key_was_down[VIEWER_GPIO_KEY_BINDING_COUNT];
+    bool gpio_key_was_down[FX_GPIO_KEY_BINDING_COUNT];
 } ViewerRuntimeFlags;
 
 typedef struct {
@@ -108,7 +106,7 @@ typedef struct {
     uint_fast32_t frame_serial;
 } ViewerFrameRenderResult;
 
-static bool viewer_key_pressed_once(const uint8_t *keys, int key, bool *was_down) {
+static bool fx_key_pressed_once(const uint8_t *keys, int key, bool *was_down) {
     if (!was_down) {
         return false;
     }
@@ -118,31 +116,7 @@ static bool viewer_key_pressed_once(const uint8_t *keys, int key, bool *was_down
     return pressed;
 }
 
-static bool viewer_any_key_down(const uint8_t *keys, int key_a, int key_b) {
-    return keys && ((keys[key_a] != 0) || (keys[key_b] != 0));
-}
-
-static bool viewer_key_group_pressed_once(const uint8_t *keys, int key_a, int key_b, bool *was_down) {
-    if (!was_down) {
-        return false;
-    }
-    bool down = viewer_any_key_down(keys, key_a, key_b);
-    bool pressed = down && !(*was_down);
-    *was_down = down;
-    return pressed;
-}
-
-static bool viewer_enqueue_direct_input_action(bool pressed_once, CljObject *input_fn, ID input_arg) {
-    if (!pressed_once) {
-        return true;
-    }
-    if (!input_fn || !input_arg) {
-        return false;
-    }
-    return event_loop_enqueue_ingress_call(input_fn, input_arg);
-}
-
-static int32_t viewer_gpio_level_for_binding(const ViewerGpioKeyBinding *binding, bool down) {
+static int32_t fx_gpio_level_for_binding(const ViewerGpioKeyBinding *binding, bool down) {
     if (!binding) {
         return down ? 1 : 0;
     }
@@ -152,42 +126,39 @@ static int32_t viewer_gpio_level_for_binding(const ViewerGpioKeyBinding *binding
     return down ? 1 : 0;
 }
 
-static void viewer_seed_gpio_key_levels(void) {
-    for (size_t i = 0; i < (sizeof(g_viewer_gpio_key_bindings) / sizeof(g_viewer_gpio_key_bindings[0])); i++) {
-        const ViewerGpioKeyBinding *binding = &g_viewer_gpio_key_bindings[i];
-        gpio_runtime_store_digital_level(binding->pin, viewer_gpio_level_for_binding(binding, false));
+static void fx_seed_gpio_key_levels(void) {
+    for (size_t i = 0; i < (sizeof(g_fx_gpio_key_bindings) / sizeof(g_fx_gpio_key_bindings[0])); i++) {
+        const ViewerGpioKeyBinding *binding = &g_fx_gpio_key_bindings[i];
+        gpio_runtime_store_digital_level(binding->pin, fx_gpio_level_for_binding(binding, false));
     }
 }
 
-static void viewer_update_runtime_flags(const uint8_t *keys,
+static void fx_update_runtime_flags(const uint8_t *keys,
                                         ViewerRuntimeFlags *flags,
                                         uint64_t *next_frame_deadline_ns,
                                         uint64_t target_frame_ns) {
     if (!flags || !next_frame_deadline_ns) {
         return;
     }
-    if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
+    if (fx_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
         *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     }
 }
 
-static void viewer_simulate_gpio_keys(const uint8_t *keys, ViewerRuntimeFlags *flags) {
+static void fx_simulate_gpio_keys(const uint8_t *keys, ViewerRuntimeFlags *flags) {
     if (!flags) {
         return;
     }
 
-    for (size_t i = 0; i < (sizeof(g_viewer_gpio_key_bindings) / sizeof(g_viewer_gpio_key_bindings[0])); i++) {
-        const ViewerGpioKeyBinding *binding = &g_viewer_gpio_key_bindings[i];
-        if (binding->key == KB_KEY_SPACE || binding->key == KB_KEY_ENTER || binding->key == KB_KEY_Y) {
-            continue;
-        }
+    for (size_t i = 0; i < (sizeof(g_fx_gpio_key_bindings) / sizeof(g_fx_gpio_key_bindings[0])); i++) {
+        const ViewerGpioKeyBinding *binding = &g_fx_gpio_key_bindings[i];
         bool down = keys && keys[binding->key] != 0;
         if (down == flags->gpio_key_was_down[i]) {
             continue;
         }
         flags->gpio_key_was_down[i] = down;
-        (void)gpio_simulate_digital(binding->pin, viewer_gpio_level_for_binding(binding, down));
+        (void)gpio_simulate_digital(binding->pin, fx_gpio_level_for_binding(binding, down));
     }
 }
 
@@ -199,7 +170,7 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     return 0xff000000u | (r << 16) | (g << 8) | b;
 }
 
-static void viewer_draw_rect_outline_xrgb8888(uint32_t *pixels,
+static void fx_draw_rect_outline_xrgb8888(uint32_t *pixels,
                                               int width,
                                               int height,
                                               VgClipRect rect,
@@ -230,7 +201,7 @@ static void viewer_draw_rect_outline_xrgb8888(uint32_t *pixels,
     }
 }
 
-static void viewer_draw_redraw_overlay(uint32_t *pixels,
+static void fx_draw_redraw_overlay(uint32_t *pixels,
                                        int width,
                                        int height,
                                        const VgClipRect *rects,
@@ -240,7 +211,7 @@ static void viewer_draw_redraw_overlay(uint32_t *pixels,
     }
     const uint32_t color = 0xff00ffffu; /* cyan */
     for (size_t i = 0; i < rect_count; i++) {
-        viewer_draw_rect_outline_xrgb8888(pixels, width, height, rects[i], color);
+        fx_draw_rect_outline_xrgb8888(pixels, width, height, rects[i], color);
     }
 }
 
@@ -253,7 +224,7 @@ typedef struct mfb_window ViewerHostWindow;
 #endif
 
 #if defined(__APPLE__)
-static ViewerHostWindow *viewer_host_window_open_with_backend(ViewerHostWindowOpenFn open_window_fn,
+static ViewerHostWindow *fx_host_window_open_with_backend(ViewerHostWindowOpenFn open_window_fn,
                                                               const char *title,
                                                               unsigned width,
                                                               unsigned height) {
@@ -264,41 +235,41 @@ static ViewerHostWindow *viewer_host_window_open_with_backend(ViewerHostWindowOp
     if (!window) {
         return NULL;
     }
-    macos_viewer_start_runloop_watchdog();
+    macos_fx_start_runloop_watchdog();
     return window;
 }
 #endif
 
-static ViewerHostWindow *viewer_host_window_open(const char *title,
+static ViewerHostWindow *fx_host_window_open(const char *title,
                                                  unsigned width,
                                                  unsigned height) {
 #if defined(__APPLE__)
-    return viewer_host_window_open_with_backend(tinyfx_macos_window_open, title, width, height);
+    return fx_host_window_open_with_backend(tinyfx_macos_window_open, title, width, height);
 #else
     return mfb_open_ex(title, width, height, 0u);
 #endif
 }
 
 #if defined(__APPLE__)
-static void viewer_host_window_close_with_backend(ViewerHostWindow *window,
+static void fx_host_window_close_with_backend(ViewerHostWindow *window,
                                                   ViewerHostWindowCloseFn close_window_fn) {
     if (!window || !close_window_fn) {
         return;
     }
-    macos_viewer_stop_runloop_watchdog();
+    macos_fx_stop_runloop_watchdog();
     close_window_fn(window);
 }
 #endif
 
-static void viewer_host_window_close(ViewerHostWindow *window) {
+static void fx_host_window_close(ViewerHostWindow *window) {
 #if defined(__APPLE__)
-    viewer_host_window_close_with_backend(window, tinyfx_macos_window_close);
+    fx_host_window_close_with_backend(window, tinyfx_macos_window_close);
 #else
     mfb_close(window);
 #endif
 }
 
-static void viewer_host_window_show_cursor(ViewerHostWindow *window, bool show) {
+static void fx_host_window_show_cursor(ViewerHostWindow *window, bool show) {
 #if defined(__APPLE__)
     tinyfx_macos_window_show_cursor(window, show);
 #else
@@ -306,7 +277,7 @@ static void viewer_host_window_show_cursor(ViewerHostWindow *window, bool show) 
 #endif
 }
 
-static bool viewer_host_window_set_viewport(ViewerHostWindow *window,
+static bool fx_host_window_set_viewport(ViewerHostWindow *window,
                                             unsigned offset_x,
                                             unsigned offset_y,
                                             unsigned width,
@@ -318,7 +289,7 @@ static bool viewer_host_window_set_viewport(ViewerHostWindow *window,
 #endif
 }
 
-static const uint8_t *viewer_host_window_get_key_buffer(ViewerHostWindow *window) {
+static const uint8_t *fx_host_window_get_key_buffer(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_get_key_buffer(window);
 #else
@@ -326,7 +297,7 @@ static const uint8_t *viewer_host_window_get_key_buffer(ViewerHostWindow *window
 #endif
 }
 
-static bool viewer_host_window_pump_events(ViewerHostWindow *window) {
+static bool fx_host_window_pump_events(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_pump_events(window);
 #else
@@ -334,7 +305,7 @@ static bool viewer_host_window_pump_events(ViewerHostWindow *window) {
 #endif
 }
 
-static bool viewer_host_window_wait_sync(ViewerHostWindow *window) {
+static bool fx_host_window_wait_sync(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_wait_sync(window);
 #else
@@ -342,7 +313,7 @@ static bool viewer_host_window_wait_sync(ViewerHostWindow *window) {
 #endif
 }
 
-static mfb_update_state viewer_host_window_update(ViewerHostWindow *window,
+static mfb_update_state fx_host_window_update(ViewerHostWindow *window,
                                                   const uint32_t *buffer,
                                                   unsigned width,
                                                   unsigned height) {
@@ -353,7 +324,7 @@ static mfb_update_state viewer_host_window_update(ViewerHostWindow *window,
 #endif
 }
 
-static uint32_t viewer_clip_rect_area_on_framebuffer(VgClipRect rect, int fb_w, int fb_h) {
+static uint32_t fx_clip_rect_area_on_framebuffer(VgClipRect rect, int fb_w, int fb_h) {
     if (vg_clip_rect_is_empty(rect) || fb_w <= 0 || fb_h <= 0) {
         return 0u;
     }
@@ -526,7 +497,7 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
 
 static ID *g_scene_slot_snapshots = NULL;
 static uint8_t *g_slot_render_priority = NULL;
-static uint8_t g_viewer_slot_count = 0u;
+static uint8_t g_fx_slot_count = 0u;
 static VgSlotChangeTracker g_slot_change_tracker;
 
 /*
@@ -557,7 +528,7 @@ typedef struct {
 static ViewerGramPanel g_gram_panel_ctx = {0};
 static VgPanel g_gram_panel = {0};
 
-static bool viewer_panel_reset(void *ctx) {
+static bool fx_panel_reset(void *ctx) {
     ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
     if (!panel) {
         return false;
@@ -567,12 +538,12 @@ static bool viewer_panel_reset(void *ctx) {
     return true;
 }
 
-static bool viewer_panel_init(void *ctx) {
+static bool fx_panel_init(void *ctx) {
     (void)ctx;
     return true;
 }
 
-static bool viewer_panel_set_orientation(void *ctx, bool mirror_x, bool mirror_y, bool swap_xy) {
+static bool fx_panel_set_orientation(void *ctx, bool mirror_x, bool mirror_y, bool swap_xy) {
     (void)ctx;
     (void)mirror_x;
     (void)mirror_y;
@@ -580,14 +551,14 @@ static bool viewer_panel_set_orientation(void *ctx, bool mirror_x, bool mirror_y
     return true;
 }
 
-static bool viewer_panel_set_gap(void *ctx, int16_t x_gap, int16_t y_gap) {
+static bool fx_panel_set_gap(void *ctx, int16_t x_gap, int16_t y_gap) {
     (void)ctx;
     (void)x_gap;
     (void)y_gap;
     return true;
 }
 
-static bool viewer_panel_write_bitmap(void *ctx,
+static bool fx_panel_write_bitmap(void *ctx,
                                       int16_t x_start,
                                       int16_t y_start,
                                       int16_t x_end,
@@ -607,7 +578,7 @@ static bool viewer_panel_write_bitmap(void *ctx,
     return vg_panel_rgb565_blit(panel->gram_pixels, panel->width, panel->height, x_start, y_start, &view);
 }
 
-static bool viewer_panel_write_bitmap_2d(void *ctx,
+static bool fx_panel_write_bitmap_2d(void *ctx,
                                          int16_t x_start,
                                          int16_t y_start,
                                          int16_t x_end,
@@ -641,7 +612,7 @@ static bool viewer_panel_write_bitmap_2d(void *ctx,
     return vg_panel_rgb565_blit(panel->gram_pixels, panel->width, panel->height, x_start, y_start, &view);
 }
 
-static bool viewer_panel_set_display_enabled(void *ctx, bool enabled) {
+static bool fx_panel_set_display_enabled(void *ctx, bool enabled) {
     ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
     if (!panel) {
         return false;
@@ -650,7 +621,7 @@ static bool viewer_panel_set_display_enabled(void *ctx, bool enabled) {
     return true;
 }
 
-static bool viewer_panel_set_sleep(void *ctx, bool sleep) {
+static bool fx_panel_set_sleep(void *ctx, bool sleep) {
     ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
     if (!panel) {
         return false;
@@ -659,15 +630,15 @@ static bool viewer_panel_set_sleep(void *ctx, bool sleep) {
     return true;
 }
 
-static const VgPanelOps g_viewer_panel_ops = {
-    .reset = viewer_panel_reset,
-    .init = viewer_panel_init,
-    .set_orientation = viewer_panel_set_orientation,
-    .set_gap = viewer_panel_set_gap,
-    .write_bitmap = viewer_panel_write_bitmap,
-    .write_bitmap_2d = viewer_panel_write_bitmap_2d,
-    .set_display_enabled = viewer_panel_set_display_enabled,
-    .set_sleep = viewer_panel_set_sleep,
+static const VgPanelOps g_fx_panel_ops = {
+    .reset = fx_panel_reset,
+    .init = fx_panel_init,
+    .set_orientation = fx_panel_set_orientation,
+    .set_gap = fx_panel_set_gap,
+    .write_bitmap = fx_panel_write_bitmap,
+    .write_bitmap_2d = fx_panel_write_bitmap_2d,
+    .set_display_enabled = fx_panel_set_display_enabled,
+    .set_sleep = fx_panel_set_sleep,
 };
 typedef struct {
     pthread_t thread;
@@ -688,21 +659,21 @@ typedef struct {
     atomic_uint_fast64_t skipped_max_slot;
     atomic_uint_fast32_t last_transfer_rects;
     atomic_uint_fast64_t last_transfer_ns;
-    VgClipRect last_transfer_clip_rects[VIEWER_MAX_DIRTY_PLAN_RECTS];
+    VgClipRect last_transfer_clip_rects[FX_MAX_DIRTY_PLAN_RECTS];
     uint16_t last_transfer_clip_rect_count;
-    VgClipRect last_overlay_clip_rects[VIEWER_MAX_DIRTY_PLAN_RECTS];
+    VgClipRect last_overlay_clip_rects[FX_MAX_DIRTY_PLAN_RECTS];
     uint16_t last_overlay_clip_rect_count;
     uint_fast32_t last_overlay_frame_serial;
     pthread_mutex_t transfer_rects_mutex;
     atomic_uint_fast32_t animated_slots_mask;
 } ViewerRenderThread;
 static ViewerRenderThread g_render_thread = {0};
-static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot_states) {
-    if (!slot_states || g_viewer_slot_count == 0u) {
+static uint32_t fx_compute_animated_slots_mask(const VgRenderSlotState *slot_states) {
+    if (!slot_states || g_fx_slot_count == 0u) {
         return 0u;
     }
     uint32_t mask = 0u;
-    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+    for (uint8_t i = 0; i < g_fx_slot_count; i++) {
         if (slot_states[i].initialized && slot_states[i].has_animation) {
             mask |= (1u << i);
         }
@@ -710,9 +681,9 @@ static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot
     return mask;
 }
 
-static void viewer_destroy_slot_runtime_buffers(void) {
+static void fx_destroy_slot_runtime_buffers(void) {
     if (g_scene_slot_snapshots) {
-        for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+        for (uint8_t i = 0; i < g_fx_slot_count; i++) {
             RELEASE(g_scene_slot_snapshots[i]);
         }
     }
@@ -726,11 +697,11 @@ static void viewer_destroy_slot_runtime_buffers(void) {
     CLJ_HOST_FREE(g_slot_render_priority);
     g_scene_slot_snapshots = NULL;
     g_slot_render_priority = NULL;
-    g_viewer_slot_count = 0u;
+    g_fx_slot_count = 0u;
 }
 
-static void viewer_publish_slot_scene_snapshots(const ViewerSceneBundle *bundle) {
-    if (!bundle || !bundle->slots || !g_scene_slot_snapshots || bundle->slot_count != g_viewer_slot_count) {
+static void fx_publish_slot_scene_snapshots(const ViewerSceneBundle *bundle) {
+    if (!bundle || !bundle->slots || !g_scene_slot_snapshots || bundle->slot_count != g_fx_slot_count) {
         return;
     }
     bool locked = false;
@@ -740,7 +711,7 @@ static void viewer_publish_slot_scene_snapshots(const ViewerSceneBundle *bundle)
         }
         locked = true;
     }
-    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+    for (uint8_t i = 0; i < g_fx_slot_count; i++) {
         ID next_snapshot = bundle->slots[i].scene;
         if (g_scene_slot_snapshots[i] == next_snapshot) {
             continue;
@@ -754,11 +725,11 @@ static void viewer_publish_slot_scene_snapshots(const ViewerSceneBundle *bundle)
     }
 }
 
-static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
-    if (!bundle || !bundle->slots || bundle->slot_count == 0u || bundle->slot_count > VIEWER_MAX_SLOTS) {
+static bool fx_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
+    if (!bundle || !bundle->slots || bundle->slot_count == 0u || bundle->slot_count > FX_MAX_SLOTS) {
         return false;
     }
-    viewer_destroy_slot_runtime_buffers();
+    fx_destroy_slot_runtime_buffers();
     g_scene_slot_snapshots = (ID *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(ID));
     g_slot_render_priority = (uint8_t *)CLJ_HOST_MALLOC(bundle->slot_count * sizeof(uint8_t));
     g_render_thread.slot_states =
@@ -769,11 +740,11 @@ static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
         (uint32_t *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(uint32_t));
     if (!g_scene_slot_snapshots || !g_slot_render_priority || !g_render_thread.slot_states ||
         !g_render_thread.slot_seen_generations || !g_render_thread.last_rendered_generation) {
-        viewer_destroy_slot_runtime_buffers();
+        fx_destroy_slot_runtime_buffers();
         return false;
     }
-    g_viewer_slot_count = bundle->slot_count;
-    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+    g_fx_slot_count = bundle->slot_count;
+    for (uint8_t i = 0; i < g_fx_slot_count; i++) {
         g_scene_slot_snapshots[i] = RETAIN(bundle->slots[i].scene);
         g_slot_render_priority[i] = i;
     }
@@ -791,7 +762,7 @@ static uint64_t monotonic_now_ns(void) {
 #if defined(__APPLE__)
 static mach_timebase_info_data_t g_mach_timebase = {0};
 
-static void viewer_init_mach_timebase(void) {
+static void fx_init_mach_timebase(void) {
     if (g_mach_timebase.denom == 0) {
         (void)mach_timebase_info(&g_mach_timebase);
     }
@@ -802,9 +773,9 @@ static uint64_t ns_to_mach_abs(uint64_t ns) {
 }
 #endif
 
-static void viewer_set_realtime_thread_policy(void) {
+static void fx_set_realtime_thread_policy(void) {
 #if defined(__APPLE__)
-    viewer_init_mach_timebase();
+    fx_init_mach_timebase();
     thread_time_constraint_policy_data_t policy;
     policy.period      = (uint32_t)ns_to_mach_abs(16666667u);
     policy.computation = (uint32_t)ns_to_mach_abs(2000000u);
@@ -842,7 +813,7 @@ static void collect_render_thread_metrics(ViewerPerfSnapshot *out_snapshot) {
     out_snapshot->max_render_lock_hold_us = (double)render_hold_max_ns / 1000.0;
 }
 
-static size_t viewer_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_capacity) {
+static size_t fx_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_capacity) {
     if (!out_rects || out_capacity == 0u) {
         return 0u;
     }
@@ -860,13 +831,13 @@ static size_t viewer_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_
     return count;
 }
 
-static void viewer_store_last_transfer_result(uint_fast32_t frame_serial,
+static void fx_store_last_transfer_result(uint_fast32_t frame_serial,
                                               const VgClipRect *rects,
                                               size_t rect_count,
                                               uint64_t transfer_ns) {
     size_t stored_count = rect_count;
-    if (stored_count > VIEWER_MAX_DIRTY_PLAN_RECTS) {
-        stored_count = VIEWER_MAX_DIRTY_PLAN_RECTS;
+    if (stored_count > FX_MAX_DIRTY_PLAN_RECTS) {
+        stored_count = FX_MAX_DIRTY_PLAN_RECTS;
     }
     atomic_store_explicit(&g_render_thread.last_transfer_rects, (uint32_t)stored_count, memory_order_relaxed);
     atomic_store_explicit(&g_render_thread.last_transfer_ns, transfer_ns, memory_order_relaxed);
@@ -883,7 +854,7 @@ static void viewer_store_last_transfer_result(uint_fast32_t frame_serial,
     (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
 }
 
-static size_t viewer_take_pending_overlay_rects(uint_fast32_t *io_last_presented_overlay_frame_serial,
+static size_t fx_take_pending_overlay_rects(uint_fast32_t *io_last_presented_overlay_frame_serial,
                                                 VgClipRect *out_rects,
                                                 size_t out_capacity,
                                                 uint_fast32_t *out_frame_serial) {
@@ -917,20 +888,20 @@ static size_t viewer_take_pending_overlay_rects(uint_fast32_t *io_last_presented
 }
 
 /* Render-thread loop: changed slots render immediately; animated slots tick continuously. */
-static void *viewer_render_thread_main(void *arg) {
+static void *fx_render_thread_main(void *arg) {
     VgFrameBuffer *fb = (VgFrameBuffer *)arg;
     if (!fb || !g_render_thread.slot_states || !g_render_thread.slot_seen_generations ||
         !g_render_thread.last_rendered_generation || !g_scene_slot_snapshots || !g_slot_render_priority ||
-        g_viewer_slot_count == 0u) {
+        g_fx_slot_count == 0u) {
         return NULL;
     }
     CLJ_ASSERT(!subjective_c_is_interpreter_thread());
-    viewer_set_realtime_thread_policy();
+    fx_set_realtime_thread_policy();
     while (atomic_load_explicit(&g_render_thread.running, memory_order_acquire)) {
         uint32_t animated_mask = (uint32_t)atomic_load_explicit(&g_render_thread.animated_slots_mask,
                                                                  memory_order_acquire);
-        uint32_t wait_timeout_ms = (animated_mask == 0u) ? UINT32_MAX : VIEWER_ANIMATED_WAIT_TIMEOUT_MS;
-        uint32_t slot_generations[VIEWER_MAX_SLOTS] = {0};
+        uint32_t wait_timeout_ms = (animated_mask == 0u) ? UINT32_MAX : FX_ANIMATED_WAIT_TIMEOUT_MS;
+        uint32_t slot_generations[FX_MAX_SLOTS] = {0};
         uint32_t changed_mask = vg_slot_change_tracker_wait_for_changes(&g_slot_change_tracker,
                                                                         g_render_thread.slot_seen_generations,
                                                                         slot_generations,
@@ -946,13 +917,13 @@ static void *viewer_render_thread_main(void *arg) {
         uint32_t frame_dirty_pixels = 0u;
         uint32_t frame_changed_slots = 0u;
         uint64_t frame_skipped_total = 0u;
-        VgClipRect frame_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+        VgClipRect frame_dirty_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
         size_t frame_dirty_rect_count = 0u;
         if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
-        for (size_t p = 0; p < g_viewer_slot_count; p++) {
+        for (size_t p = 0; p < g_fx_slot_count; p++) {
             uint8_t i = g_slot_render_priority[p];
             bool slot_changed = (changed_mask & (1u << i)) != 0u;
             bool slot_animated_tick = !slot_changed && ((animated_mask & (1u << i)) != 0u);
@@ -976,7 +947,7 @@ static void *viewer_render_thread_main(void *arg) {
             uint16_t prev_clear_color = g_render_thread.slot_states[i].last_clear_color;
             uint8_t prev_guard_px = g_render_thread.slot_states[i].last_guard_px;
             VgRenderFrameSlotResult slot_result = {0};
-            VgClipRect refined_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            VgClipRect refined_dirty_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t refined_dirty_count = 0u;
             bool use_refined_dirty_rects = false;
             vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
@@ -1002,7 +973,7 @@ static void *viewer_render_thread_main(void *arg) {
                                                                   g_render_thread.slot_states[i].last_clip_rect,
                                                                   dirty_padding,
                                                                   refined_dirty_rects,
-                                                                  VIEWER_MAX_DIRTY_PLAN_RECTS,
+                                                                  FX_MAX_DIRTY_PLAN_RECTS,
                                                                   &refined_dirty_count) &&
                     refined_dirty_count > 0u) {
                     use_refined_dirty_rects = true;
@@ -1010,7 +981,7 @@ static void *viewer_render_thread_main(void *arg) {
                     slot_result.dirty_pixels = 0u;
                     for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
                         slot_result.dirty_pixels +=
-                            viewer_clip_rect_area_on_framebuffer(refined_dirty_rects[dirty_i], fb->width, fb->height);
+                            fx_clip_rect_area_on_framebuffer(refined_dirty_rects[dirty_i], fb->width, fb->height);
                     }
                 }
             }
@@ -1051,11 +1022,11 @@ static void *viewer_render_thread_main(void *arg) {
                     frame_changed_slots++;
                     frame_dirty_pixels += slot_result.dirty_pixels;
                     if (use_refined_dirty_rects &&
-                        frame_dirty_rect_count + refined_dirty_count <= VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                        frame_dirty_rect_count + refined_dirty_count <= FX_MAX_DIRTY_PLAN_RECTS) {
                         for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
                             frame_dirty_rects[frame_dirty_rect_count++] = refined_dirty_rects[dirty_i];
                         }
-                    } else if (frame_dirty_rect_count < VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                    } else if (frame_dirty_rect_count < FX_MAX_DIRTY_PLAN_RECTS) {
                         frame_dirty_rects[frame_dirty_rect_count++] = slot_result.dirty_rect;
                     }
                 }
@@ -1073,9 +1044,9 @@ static void *viewer_render_thread_main(void *arg) {
         }
         memcpy(g_render_thread.slot_seen_generations,
                slot_generations,
-               (size_t)g_viewer_slot_count * sizeof(uint32_t));
+               (size_t)g_fx_slot_count * sizeof(uint32_t));
         atomic_store_explicit(&g_render_thread.animated_slots_mask,
-                              viewer_compute_animated_slots_mask(g_render_thread.slot_states),
+                              fx_compute_animated_slots_mask(g_render_thread.slot_states),
                               memory_order_release);
         atomic_store_explicit(&g_render_thread.last_dirty_pixels, frame_dirty_pixels, memory_order_relaxed);
         atomic_store_explicit(&g_render_thread.last_changed_slots, frame_changed_slots, memory_order_relaxed);
@@ -1103,12 +1074,12 @@ static void *viewer_render_thread_main(void *arg) {
             uint64_t transfer_begin_ns = monotonic_now_ns();
             uint_fast32_t completed_frame_serial =
                 atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_relaxed) + 1u;
-            VgClipRect planned_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            VgClipRect planned_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t planned_count = vg_dirty_union_plan_rects(frame_dirty_rects,
                                                              frame_dirty_rect_count,
-                                                             VIEWER_DIRTY_PIXEL_BUDGET,
+                                                             FX_DIRTY_PIXEL_BUDGET,
                                                              planned_rects,
-                                                             VIEWER_MAX_DIRTY_PLAN_RECTS);
+                                                             FX_MAX_DIRTY_PLAN_RECTS);
             for (size_t rect_i = 0; rect_i < planned_count; rect_i++) {
                 (void)vg_panel_backend_submit_clip_rect(&g_gram_panel, fb, planned_rects[rect_i]);
             }
@@ -1116,9 +1087,9 @@ static void *viewer_render_thread_main(void *arg) {
             uint64_t transfer_ns = (transfer_end_ns > transfer_begin_ns)
                                        ? (transfer_end_ns - transfer_begin_ns)
                                        : 0u;
-            viewer_store_last_transfer_result(completed_frame_serial, planned_rects, planned_count, transfer_ns);
+            fx_store_last_transfer_result(completed_frame_serial, planned_rects, planned_count, transfer_ns);
         } else {
-            viewer_store_last_transfer_result(0u, NULL, 0u, 0u);
+            fx_store_last_transfer_result(0u, NULL, 0u, 0u);
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
     }
@@ -1131,9 +1102,9 @@ static bool start_render_thread(VgFrameBuffer *fb) {
         !g_render_thread.last_rendered_generation) {
         return false;
     }
-    memset(g_render_thread.slot_states, 0, (size_t)g_viewer_slot_count * sizeof(VgRenderSlotState));
-    memset(g_render_thread.slot_seen_generations, 0, (size_t)g_viewer_slot_count * sizeof(uint32_t));
-    memset(g_render_thread.last_rendered_generation, 0, (size_t)g_viewer_slot_count * sizeof(uint32_t));
+    memset(g_render_thread.slot_states, 0, (size_t)g_fx_slot_count * sizeof(VgRenderSlotState));
+    memset(g_render_thread.slot_seen_generations, 0, (size_t)g_fx_slot_count * sizeof(uint32_t));
+    memset(g_render_thread.last_rendered_generation, 0, (size_t)g_fx_slot_count * sizeof(uint32_t));
     atomic_store_explicit(&g_render_thread.rendered_frame_serial, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.last_dirty_pixels, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.last_changed_slots, 0u, memory_order_release);
@@ -1157,7 +1128,7 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     g_render_thread.last_overlay_clip_rect_count = 0u;
     g_render_thread.last_overlay_frame_serial = 0u;
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
-    if (subjective_c_pthread_create_named(&g_render_thread.thread, NULL, viewer_render_thread_main, fb, "render") != 0) {
+    if (subjective_c_pthread_create_named(&g_render_thread.thread, NULL, fx_render_thread_main, fb, "render") != 0) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
         (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
@@ -1181,20 +1152,20 @@ static void stop_render_thread(void) {
     g_render_thread.started = false;
 }
 
-static bool viewer_renderer_start_callback(ID slot_atoms, void *user_data) {
+static bool fx_renderer_start_callback(ID slot_atoms, void *user_data) {
     (void)slot_atoms;
     VgFrameBuffer *fb = (VgFrameBuffer *)user_data;
     return start_render_thread(fb);
 }
 
-static bool viewer_renderer_stop_callback(void *user_data) {
+static bool fx_renderer_stop_callback(void *user_data) {
     (void)user_data;
     stop_render_thread();
     return true;
 }
 
 /* Wait for the next presentation deadline. */
-static bool viewer_wait_for_frame_pacing(ViewerHostWindow *window,
+static bool fx_wait_for_frame_pacing(ViewerHostWindow *window,
                                          bool use_mfb_waitsync,
                                          uint64_t target_frame_ns,
                                          uint64_t *next_frame_deadline_ns,
@@ -1202,7 +1173,7 @@ static bool viewer_wait_for_frame_pacing(ViewerHostWindow *window,
     uint64_t waitsync_begin_ns = monotonic_now_ns();
     bool waitsync_ok = true;
     if (use_mfb_waitsync) {
-        waitsync_ok = viewer_host_window_wait_sync(window);
+        waitsync_ok = fx_host_window_wait_sync(window);
     } else {
 #if defined(__APPLE__)
         uint64_t deadline_mach = mach_absolute_time() +
@@ -1245,7 +1216,7 @@ static bool viewer_wait_for_frame_pacing(ViewerHostWindow *window,
  * ESP32 SPI/I80 displays where the bus reads the live GRAM with no double-buffer.
  * Tearing is possible and accepted — same as on real hardware.
  */
-static ViewerFrameRenderResult viewer_poll_render_frame(void) {
+static ViewerFrameRenderResult fx_poll_render_frame(void) {
     ViewerFrameRenderResult result = {0};
     result.frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
     result.dirty_pixels = atomic_load_explicit(&g_render_thread.last_dirty_pixels, memory_order_relaxed);
@@ -1255,7 +1226,7 @@ static ViewerFrameRenderResult viewer_poll_render_frame(void) {
     return result;
 }
 
-static void viewer_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, size_t count) {
+static void fx_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, size_t count) {
     if (!src || !dst) {
         return;
     }
@@ -1264,7 +1235,7 @@ static void viewer_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, s
     }
 }
 
-static bool viewer_should_run_collision_step(uint_fast32_t frame_serial,
+static bool fx_should_run_collision_step(uint_fast32_t frame_serial,
                                              uint_fast32_t *io_last_collision_frame_serial) {
     if (!io_last_collision_frame_serial || frame_serial == 0u) {
         return false;
@@ -1276,24 +1247,24 @@ static bool viewer_should_run_collision_step(uint_fast32_t frame_serial,
     return true;
 }
 
-static size_t viewer_collect_collision_dirty_rects(VgClipRect *out_rects, size_t out_capacity) {
+static size_t fx_collect_collision_dirty_rects(VgClipRect *out_rects, size_t out_capacity) {
     if (!out_rects || out_capacity == 0u) {
         return 0u;
     }
-    return viewer_copy_last_transfer_rects(out_rects, out_capacity);
+    return fx_copy_last_transfer_rects(out_rects, out_capacity);
 }
 
-static void viewer_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRuntimeFlags *flags) {
+static void fx_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRuntimeFlags *flags) {
     if (!flags) {
         return;
     }
-    if (viewer_key_pressed_once(keys, KB_KEY_R, &flags->r_key_was_down)) {
+    if (fx_key_pressed_once(keys, KB_KEY_R, &flags->r_key_was_down)) {
         flags->redraw_overlay_enabled = !flags->redraw_overlay_enabled;
     }
 }
 #endif
 
-int viewer_host_app_run(void) {
+int fx_host_app_run(void) {
 #if !defined(TINYCLJ_WITH_MINIFB)
     fprintf(stderr, "MiniFB support is disabled for this build.\n");
     return 1;
@@ -1306,14 +1277,11 @@ int viewer_host_app_run(void) {
     bool render_thread_started = false;
     bool runloop_thread_started = false;
     bool demo_bundle_initialized = false;
-    ID direct_input_fn = NULL;
-    ID direct_launch_arg = NULL;
-    ID direct_pause_arg = NULL;
     ViewerSceneBundle demo_bundle = {0};
     ViewerSpatialRuleSet spatial_rules = {0};
     int exit_code = 1;
     uint64_t app_start_ns = monotonic_now_ns();
-    viewer_set_realtime_thread_policy();
+    fx_set_realtime_thread_policy();
 
     g_gram_pixels = fb_pixels;
     g_gram_panel_ctx.gram_pixels = fb_pixels;
@@ -1321,7 +1289,7 @@ int viewer_host_app_run(void) {
     g_gram_panel_ctx.height = VIEW_H;
     g_gram_panel_ctx.display_enabled = false;
     g_gram_panel_ctx.sleeping = false;
-    g_gram_panel.ops = &g_viewer_panel_ops;
+    g_gram_panel.ops = &g_fx_panel_ops;
     g_gram_panel.ctx = &g_gram_panel_ctx;
     g_gram_panel.initialized = false;
     memset(g_render_buffer, 0, sizeof(g_render_buffer));
@@ -1340,22 +1308,22 @@ int viewer_host_app_run(void) {
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
-    viewer_seed_gpio_key_levels();
+    fx_seed_gpio_key_levels();
     tiny_fx_host_apply_heap_limit();
-    EvalState *viewer_eval_state = evalstate_new(true);
-    if (!viewer_eval_state) {
+    EvalState *fx_eval_state = evalstate_new(true);
+    if (!fx_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
         goto cleanup;
     }
-    evalstate_set_ns(viewer_eval_state, "user");
-    if (!tiny_fx_gfx_require_records_namespace(viewer_eval_state) ||
-        !tiny_fx_gfx_ensure_schema(viewer_eval_state)) {
+    evalstate_set_ns(fx_eval_state, "user");
+    if (!tiny_fx_gfx_require_records_namespace(fx_eval_state) ||
+        !tiny_fx_gfx_ensure_schema(fx_eval_state)) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    ViewerConfigSource config_source = viewer_default_config_source();
+    ViewerConfigSource config_source = fx_default_config_source();
     TRY {
-        if (!viewer_load_deployment_config(viewer_eval_state, config_source, &demo_bundle, &spatial_rules)) {
+        if (!fx_load_deployment_config(fx_eval_state, config_source, &demo_bundle, &spatial_rules)) {
             fprintf(stderr, "Failed to load viewer config from %s\n", config_source.display_name);
             goto cleanup;
         }
@@ -1367,26 +1335,12 @@ int viewer_host_app_run(void) {
         goto cleanup;
     } END_TRY
     demo_bundle_initialized = true;
-    ID direct_input_resolved = eval_string("[tiny-breakout.runtime/apply-input! {:launch true} {:pause true}]",
-                                           viewer_eval_state);
-    if (direct_input_resolved && is_vector(direct_input_resolved)) {
-        CljPersistentVector *resolved_vec = as_vector(direct_input_resolved);
-        if (resolved_vec && vector_count(resolved_vec) == 3u) {
-            direct_input_fn = RETAIN(vector_nth(resolved_vec, 0u));
-            direct_launch_arg = RETAIN(vector_nth(resolved_vec, 1u));
-            direct_pause_arg = RETAIN(vector_nth(resolved_vec, 2u));
-        }
-    }
-    if (!direct_input_fn || !direct_launch_arg || !direct_pause_arg) {
-        fprintf(stderr, "Failed to resolve direct runtime input actions\n");
-        goto cleanup;
-    }
-    if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
+    if (!fx_init_slot_runtime_buffers(&demo_bundle)) {
         fprintf(stderr, "Failed to initialize configured slot runtime\n");
         goto cleanup;
     }
     slot_runtime_initialized = true;
-    if (!start_runloop_thread(viewer_eval_state)) {
+    if (!start_runloop_thread(fx_eval_state)) {
         fprintf(stderr, "Failed to start Clojure runloop thread\n");
         goto cleanup;
     }
@@ -1396,9 +1350,8 @@ int viewer_host_app_run(void) {
         goto cleanup;
     }
     slot_tracker_initialized = true;
-    viewer_collision_set_dispatch_context(&demo_bundle, &spatial_rules);
-    tiny_renderer_lifecycle_set_callbacks(viewer_renderer_start_callback,
-                                          viewer_renderer_stop_callback,
+    tiny_renderer_lifecycle_set_callbacks(fx_renderer_start_callback,
+                                          fx_renderer_stop_callback,
                                           &fb);
     if (!tiny_renderer_lifecycle_start(NULL)) {
         fprintf(stderr, "Failed to start render thread\n");
@@ -1407,17 +1360,17 @@ int viewer_host_app_run(void) {
     render_thread_started = true;
 
 #if defined(__APPLE__)
-    macos_viewer_begin_performance_activity();
+    macos_fx_begin_performance_activity();
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    window = viewer_host_window_open("tiny-fx", default_win_w, default_win_h);
+    window = fx_host_window_open("tiny-fx", default_win_w, default_win_h);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         goto cleanup;
     }
-    viewer_host_window_show_cursor(window, true);
-    (void)viewer_host_window_set_viewport(window, 0, 0, default_win_w, default_win_h);
+    fx_host_window_show_cursor(window, true);
+    (void)fx_host_window_set_viewport(window, 0, 0, default_win_w, default_win_h);
     ViewerPerfWindow perf_window;
     perf_window_init(&perf_window, 0.0);
 
@@ -1453,7 +1406,7 @@ int viewer_host_app_run(void) {
 
     while (true) {
         double time_s = (double)(monotonic_now_ns() - app_start_ns) / 1e9;
-        if (!viewer_wait_for_frame_pacing(window,
+        if (!fx_wait_for_frame_pacing(window,
                                           runtime_flags.use_mfb_waitsync,
                                           target_frame_ns,
                                           &next_frame_deadline_ns,
@@ -1461,51 +1414,41 @@ int viewer_host_app_run(void) {
             break;
         }
 
-        if (!viewer_host_window_pump_events(window)) {
+        if (!fx_host_window_pump_events(window)) {
             break;
         }
-        const uint8_t *keys = viewer_host_window_get_key_buffer(window);
-        if (viewer_should_exit_for_keys(keys)) {
+        const uint8_t *keys = fx_host_window_get_key_buffer(window);
+        if (fx_should_exit_for_keys(keys)) {
             break;
         }
-        viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
-        viewer_update_redraw_overlay_toggle(keys, &runtime_flags);
-        bool fire_pressed = viewer_key_group_pressed_once(keys,
-                                                         KB_KEY_SPACE,
-                                                         KB_KEY_ENTER,
-                                                         &runtime_flags.fire_key_was_down);
-        bool pause_pressed = viewer_key_pressed_once(keys, KB_KEY_Y, &runtime_flags.pause_key_was_down);
-        if (!viewer_enqueue_direct_input_action(fire_pressed, (CljObject *)direct_input_fn, direct_launch_arg) ||
-            !viewer_enqueue_direct_input_action(pause_pressed, (CljObject *)direct_input_fn, direct_pause_arg)) {
-            fprintf(stderr, "Failed to enqueue direct runtime input action\n");
-            break;
-        }
-        viewer_simulate_gpio_keys(keys, &runtime_flags);
-        viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
-        viewer_publish_slot_scene_snapshots(&demo_bundle);
+        fx_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
+        fx_update_redraw_overlay_toggle(keys, &runtime_flags);
+        fx_simulate_gpio_keys(keys, &runtime_flags);
+        fx_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
+        fx_publish_slot_scene_snapshots(&demo_bundle);
 
-        ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
+        ViewerFrameRenderResult frame_result = fx_poll_render_frame();
         bool has_new_render_frame = frame_result.frame_serial != last_presented_frame_serial;
-        if (viewer_should_run_collision_step(frame_result.frame_serial, &last_collision_frame_serial)) {
-            VgClipRect collision_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
-            size_t collision_dirty_count = viewer_collect_collision_dirty_rects(collision_dirty_rects,
-                                                                                VIEWER_MAX_DIRTY_PLAN_RECTS);
-            (void)viewer_collision_detect_step(&demo_bundle,
+        if (fx_should_run_collision_step(frame_result.frame_serial, &last_collision_frame_serial)) {
+            VgClipRect collision_dirty_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t collision_dirty_count = fx_collect_collision_dirty_rects(collision_dirty_rects,
+                                                                                FX_MAX_DIRTY_PLAN_RECTS);
+            (void)fx_collision_detect_step(&demo_bundle,
                                                &spatial_rules,
                                                platform_current_time_ms(),
                                                collision_dirty_rects,
                                                collision_dirty_count);
         }
 
-        viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
+        fx_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
         if (has_new_render_frame) {
-            VgClipRect overlay_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
-            size_t overlay_count = viewer_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
+            VgClipRect overlay_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t overlay_count = fx_take_pending_overlay_rects(&last_presented_overlay_frame_serial,
                                                                      overlay_rects,
-                                                                     VIEWER_MAX_DIRTY_PLAN_RECTS,
+                                                                     FX_MAX_DIRTY_PLAN_RECTS,
                                                                      NULL);
             if (runtime_flags.redraw_overlay_enabled && overlay_count > 0u) {
-                viewer_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
+                fx_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
             }
         }
 
@@ -1579,8 +1522,8 @@ int viewer_host_app_run(void) {
                                dt_avg_ms,
                                up_avg_ms);
             }
-            macos_viewer_set_window_title(title);
-            if (viewer_perf_stderr_diag_enabled()) {
+            macos_fx_set_window_title(title);
+            if (fx_perf_stderr_diag_enabled()) {
                 if (perf_snapshot.skipped_generations > 0u) {
                     fprintf(stderr,
                             "[viewer] skip-diag: total=%llu frame-max=%llu slot-max=%llu "
@@ -1624,7 +1567,7 @@ int viewer_host_app_run(void) {
         last_present_ns = now_ns;
 
         uint64_t update_begin_ns = monotonic_now_ns();
-        mfb_update_state state = viewer_host_window_update(window, window_pixels, VIEW_W, VIEW_H);
+        mfb_update_state state = fx_host_window_update(window, window_pixels, VIEW_W, VIEW_H);
         uint64_t update_end_ns = monotonic_now_ns();
         uint64_t update_ns = (update_end_ns > update_begin_ns)
                                  ? (update_end_ns - update_begin_ns)
@@ -1645,17 +1588,14 @@ int viewer_host_app_run(void) {
     exit_code = 0;
 
 cleanup:
-    RELEASE(direct_input_fn);
-    RELEASE(direct_launch_arg);
-    RELEASE(direct_pause_arg);
 #if defined(__APPLE__)
     if (window) {
-        macos_viewer_save_window_position();
+        macos_fx_save_window_position();
     }
-    macos_viewer_end_performance_activity();
+    macos_fx_end_performance_activity();
 #endif
     if (window) {
-        viewer_host_window_close(window);
+        fx_host_window_close(window);
     }
     if (runloop_thread_started) {
         stop_runloop_thread();
@@ -1665,13 +1605,12 @@ cleanup:
     }
     tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
     if (slot_runtime_initialized) {
-        viewer_destroy_slot_runtime_buffers();
+        fx_destroy_slot_runtime_buffers();
     }
     if (slot_tracker_initialized) {
         vg_slot_change_tracker_destroy(&g_slot_change_tracker);
     }
     if (demo_bundle_initialized) {
-        viewer_collision_reset_dispatch_state();
         destroy_scene_bundle(&demo_bundle);
     }
     destroy_spatial_rule_set(&spatial_rules);

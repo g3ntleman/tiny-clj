@@ -59,10 +59,6 @@ static const char tiny_fx_sound_code[] =
 #include "tiny-fx.sound.clj.inc"
     ;
 
-static const char tiny_fx_sound_native_code[] =
-#include "tiny-fx.sound-native.clj.inc"
-    ;
-
 static const char tiny_fx_assets_code[] =
 #include "tiny-fx.assets.clj.inc"
     ;
@@ -203,7 +199,6 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/deployment.clj", tiny_clj_deployment_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),

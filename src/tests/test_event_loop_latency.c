@@ -187,6 +187,37 @@ static void *event_loop_ingress_producer_thread(void *arg) {
     return NULL;
 }
 
+typedef struct {
+    const char *expr;
+    pthread_t producer_thread;
+    pthread_t callback_thread;
+    bool ran;
+    bool eval_ok;
+    bool enqueue_ok;
+} NativeIngressEvalArgs;
+
+static void event_loop_native_eval_callback(void *ctx, EvalState *st) {
+    NativeIngressEvalArgs *args = (NativeIngressEvalArgs *)ctx;
+    if (!args) {
+        return;
+    }
+    args->callback_thread = pthread_self();
+    args->ran = true;
+    ID result = eval_string(args->expr, st);
+    args->eval_ok = (result == clj_true);
+}
+
+static void *event_loop_native_eval_producer_thread(void *arg) {
+    NativeIngressEvalArgs *args = (NativeIngressEvalArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->producer_thread = pthread_self();
+    args->enqueue_ok =
+        event_loop_enqueue_ingress_native(event_loop_native_eval_callback, args, NULL);
+    return NULL;
+}
+
 TEST(test_event_loop_ingress_concurrent_producers_fifo_drain) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
@@ -237,6 +268,39 @@ TEST(test_event_loop_ingress_concurrent_producers_fifo_drain) {
     TEST_ASSERT_NOT_NULL(marker);
     TEST_ASSERT_TRUE(is_fixnum(marker));
     TEST_ASSERT_EQUAL_INT(expected, as_fixnum(marker));
+}
+
+TEST(test_event_loop_native_ingress_callback_can_call_clojure_on_drain_thread) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-native-marker (atom nil)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    NativeIngressEvalArgs args = {
+        .expr = "(do (reset! event-loop-native-marker :from-native) true)",
+    };
+    pthread_t producer;
+    int rc = pthread_create(&producer, NULL, event_loop_native_eval_producer_thread, &args);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+    rc = pthread_join(producer, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+
+    TEST_ASSERT_TRUE_MESSAGE(args.enqueue_ok, "native ingress enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(), "native ingress should make work visible");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "run_next should execute queued native ingress callback");
+    TEST_ASSERT_TRUE_MESSAGE(args.ran, "native ingress callback should run");
+    TEST_ASSERT_TRUE_MESSAGE(args.eval_ok, "native ingress callback should be able to evaluate Clojure");
+    TEST_ASSERT_FALSE_MESSAGE(pthread_equal(args.producer_thread, args.callback_thread),
+                              "native ingress callback must not execute on producer thread");
+
+    ID marker = eval_string("@event-loop-native-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":from-native"), marker);
 }
 
 TEST(test_event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain) {
