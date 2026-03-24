@@ -6,6 +6,13 @@
 ;; Direct var aliases to tiny-clj.runtime (no forwarding wrapper functions).
 ;; This keeps arity/error behavior identical to the native runtime entry points.
 
+(defn color
+  "Converts either a 24-bit RGB888 integer (0xRRGGBB) or three 8-bit RGB
+channels to an RGB565 integer color. Throws IllegalArgumentException for
+invalid input."
+  [& args]
+  :native)
+
 ^#^{:doc "Starts the renderer thread. Usage: (start-renderer!) or (start-renderer! slot-descriptors).
 Returns true on success, false when unsupported in the active runtime backend."}
 (def start-renderer! tiny-clj.runtime/start-renderer!)

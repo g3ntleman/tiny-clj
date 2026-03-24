@@ -1101,8 +1101,7 @@ Clojure functions triggered by `schedule-periodic` timers or input events.
 ### 9h: Host-viewer color authoring readability (DONE)
 
 - Status: DONE (2026-03-04).
-- `tiny-fx.gfx-scene/color` converts `0xRRGGBB` → RGB565.
-- `tiny-fx.gfx-scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
+- `tiny-fx.gfx/color` converts `0xRRGGBB` → RGB565.
 - Demo palette migrated to `(color 0xRRGGBB)` style.
 
 ### 9i: Rendered-State Query API (Clojure → Render Thread)

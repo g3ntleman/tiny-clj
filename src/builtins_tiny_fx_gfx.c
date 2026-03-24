@@ -75,7 +75,7 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
 ID native_tinyfx_color_color(ID *args, unsigned int argc) {
     (void)args;
     (void)argc;
-    return tinyclj_runtime_fx_disabled("tiny-fx.color/color");
+    return tinyclj_runtime_fx_disabled("tiny-fx.gfx/color");
 }
 
 #else
@@ -495,10 +495,20 @@ void builtins_tiny_fx_gfx_reset_cached_state(void) {
 ID native_tinyfx_color_color(ID *args, unsigned int argc) {
     if (argc == 1u) {
         if (!is_fixnum(args[0])) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB888 input must be an integer in range 0x000000..0xFFFFFF",
+                            __FILE__,
+                            __LINE__,
+                            0);
             return NULL;
         }
         int32_t rgb = as_fixnum(args[0]);
         if (rgb < 0 || rgb > 0xFFFFFF) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB888 input must be an integer in range 0x000000..0xFFFFFF",
+                            __FILE__,
+                            __LINE__,
+                            0);
             return NULL;
         }
         return tinyfx_color_rgb565((uint8_t)((uint32_t)rgb >> 16),
@@ -512,12 +522,17 @@ ID native_tinyfx_color_color(ID *args, unsigned int argc) {
         if (!tinyfx_color_parse_u8(args[0], &r) ||
             !tinyfx_color_parse_u8(args[1], &g) ||
             !tinyfx_color_parse_u8(args[2], &b)) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB channel inputs must be integers in range 0..255",
+                            __FILE__,
+                            __LINE__,
+                            0);
             return NULL;
         }
         return tinyfx_color_rgb565(r, g, b);
     }
     throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                              "Wrong number of args (%u) passed to: tiny-fx.color/color",
+                              "Wrong number of args (%u) passed to: tiny-fx.gfx/color",
                               argc);
     return NULL;
 }

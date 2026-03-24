@@ -425,7 +425,7 @@ TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
 TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     eval_string("(require 'tiny-fx.startup)", g_test_eval_state);
-    eval_string("(require 'tiny-fx.color)", g_test_eval_state);
+    eval_string("(require 'tiny-fx.gfx)", g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (tiny-fx.startup/create-startup-bundle) "
@@ -458,11 +458,11 @@ TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars
         "      title (get score-root 2001) "
         "      subtitle (get score-root 2002) "
         "      display-screen (get score-root 1101)] "
-        "  (println \"t:\" (:stroke-color (:style title)) \"e:\" (tiny-fx.color/color 0x9BBC0F)) "
-        "  (println \"s:\" (:stroke-color (:style subtitle)) \"e:\" (tiny-fx.color/color 0x9BBC0F)) "
+        "  (println \"t:\" (:stroke-color (:style title)) \"e:\" (tiny-fx.gfx/color 0x9BBC0F)) "
+        "  (println \"s:\" (:stroke-color (:style subtitle)) \"e:\" (tiny-fx.gfx/color 0x9BBC0F)) "
         "  (println \"hf:\" (:has-fill (:style display-screen)) \"fc:\" (:fill-color (:style display-screen))) "
-        "  (and (= (tiny-fx.color/color 0x9BBC0F) (:stroke-color (:style title))) "
-        "       (= (tiny-fx.color/color 0x9BBC0F) (:stroke-color (:style subtitle))) "
+        "  (and (= (tiny-fx.gfx/color 0x9BBC0F) (:stroke-color (:style title))) "
+        "       (= (tiny-fx.gfx/color 0x9BBC0F) (:stroke-color (:style subtitle))) "
         "       (= true (:has-fill (:style display-screen))) "
         "       (= 0 (:fill-color (:style display-screen)))))",
         g_test_eval_state);
@@ -1041,7 +1041,7 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx-scene) "
-        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx) "
         "  (let [style (record-create (quote Style) [65535 1 true false 0 false 0]) "
         "        root (record-create (quote Group) ['root nil style true [3021 3022] nil]) "
         "        star-a (record-create (quote Tri) [3021 nil style true 8 8 10 4 12 8 nil]) "
@@ -1109,7 +1109,7 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
     ID scene = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx-scene) "
-        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx) "
         "  (defrecord TimelineEase [keyframes loop ease]) "
         "  (let [entities {'root (tiny-fx.gfx-scene/->Line 'root "
         "                            (record-create (quote TimelineEase) "
@@ -1391,6 +1391,45 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_f
     TEST_ASSERT_TRUE(result.dirty_rect.w > 0);
     TEST_ASSERT_TRUE(result.dirty_rect.h > 0);
     TEST_ASSERT_NOT_EQUAL(31u, pixels[(size_t)10 * TEST_W + 8]);
+}
+
+TEST(test_vector_scene_graph_discrete_keyframes_change_style_pixels_over_time) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [fill (record-create (quote Timeline) "
+        "               [[[0 (tiny-fx.gfx/color 24 24 24)] "
+        "                 [50 (tiny-fx.gfx/color 24 24 24)] "
+        "                 [50 (tiny-fx.gfx/color 128 128 128)] "
+        "                 [100 (tiny-fx.gfx/color 128 128 128)] "
+        "                 [100 (tiny-fx.gfx/color 255 255 255)]] "
+        "                false false]) "
+        "        entities {'root (->Rect 'root nil "
+        "                              (->Style 0 1 true true fill false 0) "
+        "                              true 4 8 12 8 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [4 8 12 8] 0 true true 0 0 nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    VgRenderFrameSlotResult result = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(scene, &state, &fb, 1u, 25u, false, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    uint16_t before = pixels[(size_t)10 * TEST_W + 8];
+
+    memset(&result, 0, sizeof(result));
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(scene, &state, &fb, 1u, 75u, true, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    TEST_ASSERT_TRUE(result.dirty_pixels > 0u);
+    uint16_t after = pixels[(size_t)10 * TEST_W + 8];
+
+    TEST_ASSERT_NOT_EQUAL(before, after);
 }
 
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_union) {

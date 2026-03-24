@@ -820,7 +820,7 @@ TEST(test_breakout_contract_title_scene_hides_level_bricks_until_launch) {
         "  (def breakout-title-root (get breakout-title-index (:root breakout-title-frame))) "
         "  (def breakout-title-overlay (get breakout-title-index 1005)) "
         "  (and (= [1001 1002 1003 1004 1005 1006 1007] (:children breakout-title-root)) "
-        "       (= \"Breakout\" (:text breakout-title-overlay)) "
+        "       (= \"\" (:text breakout-title-overlay)) "
         "       (= nil (get breakout-title-index 2001))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
@@ -854,27 +854,33 @@ TEST(test_breakout_contract_scene_uses_exact_terminal_overlay_texts) {
         "        win (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :victory)) "
         "        lose-overlay (get (:index lose) 1005) "
         "        win-overlay (get (:index win) 1005)] "
-        "    (and (= \"Game Over\" (:text lose-overlay)) "
-        "         (= \"You win!\" (:text win-overlay)))))",
+        "    (and (= \"GAME OVER\" (:text lose-overlay)) "
+        "         (= \"YOU WIN!\" (:text win-overlay)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
-TEST(test_breakout_contract_scene_centers_breakout_level_clear_and_game_over_overlay_texts) {
+TEST(test_breakout_contract_scene_centers_all_overlay_texts_via_shared_path) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (let [title (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :title)) "
+        "  (let [title (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :title :overlay-start-ms 123)) "
         "        clear (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :level-clear)) "
         "        lose (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :game-over)) "
+        "        win (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :victory)) "
+        "        pause (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :pause)) "
         "        title-overlay (get (:index title) 1005) "
         "        clear-overlay (get (:index clear) 1005) "
-        "        lose-overlay (get (:index lose) 1005)] "
+        "        lose-overlay (get (:index lose) 1005) "
+        "        win-overlay (get (:index win) 1005) "
+        "        pause-overlay (get (:index pause) 1005)] "
         "    (and (= 120 (:x title-overlay)) "
         "         (= 108 (:x clear-overlay)) "
-        "         (= 118 (:x lose-overlay)))))",
+        "         (= 118 (:x lose-overlay)) "
+        "         (= 126 (:x win-overlay)) "
+        "         (= 130 (:x pause-overlay)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -885,7 +891,7 @@ TEST(test_breakout_contract_scene_animates_overlay_text_color_on_phase_entry) {
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx) "
         "  (let [scene (tiny-breakout.scene/build-scene "
         "                (assoc (tiny-breakout.core/init-state) "
         "                       :phase :game-over "
@@ -893,11 +899,27 @@ TEST(test_breakout_contract_scene_animates_overlay_text_color_on_phase_entry) {
         "        overlay (get (:index scene) 1005) "
         "        style (:style overlay) "
         "        kf (:keyframes (:stroke-color style))] "
-        "    (and (= \"Game Over\" (:text overlay)) "
-        "         (= [[123 (tiny-fx.color/color 0x181818)] "
-        "             [563 (tiny-fx.color/color 0x989898)] "
-        "             [1003 (tiny-fx.color/color 0xFFFFFF)]] "
-        "            kf))))",
+        "    (and (= \"GAME OVER\" (:text overlay)) "
+        "         (> (count kf) 10) "
+        "         (= (first (nth kf 1)) (first (nth kf 2))) "
+        "         (= [123 (tiny-fx.gfx/color 24 24 24)] (first kf)) "
+        "         (= [1003 (tiny-fx.gfx/color 255 255 255)] (last kf)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_title_overlay_text_appears_only_with_overlay_animation) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [static-title (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :title)) "
+        "        animated-title (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :title :overlay-start-ms 123)) "
+        "        static-overlay (get (:index static-title) 1005) "
+        "        animated-overlay (get (:index animated-title) 1005)] "
+        "    (and (= \"\" (:text static-overlay)) "
+        "         (= \"BREAKOUT\" (:text animated-overlay)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }

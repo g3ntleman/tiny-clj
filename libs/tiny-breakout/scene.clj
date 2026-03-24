@@ -1,6 +1,6 @@
 (ns tiny-breakout.scene
   (:require [tiny-breakout.core :as core]
-            [tiny-fx.color :as color]
+            [tiny-fx.gfx :as gfx]
             [tiny-fx.gfx-scene :refer [->Group ->Rect ->Style ->VText normalize-spatial-rule]]))
 
 (defn paddle-prototype
@@ -109,37 +109,69 @@
                    true)))))))
 
 (defn overlay-text
+  "Returns the shared centered overlay label for one breakout phase."
   [phase]
   (cond
-    (= phase :game-over) "Game Over"
-    (= phase :victory) "You win!"
-    (= phase :pause) "Paused"
-    (= phase :title) "Breakout"
-    (= phase :level-clear) "Level Clear"
+    (= phase :game-over) "GAME OVER"
+    (= phase :victory) "YOU WIN!"
+    (= phase :pause) "PAUSED"
+    (= phase :title) "BREAKOUT"
+    (= phase :level-clear) "LEVEL CLEAR"
     :else ""))
 
-(def ^:private centered-overlay-x-by-text
-  {"Breakout" 120
-   "Level Clear" 108
-   "Game Over" 118})
+(def ^:private overlay-char-advance
+  {\space 5
+   \! 4})
+
+(defn- overlay-text-width
+  [overlay]
+  (reduce (fn [width ch]
+            (+ width (get overlay-char-advance ch 10)))
+          0
+          overlay))
 
 (defn overlay-x
+  "Returns the centered x position for one overlay label in the breakout font."
   [overlay]
-  (if (contains? centered-overlay-x-by-text overlay)
-    (get centered-overlay-x-by-text overlay)
-    100))
+  (if (= overlay "")
+    100
+    (quot (+ (- core/playfield-width (overlay-text-width overlay)) 1) 2)))
 
 (def ^:private overlay-fade-duration-ms 880)
+(def ^:private overlay-fade-dark-gray 24)
+(def ^:private overlay-fade-light-gray 255)
+(def ^:private overlay-fade-stop-count 11)
+
+(defn- overlay-fade-stop-times
+  []
+  (mapv (fn [step]
+          (quot (* overlay-fade-duration-ms step) overlay-fade-stop-count))
+        (range 0 (+ overlay-fade-stop-count 1))))
+
+(defn- overlay-fade-gray-rgb565
+  [offset-ms]
+  (let [gray (+ overlay-fade-dark-gray
+                (quot (* (- overlay-fade-light-gray overlay-fade-dark-gray) offset-ms)
+                      overlay-fade-duration-ms))]
+    (gfx/color gray gray gray)))
 
 (defn overlay-fade-keyframes
-  "Monotonic keyframes so the renderer linearly interpolates stroke color (RGB565)
-  between stops — unlike step-keyframes, which duplicates timestamps and looks stepped."
+  "Compiles explicit grayscale stops into duplicated-timestamp keyframes so the
+  shared timeline path stays in Clojure and never interpolates packed RGB565 values."
   [start-ms]
-  (let [mid-ms (+ start-ms (quot overlay-fade-duration-ms 2))
-        end-ms (+ start-ms overlay-fade-duration-ms)]
-    [[start-ms (color/color 0x181818)]
-     [mid-ms (color/color 0x989898)]
-     [end-ms (color/color 0xffffff)]]))
+  (let [stops (mapv (fn [offset-ms]
+                      [(+ start-ms offset-ms)
+                       (overlay-fade-gray-rgb565 offset-ms)])
+                    (overlay-fade-stop-times))]
+    (if (empty? stops)
+      []
+      (reduce (fn [keyframes [next-ms next-value]]
+                (let [[_ prev-value] (peek keyframes)]
+                  (conj keyframes
+                        [next-ms prev-value]
+                        [next-ms next-value])))
+              [(first stops)]
+              (rest stops)))))
 
 (defn overlay-style
   [state overlay]
@@ -151,7 +183,7 @@
                                         [(overlay-fade-keyframes start-ms)
                                          false
                                          false])
-                         (color/color 0xffffff))]
+                         (gfx/color 0xffffff))]
       (->Style stroke-color nil true false nil false nil))))
 
 (defn brick->entity
@@ -242,7 +274,11 @@
           brick-shape (brick-prototype)
           score-text (str "Score: " score)
           lives-text (str lives)
-          overlay (overlay-text phase)
+          overlay-label (overlay-text phase)
+          overlay (if (and (= phase :title)
+                           (not (number? (get state :overlay-start-ms))))
+                    ""
+                    overlay-label)
           overlay-x (overlay-x overlay)
           overlay-style (overlay-style state overlay)
           base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)

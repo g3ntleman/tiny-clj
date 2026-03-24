@@ -57,6 +57,14 @@
                       (dissoc state :overlay-start-ms))]
     (record-from-map 'FrameScene (dissoc (tiny-breakout.scene/build-scene scene-state) :type))))
 
+(defn- overlay-animation-for-state
+  [state]
+  (let [overlay (scene/overlay-text (:phase state))]
+    (if (= overlay "")
+      idle-overlay-animation
+      {:text overlay
+       :start-ms (current-time-ms)})))
+
 (defn- sync-overlay-animation!
   [previous-state next-state]
   (let [previous-overlay (scene/overlay-text (:phase previous-state))
@@ -73,13 +81,8 @@
 
 (defn- restart-overlay-animation!
   []
-  (let [state @state*
-        overlay (scene/overlay-text (:phase state))]
-    (reset! overlay-animation*
-            (if (= overlay "")
-              idle-overlay-animation
-              {:text overlay
-               :start-ms (current-time-ms)}))
+  (let [state @state*]
+    (reset! overlay-animation* (overlay-animation-for-state state))
     (when (map? state)
       (reset! scene* (scene-record state))))
   nil)
@@ -441,6 +444,8 @@
   (let [state (scene/with-expanded-collision-rules (core/init-state))
         events (:events state)
         state-without-events (assoc state :events [])]
+    (reset! tiny-breakout.runtime/overlay-animation*
+            (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
     (reset! tiny-breakout.runtime/state* state-without-events)
     (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events))
     (play-events! events))
@@ -467,6 +472,8 @@
     (reset! tiny-breakout.runtime/segment-watch-active* false))
   (let [state (tiny-breakout.scene/with-expanded-collision-rules (tiny-breakout.core/init-state))
         state-without-events (assoc state :events [])]
+    (reset! tiny-breakout.runtime/overlay-animation*
+            (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
     (reset! tiny-breakout.runtime/state* state-without-events)
     (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events)))
   nil)

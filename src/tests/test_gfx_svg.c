@@ -75,7 +75,7 @@ TEST(test_gfx_svg_text_maps_to_vtext) {
       "(do "
       "  (require 'tiny-fx.svg) "
       "  (require 'tiny-fx.gfx-scene) "
-        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx) "
       "  (def gsvg_text (tiny-fx.svg/group-from-svg "
       "                  \"<svg><text x='12' y='34' fill='#00FF00' font-size='16'>TinyBoy</text></svg>\")) "
       "  true)",
@@ -89,7 +89,7 @@ TEST(test_gfx_svg_text_maps_to_vtext) {
       "       (= 12 (get node :x)) "
       "       (= 34 (get node :y)) "
       "       (= 2 (get node :scale)) "
-      "       (= (tiny-fx.color/web-hex->color \"#00FF00\") "
+      "       (= (tiny-fx.gfx/color 0x00FF00) "
       "          (get style :stroke-color))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(text_ok && text_ok != clj_false);
@@ -100,7 +100,7 @@ TEST(test_gfx_svg_text_decodes_entities_and_inline_style) {
       "(do "
       "  (require 'tiny-fx.svg) "
       "  (require 'tiny-fx.gfx-scene) "
-        "  (require 'tiny-fx.color) "
+        "  (require 'tiny-fx.gfx) "
       "  (def gsvg_text_style (tiny-fx.svg/group-from-svg "
       "                        \"<svg><text x='5' y='9' style='fill:#FF00FF;font-size:8px'>A&amp;B &lt;3</text></svg>\")) "
       "  true)",
@@ -112,7 +112,7 @@ TEST(test_gfx_svg_text_decodes_entities_and_inline_style) {
       "      style (get node :style)] "
       "  (and (= \"A&B <3\" (get node :text)) "
       "       (= 1 (get node :scale)) "
-      "       (= (tiny-fx.color/web-hex->color \"#FF00FF\") "
+      "       (= (tiny-fx.gfx/color 0xFF00FF) "
       "          (get style :stroke-color))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(text_ok && text_ok != clj_false);
