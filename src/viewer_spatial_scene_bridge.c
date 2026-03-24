@@ -341,9 +341,13 @@ bool viewer_collision_load_rules_from_scene(FrameScene *scene,
     }
     ViewerSpatialRuleSet next_rule_set = {0};
     next_rule_set.version = next_version;
+    const char *rule_capacity_msg =
+        "VIEWER_MAX_SPATIAL_RULES is too small for the scene's collision policies";
     uint32_t rule_count = vector_count(rules_vec);
     if (rule_count > VIEWER_MAX_SPATIAL_RULES) {
-        rule_count = VIEWER_MAX_SPATIAL_RULES;
+        CLJ_ASSERT(false && rule_capacity_msg);
+        destroy_spatial_rule_set(io_rule_set);
+        return false;
     }
     for (uint32_t i = 0; i < rule_count && ok; i++) {
         ID rule = vector_nth(rules_vec, i);
@@ -388,12 +392,13 @@ bool viewer_collision_load_rules_from_scene(FrameScene *scene,
                                                                   other_selector,
                                                                   other_ids,
                                                                   VIEWER_MAX_SPATIAL_RULES);
-        for (uint32_t self_i = 0;
-             self_i < self_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES && ok;
-             self_i++) {
-            for (uint32_t other_i = 0;
-                 other_i < other_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES;
-                 other_i++) {
+        for (uint32_t self_i = 0; self_i < self_count && ok; self_i++) {
+            for (uint32_t other_i = 0; other_i < other_count; other_i++) {
+                if (next_rule_set.count >= VIEWER_MAX_SPATIAL_RULES) {
+                    CLJ_ASSERT(false && rule_capacity_msg);
+                    destroy_spatial_rule_set(&next_rule_set);
+                    return false;
+                }
                 ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
                 ID self_rec = map_get_sentinel(entity_index, self_ids[self_i], NULL);
                 ID other_rec = map_get_sentinel(entity_index, other_ids[other_i], NULL);

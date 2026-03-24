@@ -519,25 +519,53 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
 }
 
 /* ========================================================================= */
-/* Finished notification (enqueue scheduler task)                            */
+/* Finished notification (tick-safe queue + interpreter-thread drain)        */
 /* ========================================================================= */
 
-static void notify_finished(ID track_id) {
-    ID fn = RETAIN(g_sound_engine.on_finished_fn);
-    if (!fn) return;
-
-    ID event_payload = sound_make_finished_event(track_id);
-    if (!event_payload) {
-        g_sound_engine.telemetry.finished_drop_count++;
-        RELEASE(fn);
+static void sound_queue_finished_notification(ID track_id) {
+    if (!track_id) {
         return;
     }
-
-    if (!event_loop_enqueue_ingress_call(fn, event_payload)) {
+    SoundFinishedNotification notification = {
+        .track_id = track_id,
+    };
+    if (!lockfree_spsc_queue_push(&g_sound_engine.finished_queue.spsc, &notification)) {
         g_sound_engine.telemetry.finished_drop_count++;
     }
-    RELEASE(event_payload);
-    RELEASE(fn);
+}
+
+bool sound_engine_has_pending_finished_notifications(void) {
+    return !lockfree_spsc_queue_empty(&g_sound_engine.finished_queue.spsc);
+}
+
+void sound_engine_drain_finished_notifications(void) {
+    SoundFinishedNotification notification = {0};
+    while (lockfree_spsc_queue_pop(&g_sound_engine.finished_queue.spsc, &notification)) {
+        ID fn = RETAIN(g_sound_engine.on_finished_fn);
+        if (!fn) {
+            continue;
+        }
+
+        ID event_payload = sound_make_finished_event(notification.track_id);
+        if (!event_payload) {
+            g_sound_engine.telemetry.finished_drop_count++;
+            RELEASE(fn);
+            continue;
+        }
+
+        if (!event_loop_enqueue_ingress_call(fn, event_payload)) {
+            g_sound_engine.telemetry.finished_drop_count++;
+        }
+        RELEASE(event_payload);
+        RELEASE(fn);
+    }
+}
+
+static void notify_finished(ID track_id) {
+    if (!g_sound_engine.on_finished_fn) {
+        return;
+    }
+    sound_queue_finished_notification(track_id);
 }
 
 /* ========================================================================= */
@@ -556,6 +584,15 @@ void sound_engine_init(int voice_count) {
                                            g_sound_engine.cmd_queue.slots,
                                            SOUND_CMD_QUEUE_CAP,
                                            sizeof(g_sound_engine.cmd_queue.slots[0]));
+        CLJ_ASSERT(ok);
+        if (!ok) return;
+    }
+    memset(g_sound_engine.finished_queue.slots, 0, sizeof(g_sound_engine.finished_queue.slots));
+    {
+        bool ok = lockfree_spsc_queue_init(&g_sound_engine.finished_queue.spsc,
+                                           g_sound_engine.finished_queue.slots,
+                                           SOUND_FINISHED_QUEUE_CAP,
+                                           sizeof(g_sound_engine.finished_queue.slots[0]));
         CLJ_ASSERT(ok);
         if (!ok) return;
     }
@@ -884,6 +921,10 @@ static void tick_drain_commands(void) {
             }
             break;
         }
+    }
+
+    if (!lockfree_spsc_queue_empty(&g_sound_engine.finished_queue.spsc)) {
+        sound_tick_kick();
     }
 
     if (!lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc)) {

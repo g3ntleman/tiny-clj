@@ -229,10 +229,20 @@ static bool viewer_load_deployment_config_fast(EvalState *st,
     }
 
     WITH_AUTORELEASE_POOL({
-        scene_atom = RETAIN(eval_string("tiny-breakout.runtime/scene*", st));
-        prepare_callback = RETAIN(eval_string("tiny-breakout.runtime/bootstrap-runtime!", st));
-        startup_callback = RETAIN(eval_string("tiny-breakout.runtime/start-runtime!", st));
-        spatial_callback = RETAIN(eval_string("tiny-breakout.runtime/on-spatial-event!", st));
+        ID resolved = eval_string("[tiny-breakout.runtime/scene* "
+                                  " tiny-breakout.runtime/bootstrap-runtime! "
+                                  " tiny-breakout.runtime/start-runtime! "
+                                  " tiny-breakout.runtime/on-spatial-event!]",
+                                  st);
+        if (resolved && is_vector(resolved)) {
+            CljPersistentVector *resolved_vec = as_vector(resolved);
+            if (resolved_vec && vector_count(resolved_vec) == 4u) {
+                scene_atom = RETAIN(vector_nth(resolved_vec, 0u));
+                prepare_callback = RETAIN(vector_nth(resolved_vec, 1u));
+                startup_callback = RETAIN(vector_nth(resolved_vec, 2u));
+                spatial_callback = RETAIN(vector_nth(resolved_vec, 3u));
+            }
+        }
     });
 
     if (!scene_atom || TAG(scene_atom) != CLJ_ATOM) {

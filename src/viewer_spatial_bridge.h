@@ -11,7 +11,8 @@
 
 struct ViewerSceneBundle;
 
-#define VIEWER_MAX_SPATIAL_RULES 128u
+/* Must fit the concrete collision policies of the active scene. */
+#define VIEWER_MAX_SPATIAL_RULES 64u
 
 typedef struct ViewerCollisionPolicy {
     ID self_entity_id;

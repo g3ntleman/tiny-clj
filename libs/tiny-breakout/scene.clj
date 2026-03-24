@@ -129,15 +129,17 @@
     (get centered-overlay-x-by-text overlay)
     100))
 
-(def ^:private overlay-fade-stops
-  [[0 (color/color 0x404040)]
-   [333 (color/color 0x808080)]
-   [666 (color/color 0xc0c0c0)]
-   [1000 (color/color 0xffffff)]])
+(def ^:private overlay-fade-duration-ms 880)
 
 (defn overlay-fade-keyframes
+  "Monotonic keyframes so the renderer linearly interpolates stroke color (RGB565)
+  between stops — unlike step-keyframes, which duplicates timestamps and looks stepped."
   [start-ms]
-  (color/step-keyframes start-ms overlay-fade-stops))
+  (let [mid-ms (+ start-ms (quot overlay-fade-duration-ms 2))
+        end-ms (+ start-ms overlay-fade-duration-ms)]
+    [[start-ms (color/color 0x181818)]
+     [mid-ms (color/color 0x989898)]
+     [end-ms (color/color 0xffffff)]]))
 
 (defn overlay-style
   [state overlay]
@@ -149,7 +151,7 @@
                                         [(overlay-fade-keyframes start-ms)
                                          false
                                          false])
-                         (second (first overlay-fade-stops)))]
+                         (color/color 0xffffff))]
       (->Style stroke-color nil true false nil false nil))))
 
 (defn brick->entity

@@ -1010,6 +1010,8 @@ TEST(test_sound_finished_callback_runs_via_event_loop) {
   TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
 
   sound_engine_tick();
+  TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
+                            "sound tick should not enqueue finished callbacks directly into ingress");
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 

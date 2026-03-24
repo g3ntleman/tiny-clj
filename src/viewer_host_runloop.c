@@ -91,9 +91,15 @@ static void *viewer_runloop_thread_main(void *arg) {
     if (!st) {
         return NULL;
     }
+    /*
+     * Ownership contract:
+     * this thread is the host-side interpreter/runloop thread and is the only
+     * viewer thread allowed to execute event-loop drains and eval APIs.
+     */
     char runloop_thread_stack_anchor;
     eval_bind_task_stack_anchor(&runloop_thread_stack_anchor);
     subjective_c_register_interpreter_thread();
+    CLJ_ASSERT(subjective_c_is_interpreter_thread());
     while (atomic_load_explicit(&g_runloop_thread.running, memory_order_acquire)) {
         uint64_t now_ns = viewer_runloop_monotonic_now_ns();
         atomic_store_explicit(&g_runloop_thread.last_tick_ns, now_ns, memory_order_relaxed);

@@ -133,9 +133,18 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
   // Get current value (RETAIN handles nil and immediates safely)
   ID current_value = atom_deref_owned(atom);
 
-  // Prepare function call arguments: [current_value, ...args]
-  // Use malloc instead of calloc - array is immediately filled
-  ID *fn_args = (ID *)CLJ_MALLOC((argc + 1) * sizeof(ID));
+  // Keep the common swap! arities on the stack to avoid hot-path heap churn.
+  ID fn_args_buf[4];
+  ID *fn_args = fn_args_buf;
+  bool fn_args_on_heap = false;
+  if (argc + 1u > (sizeof(fn_args_buf) / sizeof(fn_args_buf[0]))) {
+    fn_args = (ID *)CLJ_MALLOC((argc + 1) * sizeof(ID));
+    if (!fn_args) {
+      RELEASE(current_value);
+      return NULL;
+    }
+    fn_args_on_heap = true;
+  }
 
   fn_args[0] = current_value; // First argument is current atom value
   for (unsigned int i = 0; i < argc; i++) {
@@ -156,7 +165,9 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     for (unsigned int i = 0; i < argc + 1; i++) {
       RELEASE(fn_args[i]);
     }
-    CLJ_FREE(fn_args);
+    if (fn_args_on_heap) {
+      CLJ_FREE(fn_args);
+    }
     return NULL;
   }
   END_TRY
@@ -165,7 +176,9 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
   for (unsigned int i = 0; i < argc + 1; i++) {
     RELEASE(fn_args[i]);
   }
-  CLJ_FREE(fn_args);
+  if (fn_args_on_heap) {
+    CLJ_FREE(fn_args);
+  }
 
   if (!new_value) {
     // Function returned nil or error

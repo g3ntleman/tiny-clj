@@ -30,7 +30,6 @@
 #include "viewer_spatial_bridge.h"
 #include "platform.h"
 #include "gpio.h"
-#include "atom.h"
 #include "memory.h"
 #include "tiny_clj.h"
 #if !defined(__APPLE__)
@@ -525,7 +524,7 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
     return true;
 }
 
-static CljAtom **g_scene_slot_atoms = NULL;
+static ID *g_scene_slot_snapshots = NULL;
 static uint8_t *g_slot_render_priority = NULL;
 static uint8_t g_viewer_slot_count = 0u;
 static VgSlotChangeTracker g_slot_change_tracker;
@@ -712,17 +711,47 @@ static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot
 }
 
 static void viewer_destroy_slot_runtime_buffers(void) {
+    if (g_scene_slot_snapshots) {
+        for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+            RELEASE(g_scene_slot_snapshots[i]);
+        }
+    }
     CLJ_HOST_FREE(g_render_thread.slot_states);
     CLJ_HOST_FREE(g_render_thread.slot_seen_generations);
     CLJ_HOST_FREE(g_render_thread.last_rendered_generation);
     g_render_thread.slot_states = NULL;
     g_render_thread.slot_seen_generations = NULL;
     g_render_thread.last_rendered_generation = NULL;
-    CLJ_HOST_FREE(g_scene_slot_atoms);
+    CLJ_HOST_FREE(g_scene_slot_snapshots);
     CLJ_HOST_FREE(g_slot_render_priority);
-    g_scene_slot_atoms = NULL;
+    g_scene_slot_snapshots = NULL;
     g_slot_render_priority = NULL;
     g_viewer_slot_count = 0u;
+}
+
+static void viewer_publish_slot_scene_snapshots(const ViewerSceneBundle *bundle) {
+    if (!bundle || !bundle->slots || !g_scene_slot_snapshots || bundle->slot_count != g_viewer_slot_count) {
+        return;
+    }
+    bool locked = false;
+    if (g_render_thread.started) {
+        if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
+            return;
+        }
+        locked = true;
+    }
+    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+        ID next_snapshot = bundle->slots[i].scene;
+        if (g_scene_slot_snapshots[i] == next_snapshot) {
+            continue;
+        }
+        ID retained_snapshot = RETAIN(next_snapshot);
+        RELEASE(g_scene_slot_snapshots[i]);
+        g_scene_slot_snapshots[i] = retained_snapshot;
+    }
+    if (locked) {
+        (void)pthread_mutex_unlock(&g_render_thread.mutex);
+    }
 }
 
 static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
@@ -730,7 +759,7 @@ static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
         return false;
     }
     viewer_destroy_slot_runtime_buffers();
-    g_scene_slot_atoms = (CljAtom **)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(CljAtom *));
+    g_scene_slot_snapshots = (ID *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(ID));
     g_slot_render_priority = (uint8_t *)CLJ_HOST_MALLOC(bundle->slot_count * sizeof(uint8_t));
     g_render_thread.slot_states =
         (VgRenderSlotState *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(VgRenderSlotState));
@@ -738,14 +767,14 @@ static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
         (uint32_t *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(uint32_t));
     g_render_thread.last_rendered_generation =
         (uint32_t *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(uint32_t));
-    if (!g_scene_slot_atoms || !g_slot_render_priority || !g_render_thread.slot_states ||
+    if (!g_scene_slot_snapshots || !g_slot_render_priority || !g_render_thread.slot_states ||
         !g_render_thread.slot_seen_generations || !g_render_thread.last_rendered_generation) {
         viewer_destroy_slot_runtime_buffers();
         return false;
     }
     g_viewer_slot_count = bundle->slot_count;
     for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
-        g_scene_slot_atoms[i] = bundle->slots[i].scene_atom;
+        g_scene_slot_snapshots[i] = RETAIN(bundle->slots[i].scene);
         g_slot_render_priority[i] = i;
     }
     return true;
@@ -891,10 +920,11 @@ static size_t viewer_take_pending_overlay_rects(uint_fast32_t *io_last_presented
 static void *viewer_render_thread_main(void *arg) {
     VgFrameBuffer *fb = (VgFrameBuffer *)arg;
     if (!fb || !g_render_thread.slot_states || !g_render_thread.slot_seen_generations ||
-        !g_render_thread.last_rendered_generation || !g_scene_slot_atoms || !g_slot_render_priority ||
+        !g_render_thread.last_rendered_generation || !g_scene_slot_snapshots || !g_slot_render_priority ||
         g_viewer_slot_count == 0u) {
         return NULL;
     }
+    CLJ_ASSERT(!subjective_c_is_interpreter_thread());
     viewer_set_realtime_thread_policy();
     while (atomic_load_explicit(&g_render_thread.running, memory_order_acquire)) {
         uint32_t animated_mask = (uint32_t)atomic_load_explicit(&g_render_thread.animated_slots_mask,
@@ -929,14 +959,16 @@ static void *viewer_render_thread_main(void *arg) {
             if (!slot_changed && !slot_animated_tick) {
                 continue;
             }
-            if (!g_scene_slot_atoms[i]) {
-                continue;
-            }
-            /* Strong ref: runloop may reset! the atom while we render (atom_peek would be UAF). */
-            ID snapshot = atom_deref_owned(g_scene_slot_atoms[i]);
+            ID snapshot = g_scene_slot_snapshots[i];
             if (!snapshot) {
                 continue;
             }
+            /*
+             * Ownership contract:
+             * the main thread publishes immutable per-slot scene snapshots under
+             * g_render_thread.mutex; the render thread only consumes the already
+             * retained snapshot and never touches atom/eval/refcount APIs here.
+             */
             bool had_prior_frame = g_render_thread.slot_states[i].initialized;
             VgClipRect prev_clip_rect = g_render_thread.slot_states[i].last_clip_rect;
             bool prev_visible = g_render_thread.slot_states[i].last_visible;
@@ -1028,7 +1060,6 @@ static void *viewer_render_thread_main(void *arg) {
                     }
                 }
             }
-            RELEASE(snapshot);
         }
         if (frame_skipped_total > 0u) {
             uint64_t frame_max = atomic_load_explicit(&g_render_thread.skipped_max_frame, memory_order_relaxed);
@@ -1162,7 +1193,7 @@ static bool viewer_renderer_stop_callback(void *user_data) {
     return true;
 }
 
-/* Publish one already-built FrameScene record into one slot atom and mark it dirty. */
+/* Wait for the next presentation deadline. */
 static bool viewer_wait_for_frame_pacing(ViewerHostWindow *window,
                                          bool use_mfb_waitsync,
                                          uint64_t target_frame_ns,
@@ -1336,9 +1367,16 @@ int viewer_host_app_run(void) {
         goto cleanup;
     } END_TRY
     demo_bundle_initialized = true;
-    direct_input_fn = RETAIN(eval_string("tiny-breakout.runtime/apply-input!", viewer_eval_state));
-    direct_launch_arg = RETAIN(eval_string("{:launch true}", viewer_eval_state));
-    direct_pause_arg = RETAIN(eval_string("{:pause true}", viewer_eval_state));
+    ID direct_input_resolved = eval_string("[tiny-breakout.runtime/apply-input! {:launch true} {:pause true}]",
+                                           viewer_eval_state);
+    if (direct_input_resolved && is_vector(direct_input_resolved)) {
+        CljPersistentVector *resolved_vec = as_vector(direct_input_resolved);
+        if (resolved_vec && vector_count(resolved_vec) == 3u) {
+            direct_input_fn = RETAIN(vector_nth(resolved_vec, 0u));
+            direct_launch_arg = RETAIN(vector_nth(resolved_vec, 1u));
+            direct_pause_arg = RETAIN(vector_nth(resolved_vec, 2u));
+        }
+    }
     if (!direct_input_fn || !direct_launch_arg || !direct_pause_arg) {
         fprintf(stderr, "Failed to resolve direct runtime input actions\n");
         goto cleanup;
@@ -1444,6 +1482,7 @@ int viewer_host_app_run(void) {
         }
         viewer_simulate_gpio_keys(keys, &runtime_flags);
         viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
+        viewer_publish_slot_scene_snapshots(&demo_bundle);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
         bool has_new_render_frame = frame_result.frame_serial != last_presented_frame_serial;

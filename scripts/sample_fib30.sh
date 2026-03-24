@@ -21,19 +21,19 @@ FIB_N="${FIB_N:-30}"                                      # fib argument
 # Ensure output directory exists
 mkdir -p "$OUTPUT_DIR"
 
-echo "=== Building profiling build (ENABLE_PROFILING) ==="
+echo "=== Building release binary for sampling ==="
 
-# Configure and build (tiny-clj-profile has its own compile flags in CMakeLists.txt)
+# Configure and build the regular tiny-clj target.
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$BUILD_DIR" -j --target tiny-clj-profile
+cmake --build "$BUILD_DIR" -j --target tiny-clj
 
 # Verify the binary exists
-if [ ! -f "$BUILD_DIR/tiny-clj-profile" ]; then
-    echo "ERROR: Failed to build tiny-clj-profile"
+if [ ! -f "$BUILD_DIR/tiny-clj" ]; then
+    echo "ERROR: Failed to build tiny-clj"
     exit 1
 fi
 
-echo "✅ Profiling build ready: $BUILD_DIR/tiny-clj-profile"
+echo "✅ Sampling binary ready: $BUILD_DIR/tiny-clj"
 
 echo ""
 echo "=== Running steady-state sample on fib($FIB_N) ==="
@@ -62,10 +62,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$BUILD_DIR/tiny-clj-profile" -e "${WORKLOAD_EXPR}" >/dev/null 2>&1 &
+"$BUILD_DIR/tiny-clj" -e "${WORKLOAD_EXPR}" >/dev/null 2>&1 &
 TINYCLJ_PID=$!
 
-echo "tiny-clj-profile PID: ${TINYCLJ_PID}"
+echo "tiny-clj PID: ${TINYCLJ_PID}"
 echo "Warmup delay: ${WARMUP_SECONDS}s"
 sleep "${WARMUP_SECONDS}"
 

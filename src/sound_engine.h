@@ -100,6 +100,15 @@ typedef struct {
     LockFreeSpscQueue  spsc;
 } SoundCmdQueue;
 
+typedef struct {
+    ID track_id;
+} SoundFinishedNotification;
+
+typedef struct {
+    SoundFinishedNotification slots[SOUND_FINISHED_QUEUE_CAP];
+    LockFreeSpscQueue spsc;
+} SoundFinishedQueue;
+
 /* ========================================================================= */
 /* Track registry                                                            */
 /* ========================================================================= */
@@ -212,6 +221,7 @@ typedef struct {
 
     /* Finished callback (Clojure function, retained) */
     ID              on_finished_fn;
+    SoundFinishedQueue finished_queue;
 
     /* Tick lifecycle */
     bool            tick_running;
@@ -277,6 +287,8 @@ void sound_engine_set_music_volume(int32_t vol);
 /* Register on-finished callback. Retains fn, releases previous.
  * Callback receives {:source :audio :kind :finished :track-id ...}. */
 void sound_engine_on_finished(ID callback_fn);
+bool sound_engine_has_pending_finished_notifications(void);
+void sound_engine_drain_finished_notifications(void);
 
 /* ========================================================================= */
 /* Tick (called from timer ISR or host test harness)                         */

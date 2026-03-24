@@ -619,6 +619,12 @@ static bool host_sound_init_unit(void) {
 #ifndef TINY_CLJ_TEST_RUNNER
 static void *host_tick_thread_main(void *arg) {
     (void)arg;
+    /*
+     * Ownership contract:
+     * this helper thread may advance plain-C sound engine state only. It must
+     * not allocate Clj objects or enqueue finished callbacks directly; those
+     * are deferred to the interpreter thread drain path.
+     */
     while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         if (!atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
             pthread_mutex_lock(&g_tick_wait_mutex);

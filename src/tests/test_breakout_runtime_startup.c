@@ -1285,6 +1285,49 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
                              "expected at least one brick-hit score update while runloop + collision dispatch are active");
 }
 
+TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+
+    ID counts = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  [(count (:collision-rules @tiny-breakout.runtime/scene*)) "
+        "   (:id (last (:bricks @tiny-breakout.runtime/state*)))])",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(counts);
+    TEST_ASSERT_TRUE(TAG(counts) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *counts_vec = as_vector(counts);
+    TEST_ASSERT_NOT_NULL(counts_vec);
+    TEST_ASSERT_EQUAL_UINT(2u, vector_count(counts_vec));
+    ID expected_rule_count = vector_nth(counts_vec, 0u);
+    ID bottom_brick_id = vector_nth(counts_vec, 1u);
+    TEST_ASSERT_TRUE(is_fixnum(expected_rule_count));
+    TEST_ASSERT_TRUE(is_fixnum(bottom_brick_id));
+    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(expected_rule_count) <= VIEWER_MAX_SPATIAL_RULES,
+                             "test scene must fit inside VIEWER_MAX_SPATIAL_RULES");
+
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)AS_FIXNUM(expected_rule_count), ctx.spatial_rules.count);
+    bool saw_bottom_brick_rule = false;
+    for (uint32_t i = 0; i < ctx.spatial_rules.count; i++) {
+        ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[i];
+        if (policy->rule_id == intern_symbol_global(":ball-vs-brick") &&
+            is_fixnum(policy->other_entity_id) &&
+            AS_FIXNUM(policy->other_entity_id) == AS_FIXNUM(bottom_brick_id)) {
+            saw_bottom_brick_rule = true;
+            break;
+        }
+    }
+
+    breakout_viewer_test_context_destroy(&ctx);
+    TEST_ASSERT_TRUE_MESSAGE(saw_bottom_brick_rule,
+                             "expected collision policy set to include the last launched brick as a collision target");
+}
+
 TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_until_new_frame) {
     BreakoutViewerTestContext ctx = {0};
     uint16_t pixels[320u * 240u] = {0};

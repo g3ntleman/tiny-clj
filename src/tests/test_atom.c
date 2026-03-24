@@ -205,6 +205,31 @@ TEST(test_atom_swap_multiple_times) {
   // Don't free st - it's the global test evalState
 }
 
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_atom_swap_small_extra_arity_does_not_grow_heap_after_warmup) {
+  CljAtom *atom = make_atom(fixnum(10));
+
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  CljSymbol *plus_sym = intern_symbol_global("+");
+  ID plus_func = ns_resolve(g_test_eval_state, plus_sym);
+  TEST_ASSERT_TRUE(plus_func && plus_func != NOT_FOUND);
+
+  ID args[] = {fixnum(1), fixnum(2), fixnum(3)};
+
+  (void)atom_swap(atom, plus_func, args, 3);
+  size_t baseline = memory_current_usage_bytes();
+
+  for (int i = 0; i < 64; i++) {
+    ID result = atom_swap(atom, plus_func, args, 3);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(baseline, memory_current_usage_bytes(),
+                                     "atom_swap with three extra args should stay heap-stable after warmup");
+  }
+
+  RELEASE(atom);
+}
+#endif
+
 // ============================================================================
 // TEST: Built-in Functions (atom, deref, reset!, swap!)
 // ============================================================================

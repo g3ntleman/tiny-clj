@@ -309,6 +309,59 @@ TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
                                   "ingress callback should receive nil payload as one argument");
 }
 
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_event_loop_ingress_call_does_not_allocate_task_map_after_warmup) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(fn event-loop-ingress-pod-task [event] "
+        "  (:kind event))",
+        g_test_eval_state);
+    ID payload = eval_string("{:kind :collision :key :brick-2001}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(payload);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload), "warmup enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state), "warmup run_next should succeed");
+
+    size_t baseline = memory_current_usage_bytes();
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload), "steady-state enqueue should succeed");
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(baseline, memory_current_usage_bytes(),
+                                     "ingress enqueue call should stay heap-stable after warmup");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state), "steady-state run_next should succeed");
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(baseline, memory_current_usage_bytes(),
+                                     "ingress drain should return to steady-state heap after warmup");
+}
+
+TEST(test_timer_upsert_named_does_not_allocate_named_timer_nodes_after_warmup) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string("(fn named-timer-test-task [] nil)", g_test_eval_state);
+    ID key = intern_symbol_global(":named-timer/steady");
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(key);
+
+    int warm_timer_id = timer_upsert_named(key, (CljObject *)fn, 50, false, 0);
+    TEST_ASSERT_TRUE_MESSAGE(warm_timer_id > 0, "warmup named timer should schedule");
+    TEST_ASSERT_TRUE_MESSAGE(timer_cancel_named(key), "warmup named timer should cancel");
+
+    size_t baseline = memory_current_usage_bytes();
+
+    int timer_id = timer_upsert_named(key, (CljObject *)fn, 50, false, 0);
+    TEST_ASSERT_TRUE_MESSAGE(timer_id > 0, "steady-state named timer should schedule");
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(baseline, memory_current_usage_bytes(),
+                                     "named timer schedule should stay heap-stable after warmup");
+
+    TEST_ASSERT_TRUE_MESSAGE(timer_cancel_named(key), "steady-state named timer should cancel");
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(baseline, memory_current_usage_bytes(),
+                                     "named timer cancel should stay heap-stable after warmup");
+}
+#endif
+
 TEST(test_event_loop_ingress_call_coalesces_duplicate_kind_and_key_payloads) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();

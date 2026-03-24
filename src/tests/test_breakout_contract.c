@@ -384,6 +384,29 @@ TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_runtime_source_no_longer_references_runtime_play_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID bytes = resolve_path_to_bytes("/libs/tiny-breakout/runtime.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_NOT_NULL(ba);
+    TEST_ASSERT_TRUE(ba->length > 0);
+
+    const char *marker = "runtime-play";
+    size_t marker_len = strlen(marker);
+    const uint8_t *p = ba->data;
+    size_t rem = (size_t)ba->length;
+    while (rem >= marker_len && memcmp(p, marker, marker_len) != 0) {
+        p++;
+        rem--;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(rem < marker_len,
+                             "tiny-breakout.runtime should not keep the old runtime-play indirection");
+}
+
 TEST(test_breakout_contract_runtime_reset_works_after_fresh_reload) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -871,13 +894,9 @@ TEST(test_breakout_contract_scene_animates_overlay_text_color_on_phase_entry) {
         "        style (:style overlay) "
         "        kf (:keyframes (:stroke-color style))] "
         "    (and (= \"Game Over\" (:text overlay)) "
-        "         (= [[123 (tiny-fx.color/color 0x404040)] "
-        "             [456 (tiny-fx.color/color 0x404040)] "
-        "             [456 (tiny-fx.color/color 0x808080)] "
-        "             [789 (tiny-fx.color/color 0x808080)] "
-        "             [789 (tiny-fx.color/color 0xC0C0C0)] "
-        "             [1123 (tiny-fx.color/color 0xC0C0C0)] "
-        "             [1123 (tiny-fx.color/color 0xFFFFFF)]] "
+        "         (= [[123 (tiny-fx.color/color 0x181818)] "
+        "             [563 (tiny-fx.color/color 0x989898)] "
+        "             [1003 (tiny-fx.color/color 0xFFFFFF)]] "
         "            kf))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);

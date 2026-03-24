@@ -13,6 +13,7 @@
 #include "record.h"
 #include "value.h"
 #include "gpio.h"
+#include "sound_engine.h"
 #include "viewer_spatial_bridge.h"
 #include "mini_format.h"
 #include <stdbool.h>
@@ -53,13 +54,14 @@ static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
     {&KW_SOURCE_SPATIAL, ":spatial"},
 };
 
-typedef struct NamedTimerEntry {
+typedef struct {
     ID key;
     int timer_id;
-    struct NamedTimerEntry *next;
+    bool occupied;
 } NamedTimerEntry;
 
-static NamedTimerEntry *g_named_timers = NULL;
+#define NAMED_TIMER_CAP 16
+static NamedTimerEntry g_named_timers[NAMED_TIMER_CAP];
 
 // --- Timer Queue: plain C struct array (zero heap allocs per tick) ---
 
@@ -84,7 +86,13 @@ static int        g_timer_count = 0;
  * by dumping unbounded work into the regular task queue in one tick.
  */
 #define EVENT_LOOP_INGRESS_DRAIN_BUDGET 1u
-static ID g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
+typedef struct {
+    ID fn;
+    ID arg;
+    bool has_arg;
+} EventLoopIngressSlot;
+
+static EventLoopIngressSlot g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
 static uint16_t g_event_loop_ingress_head = 0u;
 static uint16_t g_event_loop_ingress_count = 0u;
 static bool g_event_loop_ingress_closed = false;
@@ -96,6 +104,9 @@ static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
+
+static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg, bool has_arg);
+static CljTransientVector* task_queue_get(void);
 
 static inline void event_loop_mini_fprintf(FILE *stream, const char *fmt, ...) {
     char buf[256];
@@ -288,24 +299,22 @@ static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
 }
 #endif
 
-static bool event_loop_ingress_entry_matches_payload(ID entry,
+static bool event_loop_ingress_entry_matches_payload(const EventLoopIngressSlot *entry,
                                                      ID fn_one_arity,
                                                      ID candidate_arg) {
-    if (!entry || !fn_one_arity || !candidate_arg || TAG(entry) != CLJ_MAP_PERSISTENT) {
+    if (!entry || !entry->fn || !fn_one_arity || !candidate_arg) {
         return false;
     }
-    ID queued_fn = map_get_sentinel(entry, KW_FN, NULL);
-    if (!event_loop_value_equals(queued_fn, fn_one_arity)) {
+    if (!event_loop_value_equals(entry->fn, fn_one_arity)) {
         return false;
     }
-    if (!map_get_sentinel(entry, KW_HAS_ARG, NULL)) {
+    if (!entry->has_arg) {
         return false;
     }
-    ID queued_arg = map_get_sentinel(entry, KW_ARG, NOT_FOUND);
-    if (queued_arg == NOT_FOUND || !queued_arg) {
+    if (!entry->arg) {
         return false;
     }
-    return event_loop_payload_matches_coalescing_key(queued_arg, candidate_arg);
+    return event_loop_payload_matches_coalescing_key(entry->arg, candidate_arg);
 }
 
 typedef enum {
@@ -314,10 +323,10 @@ typedef enum {
     EVENT_LOOP_INGRESS_PUSH_COALESCED = 2
 } EventLoopIngressPushResult;
 
-static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID entry,
+static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(EventLoopIngressSlot entry,
                                                                            ID coalesce_fn,
                                                                            ID coalesce_arg) {
-    if (!entry) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
+    if (!entry.fn) return EVENT_LOOP_INGRESS_PUSH_REJECTED;
     bool coalescing_enabled = coalesce_fn && coalesce_arg;
 
     event_loop_ingress_lock_acquire();
@@ -330,7 +339,7 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID ent
     if (coalescing_enabled) {
         for (uint16_t i = 0u; i < g_event_loop_ingress_count; i++) {
             uint16_t idx = (uint16_t)((g_event_loop_ingress_head + i) % EVENT_LOOP_INGRESS_CAP);
-            ID queued = g_event_loop_ingress_queue[idx];
+            EventLoopIngressSlot *queued = &g_event_loop_ingress_queue[idx];
             if (event_loop_ingress_entry_matches_payload(queued,
                                                          coalesce_fn,
                                                          coalesce_arg)) {
@@ -351,29 +360,59 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(ID ent
     return EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
 }
 
-static ID event_loop_ingress_pop(void) {
-    ID out = NULL;
+static bool event_loop_ingress_peek(EventLoopIngressSlot *out) {
+    if (out) {
+        memset(out, 0, sizeof(*out));
+    }
     event_loop_ingress_lock_acquire();
     if (g_event_loop_ingress_count > 0u) {
-        out = g_event_loop_ingress_queue[g_event_loop_ingress_head];
-        g_event_loop_ingress_queue[g_event_loop_ingress_head] = NULL;
+        if (out) {
+            *out = g_event_loop_ingress_queue[g_event_loop_ingress_head];
+        }
+        event_loop_ingress_lock_release();
+        return true;
+    }
+    event_loop_ingress_lock_release();
+    return false;
+}
+
+static void event_loop_ingress_drop_head(void) {
+    event_loop_ingress_lock_acquire();
+    if (g_event_loop_ingress_count > 0u) {
+        memset(&g_event_loop_ingress_queue[g_event_loop_ingress_head], 0,
+               sizeof(g_event_loop_ingress_queue[g_event_loop_ingress_head]));
         g_event_loop_ingress_head = (uint16_t)((g_event_loop_ingress_head + 1u) % EVENT_LOOP_INGRESS_CAP);
         g_event_loop_ingress_count--;
         g_event_loop_ingress_drained_count++;
     }
     event_loop_ingress_lock_release();
-    return out;
 }
 
 static void event_loop_ingress_drain(void) {
     uint32_t drained = 0u;
     while (drained < EVENT_LOOP_INGRESS_DRAIN_BUDGET) {
-        ID fn = event_loop_ingress_pop();
-        if (!fn) {
+        EventLoopIngressSlot slot = {0};
+        if (!event_loop_ingress_peek(&slot) || !slot.fn) {
             return;
         }
-        event_loop_enqueue(fn, NULL);
-        RELEASE(fn);
+        if (slot.has_arg) {
+            CljPersistentMap *task_map = task_to_map(slot.fn, NULL, slot.arg, true);
+            if (!task_map) {
+                return;
+            }
+            CljTransientVector *task_vec = task_queue_get();
+            if (!task_vec) {
+                RELEASE(task_map);
+                return;
+            }
+            vector_push(task_vec, task_map);
+            RELEASE(task_map);
+        } else {
+            event_loop_enqueue(slot.fn, NULL);
+        }
+        event_loop_ingress_drop_head();
+        RELEASE(slot.arg);
+        RELEASE(slot.fn);
         drained++;
     }
 }
@@ -462,79 +501,76 @@ static bool timer_key_is_valid(ID key) {
     return key != NULL;
 }
 
-static NamedTimerEntry *timer_named_find_by_key(ID key) {
-    if (!timer_key_is_valid(key)) return NULL;
-    NamedTimerEntry *cur = g_named_timers;
-    while (cur) {
-        if (clj_equal(cur->key, key)) return cur;
-        cur = cur->next;
+static int timer_named_find_by_key_index(ID key) {
+    if (!timer_key_is_valid(key)) return -1;
+    for (int i = 0; i < NAMED_TIMER_CAP; i++) {
+        if (g_named_timers[i].occupied && clj_equal(g_named_timers[i].key, key)) {
+            return i;
+        }
     }
-    return NULL;
+    return -1;
+}
+
+static int timer_named_find_by_id_index(int timer_id) {
+    if (timer_id <= 0) return -1;
+    for (int i = 0; i < NAMED_TIMER_CAP; i++) {
+        if (g_named_timers[i].occupied && g_named_timers[i].timer_id == timer_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int timer_named_find_free_index(void) {
+    for (int i = 0; i < NAMED_TIMER_CAP; i++) {
+        if (!g_named_timers[i].occupied) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 static bool timer_named_set(ID key, int timer_id) {
     if (!timer_key_is_valid(key) || timer_id <= 0) return false;
-    NamedTimerEntry *existing = timer_named_find_by_key(key);
-    if (existing) {
-        existing->timer_id = timer_id;
+    int existing_index = timer_named_find_by_key_index(key);
+    if (existing_index >= 0) {
+        g_named_timers[existing_index].timer_id = timer_id;
         return true;
     }
-    NamedTimerEntry *entry = CLJ_MALLOC(sizeof(NamedTimerEntry));
-    if (!entry) return false;
-    entry->key = RETAIN(key);
-    entry->timer_id = timer_id;
-    entry->next = g_named_timers;
-    g_named_timers = entry;
+    int free_index = timer_named_find_free_index();
+    if (free_index < 0) return false;
+    g_named_timers[free_index].key = RETAIN(key);
+    g_named_timers[free_index].timer_id = timer_id;
+    g_named_timers[free_index].occupied = true;
     return true;
 }
 
 static bool timer_named_take_by_key(ID key, int *out_timer_id) {
     if (out_timer_id) *out_timer_id = 0;
     if (!timer_key_is_valid(key)) return false;
-    NamedTimerEntry *prev = NULL;
-    NamedTimerEntry *cur = g_named_timers;
-    while (cur) {
-        if (clj_equal(cur->key, key)) {
-            if (out_timer_id) *out_timer_id = cur->timer_id;
-            if (prev) prev->next = cur->next;
-            else g_named_timers = cur->next;
-            RELEASE(cur->key);
-            CLJ_FREE(cur);
-            return true;
-        }
-        prev = cur;
-        cur = cur->next;
-    }
-    return false;
+    int index = timer_named_find_by_key_index(key);
+    if (index < 0) return false;
+    if (out_timer_id) *out_timer_id = g_named_timers[index].timer_id;
+    RELEASE(g_named_timers[index].key);
+    memset(&g_named_timers[index], 0, sizeof(g_named_timers[index]));
+    return true;
 }
 
 static bool timer_named_remove_by_id(int timer_id) {
-    if (timer_id <= 0) return false;
-    NamedTimerEntry *prev = NULL;
-    NamedTimerEntry *cur = g_named_timers;
-    while (cur) {
-        if (cur->timer_id == timer_id) {
-            if (prev) prev->next = cur->next;
-            else g_named_timers = cur->next;
-            RELEASE(cur->key);
-            CLJ_FREE(cur);
-            return true;
-        }
-        prev = cur;
-        cur = cur->next;
-    }
-    return false;
+    int index = timer_named_find_by_id_index(timer_id);
+    if (index < 0) return false;
+    RELEASE(g_named_timers[index].key);
+    memset(&g_named_timers[index], 0, sizeof(g_named_timers[index]));
+    return true;
 }
 
 static void timer_named_clear_all(void) {
-    NamedTimerEntry *cur = g_named_timers;
-    while (cur) {
-        NamedTimerEntry *next = cur->next;
-        RELEASE(cur->key);
-        CLJ_FREE(cur);
-        cur = next;
+    for (int i = 0; i < NAMED_TIMER_CAP; i++) {
+        if (g_named_timers[i].occupied) {
+            RELEASE(g_named_timers[i].key);
+            memset(&g_named_timers[i], 0, sizeof(g_named_timers[i]));
+        }
     }
-    g_named_timers = NULL;
 }
 
 static bool timer_schedule_with_id(CljObject *fn_zero_arity,
@@ -623,11 +659,13 @@ void event_loop_clear(void) {
     timer_named_clear_all();
 
     while (true) {
-        ID fn = event_loop_ingress_pop();
-        if (!fn) {
+        EventLoopIngressSlot slot = {0};
+        if (!event_loop_ingress_peek(&slot) || !slot.fn) {
             break;
         }
-        RELEASE(fn);
+        event_loop_ingress_drop_head();
+        RELEASE(slot.arg);
+        RELEASE(slot.fn);
     }
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
@@ -660,26 +698,30 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
 
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     if (!fn_zero_arity) return false;
-    ID retained = RETAIN(fn_zero_arity);
+    EventLoopIngressSlot slot = {
+        .fn = RETAIN(fn_zero_arity),
+        .arg = NULL,
+        .has_arg = false,
+    };
     EventLoopIngressPushResult push_result =
-        event_loop_ingress_push_with_coalescing(retained, NULL, NULL);
+        event_loop_ingress_push_with_coalescing(slot, NULL, NULL);
     if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
         return true;
     }
-    RELEASE(retained);
+    RELEASE(slot.fn);
     return false;
 }
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
     bool can_coalesce = event_loop_payload_supports_coalescing(arg);
-
-    CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg, true);
-    if (!task_map) {
-        return false;
-    }
+    EventLoopIngressSlot slot = {
+        .fn = RETAIN(fn_one_arity),
+        .arg = RETAIN(arg),
+        .has_arg = true,
+    };
     EventLoopIngressPushResult push_result =
-        event_loop_ingress_push_with_coalescing(task_map,
+        event_loop_ingress_push_with_coalescing(slot,
                                                 can_coalesce ? fn_one_arity : NULL,
                                                 can_coalesce ? arg : NULL);
     if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
@@ -691,10 +733,12 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
             event_loop_debug_log_coalesced_ingress_event(fn_one_arity, arg);
         }
 #endif
-        RELEASE(task_map);
+        RELEASE(slot.arg);
+        RELEASE(slot.fn);
         return true;
     }
-    RELEASE(task_map);
+    RELEASE(slot.arg);
+    RELEASE(slot.fn);
     return false;
 }
 
@@ -733,6 +777,7 @@ bool event_loop_ingress_stats(EventLoopIngressStats *out_stats) {
 
 bool event_loop_has_pending_tasks(void) {
     if (event_loop_ingress_has_pending()) return true;
+    if (sound_engine_has_pending_finished_notifications()) return true;
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec || !task_vec->backing) return false;
     return vector_count(task_vec->backing) > 0;
@@ -766,6 +811,8 @@ int event_loop_time_until_next_timer_ms(void) {
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
+
+    sound_engine_drain_finished_notifications();
 
     // Promote ISR-raised drain requests into regular event-loop tasks.
     gpio_poll_drain();
@@ -882,9 +929,10 @@ int timer_upsert_named(ID key,
                        int64_t period_ms) {
     if (!timer_key_is_valid(key) || !fn_zero_arity) return 0;
 
-    NamedTimerEntry *existing = timer_named_find_by_key(key);
-    int timer_id = existing ? existing->timer_id : (++g_runtime.timer_id_counter);
-    if (existing) {
+    int existing_index = timer_named_find_by_key_index(key);
+    int timer_id = (existing_index >= 0) ? g_named_timers[existing_index].timer_id
+                                         : (++g_runtime.timer_id_counter);
+    if (existing_index >= 0) {
         (void)timer_cancel(timer_id);
     }
 

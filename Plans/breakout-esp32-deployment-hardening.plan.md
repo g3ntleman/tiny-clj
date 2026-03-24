@@ -10,16 +10,16 @@ todos:
     status: completed
   - id: thread-ownership-contract
     content: Define and enforce which threads may touch subjective-memory objects, retain/release APIs, eval APIs, and event payload construction
-    status: pending
+    status: completed
   - id: render-thread-detox
     content: Eliminate subjective-memory ownership churn from the render thread by switching to a plain-C snapshot handoff instead of deref/retain/release of Clj objects in that thread
-    status: pending
+    status: completed
   - id: audio-callback-detox
     content: Eliminate Clj allocation and callback/event construction from sound tick threads and ESP32 timer callbacks; forward only POD commands/events into a scheduler-owned drain path
-    status: pending
+    status: completed
   - id: breakout-runtime-hotpath
     content: Remove avoidable runtime.clj/runtime-play.clj hot-path allocations and repeated require/eval lookups from input, publish-state, and collision handling
-    status: in_progress
+    status: completed
   - id: collision-event-shape
     content: Reduce collision dispatch allocation cost and simplify the event bridge by keeping raw hit data compact until the interpreter thread materializes higher-level objects
     status: pending
@@ -31,31 +31,31 @@ todos:
     status: pending
   - id: docs-and-ownership-comments
     content: Add focused documentation for thread/ownership contracts and for the runtime, collision, and sound execution model
-    status: pending
+    status: completed
   - id: ingress-task-map-alloc
     content: Eliminate per-enqueue map allocation in event_loop_enqueue_ingress_call by using a fixed-slot ring buffer of POD task descriptors instead of heap-allocated CljPersistentMap per ingress entry
-    status: pending
+    status: completed
   - id: named-timer-heap-alloc
     content: Replace the malloc-based NamedTimerEntry linked list with a fixed-capacity static array to remove per-schedule heap allocation in the timer hot path
-    status: pending
+    status: completed
   - id: intern-symbol-caching
     content: Cache repeatedly called intern_symbol_global lookups in collision dispatch and scene bridge into static module-level variables initialized once, instead of repeated hash-table probes per frame or per hit
     status: completed
   - id: atom-swap-malloc
     content: Replace the per-call CLJ_MALLOC in atom_swap for the fn_args array with a small fixed-size stack buffer (covers the common 1-3 extra-args case) and only fall back to heap for rare large-arity swaps
-    status: pending
+    status: completed
   - id: collision-static-sizing
     content: Review and shrink VIEWER_COLLISION_RAW_HIT_CAP (512) and VIEWER_MAX_SPATIAL_RULES (128) to match actual Breakout usage, reducing static BSS footprint on ESP32
-    status: pending
+    status: completed
   - id: runtime-namespace-merge
     content: Merge runtime-play.clj back into runtime.clj to eliminate the indirection through runtime-play-call!/eval and the duplicated helper functions between the two namespaces
-    status: pending
+    status: completed
   - id: startup-eval-string-reduction
     content: Reduce the number of eval_string calls in viewer_load_breakout_host_config_fast by resolving multiple vars in a single eval expression or by using direct C namespace lookups
-    status: pending
+    status: completed
   - id: remove-cmake-dead-targets
     content: Clean up stale CMake targets such as the removed tiny-clj-profile and verify that only shipping and test targets remain
-    status: pending
+    status: completed
   - id: regression-and-budgets
     content: Add targeted regression tests and measurement steps for heap, thread-safety, sound callbacks, collision dispatch, and ESP32 binary size before implementation sign-off
     status: pending

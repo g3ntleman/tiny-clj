@@ -73,7 +73,6 @@ static CljObject *require_core_var(const char *name) {
 }
 
 TEST(test_add_watch_adds_watcher) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   // Ensure add-watch exists (prevents false positives if symbol resolution fails)
   CljObject *add_watch_fn = require_core_var("add-watch");
   TEST_ASSERT_TRUE_MESSAGE(
