@@ -1125,9 +1125,7 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
     vg_framebuffer_clear(&fb, 0x0000u);
 
-    if (!vg_render_scene_record_at_ms(scene, &fb, 50u)) {
-        TEST_IGNORE_MESSAGE("timeline ease via custom timeline-like records is unsupported in this runtime path");
-    }
+    TEST_ASSERT_TRUE(vg_render_scene_record_at_ms(scene, &fb, 50u));
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 17]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 27]);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 10]);
