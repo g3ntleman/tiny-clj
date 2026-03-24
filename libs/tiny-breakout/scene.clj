@@ -26,18 +26,12 @@
 
 (defn paddle-rule
   []
-  (concrete-spatial-rule :ball-vs-paddle 1003 1002))
-
-(defn paddle-rule?
-  [rule]
-  (and (= :ball-vs-paddle (:id rule))
-       (= 1003 (:self rule))
-       (= 1002 (:other rule))))
+  (concrete-spatial-rule :ball-vs-paddle :ball :paddle))
 
 (defn brick-rule-target-id
   [rule]
   (if (and (= :ball-vs-brick (:id rule))
-           (= 1003 (:self rule))
+           (= :ball (:self rule))
            (number? (:other rule)))
     (:other rule)
     nil))
@@ -73,9 +67,7 @@
         existing-rules (let [rules (:collision-rules state)]
                          (if (vector? rules) rules []))
         base-rules (if (some (fn [rule]
-                               (and (= :ball-vs-paddle (:id rule))
-                                    (= 1003 (:self rule))
-                                    (= 1002 (:other rule))))
+                               (= :ball-vs-paddle (:id rule)))
                              existing-rules)
                      existing-rules
                      (into [(paddle-rule)] existing-rules))
@@ -105,7 +97,7 @@
             (recur (rest remaining)
                    (assoc known brick-id true)
                    (conj! rules
-                          (concrete-spatial-rule :ball-vs-brick 1003 brick-id))
+                          (concrete-spatial-rule :ball-vs-brick :ball brick-id))
                    true)))))))
 
 (defn overlay-text
@@ -281,23 +273,30 @@
                     overlay-label)
           overlay-x (overlay-x overlay)
           overlay-style (overlay-style state overlay)
-          base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
-                         1002 (->Rect 1002 nil nil true paddle-x-field core/paddle-y core/paddle-width core/paddle-height paddle-shape)
-                         1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
-                         1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
-                         1005 (->VText 1005 nil overlay-style true overlay-x 120 1 0 overlay nil)
-                         1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
-                         1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
+          base-child-ids [:background
+                          :paddle
+                          :ball
+                          :score-text
+                          :overlay-text
+                          :lives-label
+                          :lives-value]
+          base-entities {:background (->Rect :background nil nil true 0 0 core/playfield-width core/playfield-height nil)
+                         :paddle (->Rect :paddle nil nil true paddle-x-field core/paddle-y core/paddle-width core/paddle-height paddle-shape)
+                         :ball (->Rect :ball nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
+                         :score-text (->VText :score-text nil nil true 8 12 1 0 score-text nil)
+                         :overlay-text (->VText :overlay-text nil overlay-style true overlay-x 120 1 0 overlay nil)
+                         :lives-label (->VText :lives-label nil nil true 226 12 1 0 "Lives:" nil)
+                         :lives-value (->VText :lives-value nil nil true 286 12 1 0 lives-text nil)}]
       (loop [i 0
              entities base-entities
-             child-ids (transient [1001 1002 1003 1004 1005 1006 1007])]
+             child-ids (transient base-child-ids)]
         (if (>= i (count bricks))
           (let [child-ids (persistent! child-ids)
-                root-node (->Group 'root nil nil true child-ids nil)]
+                root-node (->Group :tiny-fx.scene/root-entity nil nil true child-ids nil)]
             {:type :FrameScene
-             :root 'root
-             :index (assoc entities 'root root-node)
-             :clip-rect [0 0 320 240]
+             :root :tiny-fx.scene/root-entity
+             :index (assoc entities :tiny-fx.scene/root-entity root-node)
+             :clip-rect [0 0 core/playfield-width core/playfield-height]
              :z 0
              :visible true
              :opaque true

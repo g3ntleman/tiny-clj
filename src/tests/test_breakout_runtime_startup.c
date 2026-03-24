@@ -563,9 +563,10 @@ TEST(test_breakout_runtime_startup_restarts_title_overlay_fade_on_runtime_start)
 
     ID ok = eval_string(
         "(do "
+        "  (require 'tiny-breakout.scene) "
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-breakout.runtime/start-runtime! nil) "
-        "  (let [overlay (get (:index @tiny-breakout.runtime/scene*) 1005) "
+        "  (let [overlay (get (:index @tiny-breakout.runtime/scene*) :overlay-text) "
         "        kf (:keyframes (:stroke-color (:style overlay)))] "
         "    (> (first (first kf)) 0)))",
         ctx.st);
@@ -580,9 +581,10 @@ TEST(test_breakout_runtime_startup_bootstrap_title_overlay_starts_fade_immediate
 
     ID ok = eval_string(
         "(do "
+        "  (require 'tiny-breakout.scene) "
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-breakout.runtime/bootstrap-runtime!) "
-        "  (let [overlay (get (:index @tiny-breakout.runtime/scene*) 1005) "
+        "  (let [overlay (get (:index @tiny-breakout.runtime/scene*) :overlay-text) "
         "        kf (:keyframes (:stroke-color (:style overlay)))] "
         "    (and (vector? kf) "
         "         (> (count kf) 0) "
@@ -693,8 +695,8 @@ TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_ru
         "  (require 'tiny-fx.gfx) "
         "  (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote FrameScene) ["
-        "    'root "
-        "    {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 0 1 1 nil)} "
+        "    :tiny-fx.scene/root-entity "
+        "    {:tiny-fx.scene/root-entity (->Line :tiny-fx.scene/root-entity nil (->Style 65535 1 true false 0 false 0) true 0 0 1 1 nil)} "
         "    [0 0 320 240] "
         "    0 true true 0 0 nil]))",
         ctx.st);

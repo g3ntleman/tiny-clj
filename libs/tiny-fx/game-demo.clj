@@ -10,6 +10,7 @@
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
+(def root-entity-id :tiny-fx.scene/root-entity)
 (def starwars-title-track-id :starwars-title-2v)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-data* (atom nil))
@@ -78,22 +79,22 @@ and game-demo startup."
   (let [root (:root scene)
         index (:index scene)]
     (cond
-      (and (map? index) (= root 'root) (contains? index 'root))
+      (and (map? index) (= root root-entity-id) (contains? index root-entity-id))
       (record-from-map 'FrameScene
                        (assoc scene
-                              :index (assoc index 'root (assoc (get index 'root) :id 'root))))
+                              :index (assoc index root-entity-id (assoc (get index root-entity-id) :id root-entity-id))))
 
       (and (map? index) root)
       (record-from-map 'FrameScene
                        (assoc scene
-                              :root 'root
-                              :index (assoc index 'root (assoc root :id 'root))))
+                              :root root-entity-id
+                              :index (assoc index root-entity-id (assoc root :id root-entity-id))))
 
-      (and (nil? index) (map? root) (contains? root 'root))
+      (and (nil? index) (map? root) (contains? root root-entity-id))
       (record-from-map 'FrameScene
                        (assoc scene
-                              :root 'root
-                              :index (assoc root 'root (assoc (get root 'root) :id 'root))))
+                              :root root-entity-id
+                              :index (assoc root root-entity-id (assoc (get root root-entity-id) :id root-entity-id))))
 
       :else scene)))
 
@@ -175,12 +176,12 @@ Index layout:
         deco-scene (canonicalize-frame-scene (:deco-scene-template data))
         score-scene (canonicalize-frame-scene (:score-scene-template data))
         game-entities (assoc (:game-entities-static data)
-                        'root (assoc (get (:game-entities-static data) 'root) :id 'root)
+                        root-entity-id (assoc (get (:game-entities-static data) root-entity-id) :id root-entity-id)
                         obstacle-entity-id (:rocket-body-instance data)
                         3005 (:rocket-nose-instance data)
                         player-collision-entity-id (:game-player-collision data)
                         player-entity-id (:game-player data))
-        game-scene (record-create 'FrameScene ['root
+        game-scene (record-create 'FrameScene [root-entity-id
                                                    game-entities
                                                    [0 40 320 136]
                                                    2

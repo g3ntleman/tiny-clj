@@ -335,6 +335,13 @@
               (clear-events state))]
         result))))
 
+(defn- bounce-off-wall
+  [state wall]
+  (let [bounced (if (= wall :top)
+                  (assoc state :ball-vy (- (:ball-vy state)))
+                  (assoc state :ball-vx (- (:ball-vx state))))]
+    (assoc bounced :events (conj (:events bounced) :wall-hit))))
+
 (defn apply-segment-end-at-ms
   "Pure domain transition for one expected segment-end notification.
 now-ms may be nil; in that case the segment end timestamp is used."
@@ -350,19 +357,8 @@ now-ms may be nil; in that case the segment end timestamp is used."
                              (clear-events)
                              (anchor-ball (:to-x segment) (:to-y segment)))]
             (cond
-              (= wall :left)
-              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))
-                                                 :events (conj (:events anchored) :wall-hit))
-                                 resume-ms)
-
-              (= wall :right)
-              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))
-                                                 :events (conj (:events anchored) :wall-hit))
-                                 resume-ms)
-
-              (= wall :top)
-              (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))
-                                                 :events (conj (:events anchored) :wall-hit))
+              (or (= wall :left) (= wall :right) (= wall :top))
+              (plan-next-segment (bounce-off-wall anchored wall)
                                  resume-ms)
 
               (= wall :bottom)

@@ -19,26 +19,14 @@
 #include "value.h"
 #include "vector.h"
 
-#define STATIC_SYMBOL_DATA(name, cname_literal) \
-    static StaticSymbolData name = { \
-        .sym = { \
-            .base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = 0}, \
-            .ns_name = NULL, \
-            .unqualified = NULL, \
-            .cname = cname_literal \
-        } \
-    }
-
-STATIC_SYMBOL_DATA(sym_entity_root_data, "root");
-
-#undef STATIC_SYMBOL_DATA
-
 typedef struct {
     ID entity_map;
     CljHashMap *index;
 } VgFlatSceneLookup;
 
 static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+static CljSymbol *g_ns_tiny_fx_scene = NULL;
+static CljSymbol *g_kw_root_entity = NULL;
 static CljSymbol *g_kw_timeline_ease = NULL;
 static CljSymbol *g_kw_timeline_easing = NULL;
 static const SymbolCacheEntry g_scene_symbol_cache[] = {
@@ -46,12 +34,14 @@ static const SymbolCacheEntry g_scene_symbol_cache[] = {
     {&g_kw_timeline_easing, ":easing", SYMBOL_CACHE_SCOPE_GLOBAL},
 };
 
-static inline void scene_ensure_timeline_keyword_cache(void) {
+static inline void scene_ensure_symbol_cache(void) {
     if (!g_kw_timeline_ease || !g_kw_timeline_easing) {
         (void)symbol_cache_init_global(
             g_scene_symbol_cache,
             sizeof(g_scene_symbol_cache) / sizeof(g_scene_symbol_cache[0]));
     }
+    g_ns_tiny_fx_scene = intern_symbol_global("tiny-fx.scene");
+    g_kw_root_entity = g_ns_tiny_fx_scene ? intern_symbol(g_ns_tiny_fx_scene, ":root-entity") : NULL;
 }
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
@@ -163,7 +153,8 @@ static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID en
 }
 
 static inline bool vg_scene_root_is_canonical(ID root_field) {
-    return root_field && clj_equal(root_field, (ID)&sym_entity_root_data.sym);
+    scene_ensure_symbol_cache();
+    return root_field == (ID)g_kw_root_entity;
 }
 
 static inline uint32_t record_type_hash(ID obj) {
@@ -849,7 +840,7 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
 }
 
 static VgAnimEase timeline_ease_kind(ID timeline_obj) {
-    scene_ensure_timeline_keyword_cache();
+    scene_ensure_symbol_cache();
     ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_ease, NULL);
     if (!ease_obj) {
         ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_easing, NULL);
@@ -1653,7 +1644,7 @@ static bool resolve_root_node(ID root_field,
     if (out_entity_map) {
         *out_entity_map = index_field;
     }
-    *out_root_node = vg_flat_scene_lookup_get(lookup, index_field, (ID)&sym_entity_root_data.sym);
+    *out_root_node = vg_flat_scene_lookup_get(lookup, index_field, root_field);
     return *out_root_node != NULL;
 }
 
@@ -1812,7 +1803,7 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
     if (!vg_flat_scene_lookup_build(scene->index, &lookup)) {
         return false;
     }
-    ID root_node = vg_flat_scene_lookup_get(&lookup, scene->index, (ID)&sym_entity_root_data.sym);
+    ID root_node = vg_flat_scene_lookup_get(&lookup, scene->index, scene->root);
     if (!root_node) {
         return false;
     }

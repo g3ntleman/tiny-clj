@@ -14,7 +14,9 @@
 (def held-buttons* (atom idle-held-buttons))
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
-(def ^:private segment-watch-opts {:slot :game :entity-id 1003 :field :x})
+(def ^:private segment-watch-opts {:slot :game
+                                   :entity-id :ball
+                                   :field :x})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
 (def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
@@ -55,7 +57,7 @@
                              (= overlay (:text animation)))
                       (assoc state :overlay-start-ms (:start-ms animation))
                       (dissoc state :overlay-start-ms))]
-    (record-from-map 'FrameScene (dissoc (tiny-breakout.scene/build-scene scene-state) :type))))
+    (record-from-map 'FrameScene (dissoc (scene/build-scene scene-state) :type))))
 
 (defn- overlay-animation-for-state
   [state]
@@ -121,7 +123,7 @@
 
 (defn- rendered-ball-position
   []
-  (let [rendered (rendered-entity-state 1003)]
+  (let [rendered (rendered-entity-state :ball)]
     (if (and (map? rendered)
              (number? (:tx rendered))
              (number? (:ty rendered)))
@@ -131,16 +133,16 @@
 
 (defn- clamp-paddle-x
   [x]
-  (let [right-limit (- tiny-breakout.core/playfield-width tiny-breakout.core/paddle-width)]
+  (let [right-limit (- core/playfield-width core/paddle-width)]
     (max 0 (min right-limit x))))
 
 (defn- attached-ball-x
   [paddle-x]
-  (+ paddle-x (quot tiny-breakout.core/paddle-width 2)))
+  (+ paddle-x (quot core/paddle-width 2)))
 
 (defn- attached-ball-y
   []
-  (- tiny-breakout.core/paddle-y 6))
+  (- core/paddle-y 6))
 
 (defn- play-events!
   [events]
@@ -193,9 +195,9 @@
   [distance]
   (if (<= distance 0)
     0
-    (quot (+ (* distance tiny-breakout.core/segment-step-ms)
-             (- tiny-breakout.core/paddle-speed 1))
-          tiny-breakout.core/paddle-speed)))
+    (quot (+ (* distance core/segment-step-ms)
+             (- core/paddle-speed 1))
+          core/paddle-speed)))
 
 (defn- paddle-motion-direction
   [state]
@@ -208,7 +210,7 @@
   (let [from-x (clamp-paddle-x (let [v (:paddle-x state)] (if (number? v) v 0)))
         to-x (if (< dir 0)
                0
-               (- tiny-breakout.core/playfield-width tiny-breakout.core/paddle-width))
+               (- core/playfield-width core/paddle-width))
         distance (abs (- to-x from-x))
         duration-ms (paddle-motion-duration-ms distance)]
     (assoc state
@@ -270,7 +272,7 @@
                          (= (:phase current) :pause))
                    (rendered-ball-position)
                    nil)]
-    (tiny-breakout.core/apply-input current input-map now-ms rendered)))
+    (core/apply-input current input-map now-ms rendered)))
 
 (defn- normalize-paddle-intent
   [input]
@@ -342,7 +344,7 @@
 
 (defn- store-published-state!
   [state]
-  (let [state (tiny-breakout.scene/with-expanded-collision-rules state)
+  (let [state (scene/with-expanded-collision-rules state)
         events (:events state)
         state-without-events (assoc state :events [])]
     (reset! state* state-without-events)
@@ -410,7 +412,7 @@
   (let [now-ms (current-time-ms)
         next-state (swap! tiny-breakout.runtime/state*
                           (fn [current]
-                            (tiny-breakout.core/apply-spatial-event current event now-ms)))]
+                            (core/apply-spatial-event current event now-ms)))]
     (tiny-breakout.runtime/publish-state! next-state)
     (gfx-collision/dispatch-spatial-watchers! event)
     nil))
@@ -470,7 +472,7 @@
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))
-  (let [state (tiny-breakout.scene/with-expanded-collision-rules (tiny-breakout.core/init-state))
+  (let [state (scene/with-expanded-collision-rules (core/init-state))
         state-without-events (assoc state :events [])]
     (reset! tiny-breakout.runtime/overlay-animation*
             (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
