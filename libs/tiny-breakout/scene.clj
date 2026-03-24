@@ -129,32 +129,32 @@
     100
     (quot (+ (- core/playfield-width (overlay-text-width overlay)) 1) 2)))
 
-(def ^:private overlay-ease-in-duration-ms 880)
-(def ^:private overlay-ease-in-dark-gray 24)
-(def ^:private overlay-ease-in-light-gray 255)
-(def ^:private overlay-ease-in-stop-count 11)
+(def ^:private ease-in-duration-ms 880)
+(def ^:private ease-in-dark-gray 24)
+(def ^:private ease-in-light-gray 255)
+(def ^:private ease-in-stop-count 11)
 
-(defn- overlay-ease-in-stop-times
+(defn- ease-in-stop-times
   []
   (mapv (fn [step]
-          (quot (* overlay-ease-in-duration-ms step) overlay-ease-in-stop-count))
-        (range 0 (+ overlay-ease-in-stop-count 1))))
+          (quot (* ease-in-duration-ms step) ease-in-stop-count))
+        (range 0 (+ ease-in-stop-count 1))))
 
-(defn- overlay-ease-in-gray-rgb565
+(defn- ease-in-gray-rgb565
   [offset-ms]
-  (let [gray (+ overlay-ease-in-dark-gray
-                (quot (* (- overlay-ease-in-light-gray overlay-ease-in-dark-gray) offset-ms)
-                      overlay-ease-in-duration-ms))]
+  (let [gray (+ ease-in-dark-gray
+                (quot (* (- ease-in-light-gray ease-in-dark-gray) offset-ms)
+                      ease-in-duration-ms))]
     (gfx/color gray gray gray)))
 
-(defn overlay-ease-in-keyframes
+(defn ease-in-keyframes
   "Compiles explicit grayscale stops into duplicated-timestamp keyframes so the
   shared timeline path stays in Clojure and never interpolates packed RGB565 values."
   [start-ms]
   (let [stops (mapv (fn [offset-ms]
                       [(+ start-ms offset-ms)
-                       (overlay-ease-in-gray-rgb565 offset-ms)])
-                    (overlay-ease-in-stop-times))]
+                       (ease-in-gray-rgb565 offset-ms)])
+                    (ease-in-stop-times))]
     (if (empty? stops)
       []
       (reduce (fn [keyframes [next-ms next-value]]
@@ -172,7 +172,7 @@
     (let [start-ms (get state :overlay-start-ms)
           stroke-color (if (number? start-ms)
                          (record-create 'Timeline
-                                        [(overlay-ease-in-keyframes start-ms)
+                                        [(ease-in-keyframes start-ms)
                                          false
                                          false])
                          (gfx/color 0xffffff))]
