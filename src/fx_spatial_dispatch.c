@@ -177,6 +177,7 @@ static bool fx_collision_enqueue_event(const ViewerSceneBundle *bundle,
 
 static bool fx_collision_lookup_entity_state(ViewerEntityStateCacheEntry *cache,
                                                  uint32_t *cache_count,
+                                                 uint32_t cache_capacity,
                                                  ID entity_id,
                                                  uint8_t primary_slot,
                                                  VgRenderedEntityState *out_state) {
@@ -195,7 +196,7 @@ static bool fx_collision_lookup_entity_state(ViewerEntityStateCacheEntry *cache,
     }
 
     bool present = vg_rendered_state_query_entity(primary_slot, (uintptr_t)entity_id, out_state);
-    if (*cache_count < (FX_MAX_SPATIAL_RULES * 2u)) {
+    if (*cache_count < cache_capacity) {
         ViewerEntityStateCacheEntry *entry = &cache[(*cache_count)++];
         entry->entity_id = entity_id;
         entry->resolved = true;
@@ -291,7 +292,19 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
     bool any_triggered = false;
     uint8_t primary_slot = bundle->primary_slot_index;
     ID entity_index = fx_collision_scene_entity_map(bundle->primary_scene);
-    ViewerEntityStateCacheEntry state_cache[FX_MAX_SPATIAL_RULES * 2u] = {0};
+    ViewerEntityStateCacheEntry stack_state_cache[32] = {0};
+    ViewerEntityStateCacheEntry *state_cache = stack_state_cache;
+    uint32_t state_cache_capacity = rule_set->count > (UINT32_MAX / 2u)
+        ? UINT32_MAX
+        : (rule_set->count * 2u);
+    if (state_cache_capacity > 32u) {
+        state_cache = (ViewerEntityStateCacheEntry *)CLJ_HOST_MALLOC(sizeof(*state_cache) *
+                                                                     (size_t)state_cache_capacity);
+        if (!state_cache) {
+            return false;
+        }
+        memset(state_cache, 0, sizeof(*state_cache) * (size_t)state_cache_capacity);
+    }
     uint32_t state_cache_count = 0u;
     for (uint32_t i = 0; i < rule_set->count; i++) {
         ViewerCollisionPolicy *policy = &rule_set->items[i];
@@ -300,11 +313,13 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
         VgRenderedEntityState other_state;
         bool have_self = fx_collision_lookup_entity_state(state_cache,
                                                               &state_cache_count,
+                                                              state_cache_capacity,
                                                               policy->self_entity_id,
                                                               primary_slot,
                                                               &self_state);
         bool have_other = fx_collision_lookup_entity_state(state_cache,
                                                                &state_cache_count,
+                                                               state_cache_capacity,
                                                                policy->other_entity_id,
                                                                primary_slot,
                                                                &other_state);
@@ -353,6 +368,9 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
                                              &self_box,
                                              &other_box);
         any_triggered = true;
+    }
+    if (state_cache != stack_state_cache) {
+        CLJ_HOST_FREE(state_cache);
     }
     return any_triggered;
 }

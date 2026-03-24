@@ -194,6 +194,43 @@ static uint32_t fx_next_rule_set_version(const ViewerSpatialRuleSet *rule_set) {
     return version;
 }
 
+static bool fx_spatial_rule_set_reserve(ViewerSpatialRuleSet *rule_set, uint32_t capacity) {
+    if (!rule_set) {
+        return false;
+    }
+    if (capacity <= rule_set->capacity) {
+        return true;
+    }
+
+    size_t items_size = sizeof(*rule_set->items) * (size_t)capacity;
+    size_t states_size = sizeof(*rule_set->states) * (size_t)capacity;
+    ViewerCollisionPolicy *items = (ViewerCollisionPolicy *)CLJ_HOST_MALLOC(items_size);
+    if (!items) {
+        return false;
+    }
+    memset(items, 0, items_size);
+    VgCollisionState *states = (VgCollisionState *)CLJ_HOST_MALLOC(states_size);
+    if (!states) {
+        CLJ_HOST_FREE(items);
+        return false;
+    }
+    memset(states, 0, states_size);
+
+    if (rule_set->items && rule_set->count > 0u) {
+        memcpy(items, rule_set->items, sizeof(*items) * (size_t)rule_set->count);
+    }
+    if (rule_set->states && rule_set->count > 0u) {
+        memcpy(states, rule_set->states, sizeof(*states) * (size_t)rule_set->count);
+    }
+
+    CLJ_HOST_FREE(rule_set->items);
+    CLJ_HOST_FREE(rule_set->states);
+    rule_set->items = items;
+    rule_set->states = states;
+    rule_set->capacity = capacity;
+    return true;
+}
+
 /**
  * @brief Returns the entity index map for a frame scene when present.
  *
@@ -239,9 +276,11 @@ void destroy_spatial_rule_set(ViewerSpatialRuleSet *rule_set) {
     if (!rule_set) {
         return;
     }
-    for (uint32_t i = 0; i < rule_set->count && i < FX_MAX_SPATIAL_RULES; i++) {
+    for (uint32_t i = 0; i < rule_set->count; i++) {
         destroy_collision_policy(&rule_set->items[i]);
     }
+    CLJ_HOST_FREE(rule_set->items);
+    CLJ_HOST_FREE(rule_set->states);
     memset(rule_set, 0, sizeof(*rule_set));
 }
 
@@ -362,13 +401,24 @@ bool fx_collision_load_rules_from_scene(FrameScene *scene,
     }
     ViewerSpatialRuleSet next_rule_set = {0};
     next_rule_set.version = next_version;
-    const char *rule_capacity_msg =
-        "FX_MAX_SPATIAL_RULES is too small for the scene's collision policies";
     uint32_t rule_count = vector_count(rules_vec);
-    if (rule_count > FX_MAX_SPATIAL_RULES) {
-        CLJ_ASSERT(false && rule_capacity_msg);
+    ID entity_index = fx_collision_scene_entity_map(scene);
+    if (!entity_index || !is_map(entity_index)) {
         destroy_spatial_rule_set(io_rule_set);
         return false;
+    }
+    uint32_t entity_capacity = (uint32_t)map_count(entity_index);
+    ID *self_ids = NULL;
+    ID *other_ids = NULL;
+    if (entity_capacity > 0u) {
+        self_ids = (ID *)CLJ_HOST_MALLOC(sizeof(*self_ids) * (size_t)entity_capacity);
+        other_ids = (ID *)CLJ_HOST_MALLOC(sizeof(*other_ids) * (size_t)entity_capacity);
+        if (!self_ids || !other_ids) {
+            CLJ_HOST_FREE(self_ids);
+            CLJ_HOST_FREE(other_ids);
+            destroy_spatial_rule_set(io_rule_set);
+            return false;
+        }
     }
     for (uint32_t i = 0; i < rule_count && ok; i++) {
         ID rule = vector_nth(rules_vec, i);
@@ -397,30 +447,33 @@ bool fx_collision_load_rules_from_scene(FrameScene *scene,
             ok = false;
             break;
         }
-        ID entity_index = fx_collision_scene_entity_map(scene);
-        if (!entity_index || !is_map(entity_index)) {
-            destroy_spatial_rule_set(&next_rule_set);
-            ok = false;
-            break;
+        if (entity_capacity > 0u) {
+            memset(self_ids, 0, sizeof(*self_ids) * (size_t)entity_capacity);
+            memset(other_ids, 0, sizeof(*other_ids) * (size_t)entity_capacity);
         }
-        ID self_ids[FX_MAX_SPATIAL_RULES] = {0};
-        ID other_ids[FX_MAX_SPATIAL_RULES] = {0};
         uint32_t self_count = fx_collect_selector_entity_ids(entity_index,
                                                                  self_selector,
                                                                  self_ids,
-                                                                 FX_MAX_SPATIAL_RULES);
+                                                                 entity_capacity);
         uint32_t other_count = fx_collect_selector_entity_ids(entity_index,
                                                                   other_selector,
                                                                   other_ids,
-                                                                  FX_MAX_SPATIAL_RULES);
+                                                                  entity_capacity);
         for (uint32_t self_i = 0; self_i < self_count && ok; self_i++) {
             for (uint32_t other_i = 0; other_i < other_count; other_i++) {
-                if (next_rule_set.count >= FX_MAX_SPATIAL_RULES) {
-                    CLJ_ASSERT(false && rule_capacity_msg);
-                    destroy_spatial_rule_set(&next_rule_set);
-                    return false;
+                if (next_rule_set.count == next_rule_set.capacity) {
+                    uint32_t grown_capacity = next_rule_set.capacity < 8u ? 8u : (next_rule_set.capacity * 2u);
+                    if (grown_capacity < next_rule_set.count + 1u) {
+                        grown_capacity = next_rule_set.count + 1u;
+                    }
+                    if (!fx_spatial_rule_set_reserve(&next_rule_set, grown_capacity)) {
+                        destroy_spatial_rule_set(&next_rule_set);
+                        ok = false;
+                        break;
+                    }
                 }
                 ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
+                memset(dst, 0, sizeof(*dst));
                 ID self_rec = map_get_sentinel(entity_index, self_ids[self_i], NULL);
                 ID other_rec = map_get_sentinel(entity_index, other_ids[other_i], NULL);
                 if (!self_rec || !other_rec) {
@@ -446,6 +499,8 @@ bool fx_collision_load_rules_from_scene(FrameScene *scene,
             }
         }
     }
+    CLJ_HOST_FREE(self_ids);
+    CLJ_HOST_FREE(other_ids);
     if (ok) {
         destroy_spatial_rule_set(io_rule_set);
         *io_rule_set = next_rule_set;

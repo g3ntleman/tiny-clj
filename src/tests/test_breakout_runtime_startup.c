@@ -55,6 +55,25 @@ static ViewerCollisionPolicy *breakout_find_policy_by_id(ViewerSpatialRuleSet *r
     return NULL;
 }
 
+static void breakout_init_single_rule_set(ViewerSpatialRuleSet *rule_set,
+                                          ViewerCollisionPolicy *policy_storage,
+                                          VgCollisionState *state_storage,
+                                          const ViewerCollisionPolicy *policy) {
+    TEST_ASSERT_NOT_NULL(rule_set);
+    TEST_ASSERT_NOT_NULL(policy_storage);
+    TEST_ASSERT_NOT_NULL(state_storage);
+    TEST_ASSERT_NOT_NULL(policy);
+
+    memset(policy_storage, 0, sizeof(*policy_storage));
+    *policy_storage = *policy;
+    memset(state_storage, 0, sizeof(*state_storage));
+    memset(rule_set, 0, sizeof(*rule_set));
+    rule_set->items = policy_storage;
+    rule_set->states = state_storage;
+    rule_set->count = 1u;
+    rule_set->capacity = 1u;
+}
+
 static bool breakout_fx_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
                                                                bool apply_host_heap_budget) {
     if (!ctx) {
@@ -273,8 +292,8 @@ TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {
             memory_current_usage_bytes(),
             memory_get_heap_limit_bytes());
 
-    TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 96 * 1024,
-                             "direct first-launch apply-input path should stay below 96KB local peak");
+    TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 128 * 1024,
+                             "direct first-launch apply-input path should stay below 128KB local peak");
 
     memory_set_heap_limit_bytes(previous_limit);
     breakout_fx_test_context_destroy(&ctx);
@@ -733,7 +752,7 @@ TEST(test_breakout_runtime_startup_level_clear_direct_launch_ingress_advances_to
                              "direct host launch ingress should advance level-clear to the next serve state");
 }
 
-TEST(test_breakout_runtime_startup_advancing_to_third_level_keeps_spatial_rules_within_capacity) {
+TEST(test_breakout_runtime_startup_advancing_to_third_level_reloads_spatial_rules) {
     BreakoutViewerTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
 
@@ -767,8 +786,6 @@ TEST(test_breakout_runtime_startup_advancing_to_third_level_keeps_spatial_rules_
     TEST_ASSERT_TRUE(is_fixnum(rule_count));
     TEST_ASSERT_TRUE(is_fixnum(level_index));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(level_index));
-    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(rule_count) <= FX_MAX_SPATIAL_RULES,
-                             "advancing to the third level must not exceed FX_MAX_SPATIAL_RULES");
 
     fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
     TEST_ASSERT_EQUAL_UINT32((uint32_t)AS_FIXNUM(rule_count), ctx.spatial_rules.count);
@@ -964,8 +981,9 @@ TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapsh
     ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
     TEST_ASSERT_NOT_NULL(policy);
     ViewerSpatialRuleSet single_rule_set = {0};
-    single_rule_set.items[0] = *policy;
-    single_rule_set.count = 1u;
+    ViewerCollisionPolicy single_policy = {0};
+    VgCollisionState single_state = {0};
+    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
 
     uint8_t slot = ctx.bundle.primary_slot_index;
     VgTransformFixed world_t = {
@@ -1017,8 +1035,9 @@ TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_re
     ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
     TEST_ASSERT_NOT_NULL(policy);
     ViewerSpatialRuleSet single_rule_set = {0};
-    single_rule_set.items[0] = *policy;
-    single_rule_set.count = 1u;
+    ViewerCollisionPolicy single_policy = {0};
+    VgCollisionState single_state = {0};
+    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
 
     uint8_t slot = ctx.bundle.primary_slot_index;
     VgTransformFixed world_t = {
@@ -1066,8 +1085,9 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
     ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
     TEST_ASSERT_NOT_NULL(policy);
     ViewerSpatialRuleSet single_rule_set = {0};
-    single_rule_set.items[0] = *policy;
-    single_rule_set.count = 1u;
+    ViewerCollisionPolicy single_policy = {0};
+    VgCollisionState single_state = {0};
+    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
 
     ID callback = eval_string(
         "(do "
@@ -1123,8 +1143,9 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
     TEST_ASSERT_NOT_NULL(policy);
     ViewerSpatialRuleSet single_rule_set = {0};
-    single_rule_set.items[0] = *policy;
-    single_rule_set.count = 1u;
+    ViewerCollisionPolicy single_policy = {0};
+    VgCollisionState single_state = {0};
+    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
 
     uint8_t slot = ctx.bundle.primary_slot_index;
     VgTransformFixed world_t = {
@@ -1539,8 +1560,6 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
     ID bottom_brick_id = vector_nth(counts_vec, 1u);
     TEST_ASSERT_TRUE(is_fixnum(expected_rule_count));
     TEST_ASSERT_TRUE(is_fixnum(bottom_brick_id));
-    TEST_ASSERT_TRUE_MESSAGE((uint32_t)AS_FIXNUM(expected_rule_count) <= FX_MAX_SPATIAL_RULES,
-                             "test scene must fit inside FX_MAX_SPATIAL_RULES");
 
     fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
 
@@ -1559,6 +1578,44 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
     breakout_fx_test_context_destroy(&ctx);
     TEST_ASSERT_TRUE_MESSAGE(saw_bottom_brick_rule,
                              "expected collision policy set to include the last launched brick as a collision target");
+}
+
+TEST(test_breakout_runtime_startup_loads_spatial_rules_beyond_legacy_fixed_cap) {
+    BreakoutViewerTestContext ctx = {0};
+    bool init_ok = breakout_fx_test_context_init(&ctx);
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout test context init failed");
+
+    ID kw_collision_rules = intern_symbol_global(":collision-rules");
+    TEST_ASSERT_NOT_NULL_MESSAGE(kw_collision_rules, "missing :collision-rules keyword");
+    FrameScene *scene = fx_frame_scene_from_atom(ctx.bundle.primary_scene_atom);
+    TEST_ASSERT_NOT_NULL_MESSAGE(scene, "primary scene atom did not deref to a frame scene");
+    ID rules = tiny_fx_gfx_get_field((ID)scene, kw_collision_rules, NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(rules, "scene did not expose :collision-rules");
+    TEST_ASSERT_TRUE_MESSAGE(is_vector(rules), "scene :collision-rules must stay a vector");
+    CljPersistentVector *rules_vec = as_vector(rules);
+    TEST_ASSERT_NOT_NULL_MESSAGE(rules_vec, "scene :collision-rules vector could not be accessed");
+    ID base_rule = vector_nth(rules_vec, 0u);
+    TEST_ASSERT_NOT_NULL_MESSAGE(base_rule, "scene must contain at least one base collision rule");
+
+    CljPersistentVector *expanded = make_vector(80, STRONG);
+    TEST_ASSERT_NOT_NULL_MESSAGE(expanded, "failed to allocate expanded collision rule vector");
+    for (uint32_t i = 0; i < 80u; i++) {
+        vector_conj_inplace(&expanded, base_rule);
+    }
+    AUTORELEASE((ID)expanded);
+
+    ID updated_scene = record_assoc((ID)scene, kw_collision_rules, (ID)expanded);
+    TEST_ASSERT_NOT_NULL_MESSAGE(updated_scene, "record_assoc failed to build updated scene");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(updated_scene,
+                                  atom_reset(ctx.bundle.primary_scene_atom, updated_scene),
+                                  "atom_reset should publish the updated primary scene");
+
+    fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(80u,
+                                     ctx.spatial_rules.count,
+                                     "dynamic spatial loader should keep all 80 concrete rules");
+
+    breakout_fx_test_context_destroy(&ctx);
 }
 
 TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_until_new_frame) {

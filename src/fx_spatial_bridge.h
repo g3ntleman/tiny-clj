@@ -11,9 +11,6 @@
 
 struct ViewerSceneBundle;
 
-/* Must fit the concrete collision policies of the active scene. */
-#define FX_MAX_SPATIAL_RULES 64u
-
 typedef struct ViewerCollisionPolicy {
     ID self_entity_id;
     ID other_entity_id;
@@ -28,9 +25,10 @@ typedef struct ViewerCollisionPolicy {
 } ViewerCollisionPolicy;
 
 typedef struct ViewerSpatialRuleSet {
-    ViewerCollisionPolicy items[FX_MAX_SPATIAL_RULES];
-    VgCollisionState states[FX_MAX_SPATIAL_RULES];
+    ViewerCollisionPolicy *items;
+    VgCollisionState *states;
     uint32_t count;
+    uint32_t capacity;
     uint32_t version;
 } ViewerSpatialRuleSet;
 
