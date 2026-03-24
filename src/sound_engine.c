@@ -725,7 +725,11 @@ bool sound_engine_play_sfx(ID sfx_id) {
 
     SoundCmd cmd = { .type = SOUND_CMD_PLAY_SFX, .track_id = sfx_id };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
-    if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (!ok) {
+        g_sound_engine.telemetry.cmd_drop_count++;
+        fprintf(stderr, "[sound] PLAY_SFX dropped: command queue full (%d slots)\n",
+                SOUND_CMD_QUEUE_CAP);
+    }
     if (ok) {
         sound_tick_kick();
     }
