@@ -112,6 +112,7 @@ static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
+#define RUNLOOP_SLOW_CLOJURE_TASK_WARN_THRESHOLD_NS (20ull * 1000ull * 1000ull)
 
 static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg, bool has_arg);
 static CljTransientVector* task_queue_get(void);
@@ -147,6 +148,44 @@ static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
                             "[runloop] warning: runloop tick took %lums (threshold: 1000ms)\n",
                             elapsed_ms);
     g_runloop_last_warn_ns = end_ns;
+}
+
+static const char *event_loop_log_value_cstr(ID value) {
+    if (!value) {
+        return "nil";
+    }
+    CljString *rendered = clj_to_string(value);
+    if (!rendered) {
+        return "<to_string failed>";
+    }
+    return string_data((ID)rendered);
+}
+
+static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
+                                                 ID fn,
+                                                 bool has_arg,
+                                                 ID arg) {
+    if (elapsed_ns < RUNLOOP_SLOW_CLOJURE_TASK_WARN_THRESHOLD_NS) {
+        return;
+    }
+    unsigned long elapsed_ms = (unsigned long)(elapsed_ns / 1000000ull);
+    const char *fn_cstr = event_loop_log_value_cstr(fn);
+    if (has_arg) {
+        const char *arg_cstr = event_loop_log_value_cstr(arg);
+        fprintf(stdout,
+                "[viewer-runloop] warning: clojure runloop event took %lums "
+                "(threshold: 20ms, fn=%s, payload=%s)\n",
+                elapsed_ms,
+                fn_cstr,
+                arg_cstr);
+    } else {
+        fprintf(stdout,
+                "[viewer-runloop] warning: clojure runloop event took %lums "
+                "(threshold: 20ms, fn=%s)\n",
+                elapsed_ms,
+                fn_cstr);
+    }
+    fflush(stdout);
 }
 
 static inline void event_loop_ingress_lock_acquire(void) {
@@ -302,35 +341,16 @@ static bool event_loop_payload_matches_coalescing_key(ID queued_payload, ID cand
     return false;
 }
 
-#ifdef DEBUG
-static const char *event_loop_debug_value_cstr(ID value, CljString **owned_string) {
-    if (owned_string) {
-        *owned_string = NULL;
-    }
-    if (!value) {
-        return "nil";
-    }
-    CljString *rendered = clj_to_string(value);
-    if (!rendered) {
-        return "<to_string failed>";
-    }
-    // clj_to_string returns an autoreleased string in tiny-clj integration.
-    // Do not RELEASE here; just keep pointer valid for immediate logging.
-    (void)owned_string;
-    return string_data((ID)rendered);
-}
-
 static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
                                                          ID payload) {
-    const char *fn_cstr = event_loop_debug_value_cstr(fn_one_arity, NULL);
-    const char *payload_cstr = event_loop_debug_value_cstr(payload, NULL);
+    const char *fn_cstr = event_loop_log_value_cstr(fn_one_arity);
+    const char *payload_cstr = event_loop_log_value_cstr(payload);
 
     event_loop_mini_fprintf(stderr,
                             "[runloop][ingress][coalesce] fn=%s payload=%s\n",
                             fn_cstr,
                             payload_cstr);
 }
-#endif
 
 static bool event_loop_ingress_entry_matches_payload(const EventLoopIngressSlot *entry,
                                                      ID fn_one_arity,
@@ -1034,7 +1054,11 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     RELEASE(fn);
     uint64_t tick_end_ns = event_loop_monotonic_now_ns();
     if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
-        event_loop_warn_if_slow_tick(tick_end_ns - tick_start_ns, tick_end_ns);
+        uint64_t elapsed_ns = tick_end_ns - tick_start_ns;
+        WITH_AUTORELEASE_POOL({
+            event_loop_warn_if_slow_clojure_task(elapsed_ns, fn, has_arg, arg);
+        });
+        event_loop_warn_if_slow_tick(elapsed_ns, tick_end_ns);
     }
     return true;
 }

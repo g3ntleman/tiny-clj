@@ -74,6 +74,71 @@ static void breakout_init_single_rule_set(ViewerSpatialRuleSet *rule_set,
     rule_set->capacity = 1u;
 }
 
+typedef bool (*BreakoutStdoutCaptureAction)(void *ctx);
+
+static char *breakout_capture_stdout(BreakoutStdoutCaptureAction action, void *ctx) {
+    if (!action) {
+        return NULL;
+    }
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+    int stdout_fd = fileno(stdout);
+    int saved_stdout = dup(stdout_fd);
+    if (saved_stdout < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    fflush(stdout);
+    if (dup2(fileno(tmp), stdout_fd) < 0) {
+        close(saved_stdout);
+        fclose(tmp);
+        return NULL;
+    }
+
+    (void)action(ctx);
+
+    fflush(stdout);
+    (void)dup2(saved_stdout, stdout_fd);
+    close(saved_stdout);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    long size = ftell(tmp);
+    if (size < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    char *buf = (char *)CLJ_MALLOC((size_t)size + 1u);
+    if (!buf) {
+        fclose(tmp);
+        return NULL;
+    }
+    size_t read_n = fread(buf, 1u, (size_t)size, tmp);
+    buf[read_n] = '\0';
+    fclose(tmp);
+    return buf;
+}
+
+typedef struct {
+    EvalState *st;
+} BreakoutRunloopDrainCaptureCtx;
+
+static bool breakout_capture_drain_one_runloop_task(void *ctx) {
+    BreakoutRunloopDrainCaptureCtx *capture_ctx = (BreakoutRunloopDrainCaptureCtx *)ctx;
+    if (!capture_ctx) {
+        return false;
+    }
+    return fx_drain_one_runloop_task(capture_ctx->st);
+}
+
 static bool breakout_fx_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
                                                                bool apply_host_heap_budget) {
     if (!ctx) {
@@ -454,6 +519,38 @@ TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_flags_stalls_after_
 
     TEST_ASSERT_EQUAL_UINT64(6ull * 1000ull * 1000ull * 1000ull, snapshot.age_ns);
     TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_STALLED, snapshot.state);
+}
+
+TEST(test_breakout_runtime_startup_runloop_warns_to_stdout_when_event_exceeds_20ms) {
+    EvalState *st = NULL;
+
+    runtime_init(&g_runtime);
+    event_loop_init();
+    event_loop_clear();
+
+    st = evalstate_new(true);
+    TEST_ASSERT_NOT_NULL(st);
+    evalstate_set_ns(st, "user");
+
+    ID fn = eval_string("(fn [event] (sleep 25) nil)", st);
+    ID payload = eval_string("{:id :slow-runloop-event}", st);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(payload);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)fn, payload));
+
+    BreakoutRunloopDrainCaptureCtx ctx = {.st = st};
+    char *stdout_output = breakout_capture_stdout(breakout_capture_drain_one_runloop_task, &ctx);
+    TEST_ASSERT_NOT_NULL_MESSAGE(stdout_output, "failed to capture stdout for slow runloop warning");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[viewer-runloop] warning: clojure runloop event took"),
+                                 "expected slow runloop warning on stdout");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "threshold: 20ms"),
+                                 "expected warning to mention 20ms threshold");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "payload="),
+                                 "expected warning to include payload context");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, ":slow-runloop-event"),
+                                 "expected warning to include event payload details");
+    CLJ_FREE(stdout_output);
+    evalstate_free(st);
 }
 
 TEST(test_breakout_runtime_startup_host_keys_drive_gpio_levels_for_fire_and_y) {
