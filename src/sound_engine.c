@@ -182,7 +182,11 @@ typedef struct {
 typedef struct {
     ID callback_fn;
     ID track_id;
+    uint32_t epoch;
 } SoundFinishedIngressCtx;
+
+static uint32_t g_sound_engine_callback_epoch = 0u;
+static uint32_t g_sound_engine_callback_epoch_counter = 0u;
 
 static void sound_deferred_release_run(void *ctx, EvalState *st) {
     (void)st;
@@ -226,6 +230,9 @@ static void sound_release_retained_obj(ID retained_obj) {
 static void sound_finished_ingress_run(void *ctx, EvalState *st) {
     SoundFinishedIngressCtx *finished_ctx = (SoundFinishedIngressCtx *)ctx;
     if (!finished_ctx || !finished_ctx->callback_fn || !finished_ctx->track_id) {
+        return;
+    }
+    if (finished_ctx->epoch != g_sound_engine_callback_epoch) {
         return;
     }
 
@@ -632,6 +639,7 @@ static void sound_engine_enqueue_finished_notifications(void) {
         }
         ctx->callback_fn = fn;
         ctx->track_id = notification.track_id;
+        ctx->epoch = g_sound_engine_callback_epoch;
 
         if (!event_loop_enqueue_ingress_native(sound_finished_ingress_run,
                                                ctx,
@@ -655,6 +663,7 @@ static void notify_finished(ID track_id) {
 
 void sound_engine_init(int voice_count) {
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
+    g_sound_engine_callback_epoch = ++g_sound_engine_callback_epoch_counter;
     sound_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
     if (voice_count > SOUND_MAX_VOICES) voice_count = SOUND_MAX_VOICES;
@@ -682,6 +691,8 @@ void sound_engine_init(int voice_count) {
 }
 
 void sound_engine_shutdown(void) {
+    g_sound_engine_callback_epoch = ++g_sound_engine_callback_epoch_counter;
+
     /* Stop tick */
     if (g_sound_engine.tick_running) {
         sound_tick_stop();
@@ -760,9 +771,8 @@ bool sound_engine_play_sfx(ID sfx_id, ID byte_array_obj) {
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) {
         g_sound_engine.telemetry.cmd_drop_count++;
+        g_sound_engine.telemetry.sfx_drop_count++;
         RELEASE(cmd.retained_obj);
-        fprintf(stderr, "[sound] PLAY_SFX dropped: command queue full (%d slots)\n",
-                SOUND_CMD_QUEUE_CAP);
     }
     if (ok) {
         sound_tick_kick();

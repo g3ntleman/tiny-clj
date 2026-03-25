@@ -626,6 +626,43 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":brick-hit"), vector_nth(v, 3));
 }
 
+TEST(test_breakout_contract_same_snapshot_brick_hits_only_count_first_hit) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [b1 {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
+        "        b2 {:id 2002 :x 70 :y 50 :w 20 :h 10 :points 20} "
+        "        s0 (-> (tiny-breakout.core/init-state) "
+        "               (assoc :phase :play) "
+        "               (assoc :score 0) "
+        "               (assoc :ball-vx 0 :ball-vy 2) "
+        "               (assoc :levels [{:id :only :bricks [b1 b2]}]) "
+        "               (assoc :level-index 0) "
+        "               (assoc :bricks [b1 b2]) "
+        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 "
+        "                                     :to-x 60 :to-y 55 :wall :bottom})) "
+        "        ev1 {:id :ball-vs-brick :phase :enter :other 2001 "
+        "             :snapshot-gen 42 "
+        "             :self-aabb {:min-x 58 :min-y 49 :max-x 62 :max-y 53} "
+        "             :other-aabb {:min-x 50 :min-y 50 :max-x 70 :max-y 60}} "
+        "        ev2 {:id :ball-vs-brick :phase :enter :other 2002 "
+        "             :snapshot-gen 42 "
+        "             :self-aabb {:min-x 68 :min-y 49 :max-x 72 :max-y 53} "
+        "             :other-aabb {:min-x 70 :min-y 50 :max-x 90 :max-y 60}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev1 300) "
+        "        s2 (tiny-breakout.core/apply-spatial-event s1 ev2 300)] "
+        "    [(:ball-vy s2) (:score s2) (count (:bricks s2)) (:id (first (:bricks s2)))]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 0)) < 0);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_EQUAL_PTR(fixnum(2002), vector_nth(v, 3));
+}
+
 TEST(test_breakout_contract_brick_collision_from_below_snaps_ball_outside_brick_bounds) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(

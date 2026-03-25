@@ -14,7 +14,7 @@ static inline bool is_numeric_type(ID value) {
 static inline CljObject* throw_non_numeric_argument(ID value) {
     RELEASE(value);
     throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                              "String cannot be used as a Number");
+        "String cannot be used as a Number");
     return NULL;
 }
 
@@ -46,7 +46,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
             case ARITH_MUL: return fixnum(1);
             default:
                 throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                          "Wrong number of args: 0");
+                    "Wrong number of args: 0");
                 return NULL;
         }
     }
@@ -129,7 +129,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
         if (!is_numeric_type(args[i])) {
             free_obj_array(args, args_stack);
             throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                                      "String cannot be used as a Number");
+                "String cannot be used as a Number");
             return NULL;
         }
         current = current->rest ? as_list(current->rest) : NULL;

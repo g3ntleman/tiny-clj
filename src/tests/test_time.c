@@ -10,7 +10,6 @@
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
-ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +120,7 @@ TEST_SHARED(test_time_with_too_many_arguments) {
     CljObject *expr1 = fixnum(1);
     CljObject *expr2 = fixnum(2);
     
-    // Create (time 1 2) with too many arguments
+    // Create [1 2] args with too many arguments
     CljPersistentVector *time_args = make_vector(2, STRONG);
     vector_conj_inplace(&time_args, expr1);
     vector_conj_inplace(&time_args, expr2);
@@ -159,19 +158,67 @@ TEST_SHARED(test_time_no_double_evaluation) {
 }
 
 TEST_SHARED(test_time_with_dotimes) {
-    // Test that time works correctly with dotimes.
-    // Build canonical expression to match runtime path (no raw list fallback).
-    ID dotimes_call = parse_canonicalized("(dotimes [i 1000] (+ 1 2 3 4 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(dotimes_call);
-
+    // Test that time works correctly with dotimes
+    // Create: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
+    
+    // Create symbols
+    CljObject *time_symbol = (CljObject *)SYM_TIME;
+    CljObject *dotimes_symbol = (CljObject *)SYM_DOTIMES;
+    CljSymbol *i_symbol = intern_symbol_global("i");
+    CljObject *plus_symbol = (CljObject *)SYM_PLUS;
+    
+    // Create numbers
+    CljObject *thousand = fixnum(1000);
+    CljObject *one = fixnum(1);
+    CljObject *two = fixnum(2);
+    CljObject *three = fixnum(3);
+    CljObject *four = fixnum(4);
+    CljObject *five = fixnum(5);
+    
+    // Create binding vector: [i 1000]
+    CljObject *binding_vector = (CljObject *)make_vector(2, STRONG);
+    CljPersistentVector *vec_data = as_vector(binding_vector);
+    // Add elements using vector_conj
+    vec_data = vector_conj(vec_data, i_symbol);
+    vec_data = vector_conj(vec_data, thousand);
+    
+    // Create arithmetic expression: (+ 1 2 3 4 5)
+    CljObject *arithmetic_expr = (CljObject *)make_list(plus_symbol, 
+        make_list(one, 
+        make_list(two, 
+        make_list(three, 
+        make_list(four, 
+        make_list(five, NULL))))));
+    
+    // Create dotimes call: (dotimes [i 1000] (+ 1 2 3 4 5))
+    CljObject *dotimes_call = (CljObject *)make_list(dotimes_symbol, 
+        make_list(binding_vector, 
+        make_list(arithmetic_expr, NULL)));
+    
+    // Create time call: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
+    CljObject *time_call = (CljObject *)make_list(time_symbol, 
+        make_list(dotimes_call, NULL));
+    
+    // Create environment
+    CljPersistentMap *env = make_map(4);
+    
+    // Test time evaluation with dotimes
     CljPersistentVector *time_args = make_vector(1, STRONG);
     vector_conj_inplace(&time_args, dotimes_call);
-    CljObject *result = eval_time(time_args, NULL, g_test_eval_state, NULL);
-    RELEASE(time_args);
+    CljObject *result = eval_time(time_args, env, g_test_eval_state, NULL);
     
     // time should return the result of the evaluated expression
     // Since dotimes returns nil, time should also return nil
     TEST_ASSERT_TRUE(result == NULL); // dotimes returns nil, so time returns nil
+    
+    // Clean up
+    RELEASE(binding_vector);
+    RELEASE(arithmetic_expr);
+    RELEASE(dotimes_call);
+    RELEASE(time_args);
+    RELEASE(time_call);
+    // Don't RELEASE result - eval_time returns autoreleased object
+    RELEASE(env);
 }
 
 TEST_SHARED(test_time_preserves_lexical_context) {

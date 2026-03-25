@@ -390,7 +390,7 @@ TEST(test_meta_qualified_symbol) {
                              ":name should be a symbol");
     if (TAG(name_value) == CLJ_SYMBOL) {
         CljSymbol *name_sym = (CljSymbol *)name_value;
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", clj_symbol_name(name_sym),
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", name_sym->cname,
                                          ":name should be symbol trim");
     }
 }

@@ -366,6 +366,23 @@ mfb_key tinyfx_macos_key_from_virtual_key(unsigned short key_code) {
 
 @end
 
+static NSApplication *tinyfx_macos_ensure_application(void) {
+    NSApplication *app = [NSApplication sharedApplication];
+    if (!app) {
+        return nil;
+    }
+    [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+    /*
+     * Create the AppKit application context before the first NSWindow.
+     * Some launch paths abort inside HIServices when the initial window
+     * creation implicitly tries to register the process as an app.
+     */
+    if (![app isRunning]) {
+        [app finishLaunching];
+    }
+    return app;
+}
+
 static void tinyfx_macos_window_pump_once(TinyFxMacosWindow *window) {
     if (!window) {
         return;
@@ -384,6 +401,9 @@ static void tinyfx_macos_window_pump_once(TinyFxMacosWindow *window) {
 
 TinyFxMacosWindow *tinyfx_macos_window_open(const char *title, unsigned width, unsigned height) {
     @autoreleasepool {
+        if (!tinyfx_macos_ensure_application()) {
+            return NULL;
+        }
         TinyFxMacosWindow *window = calloc(1u, sizeof(*window));
         if (!window) {
             return NULL;

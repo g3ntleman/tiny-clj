@@ -140,10 +140,12 @@ void frame_release(CallFrame *frame) {
 
 void frame_release_except(CallFrame *frame, ID keep) {
     if (!frame) return;
+
     for (int i = 0; i < frame->param_count; i++) {
         ID value = frame_decode_value(frame->values[i]);
-        if (value && value != keep && !IS_IMMEDIATE(value))
+        if (value && value != keep && !IS_IMMEDIATE(value)) {
             RELEASE(value);
+        }
         frame->values[i] = NULL;
     }
     frame->param_count = 0;

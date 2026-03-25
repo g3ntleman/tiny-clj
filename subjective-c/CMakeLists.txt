@@ -2,35 +2,6 @@ cmake_minimum_required(VERSION 3.10)
 
 project(subjective-c C)
 
-# Keep build flags consistent with tiny-clj (use same variable names).
-if(NOT DEFINED META_ENABLED)
-    option(META_ENABLED "Enable metadata support" ON)
-endif()
-if(NOT DEFINED MEMORY_PROFILING_ENABLED)
-    option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)
-endif()
-if(NOT DEFINED ZOMBIE_ENABLED)
-    option(ZOMBIE_ENABLED "Enable zombie mode" OFF)
-endif()
-
-if(META_ENABLED)
-    set(META_ENABLED_VALUE 1)
-else()
-    set(META_ENABLED_VALUE 0)
-endif()
-
-if(MEMORY_PROFILING_ENABLED)
-    set(MEMORY_PROFILING_ENABLED_VALUE 1)
-else()
-    set(MEMORY_PROFILING_ENABLED_VALUE 0)
-endif()
-
-if(ZOMBIE_ENABLED)
-    set(ZOMBIE_ENABLED_VALUE 1)
-else()
-    set(ZOMBIE_ENABLED_VALUE 0)
-endif()
-
 # Disallow in-source builds for the subjective-c subproject to prevent CMake
 # artifacts from polluting the source tree (CMakeCache.txt, CMakeFiles/, etc.).
 # Use: cmake -S subjective-c -B subjective-c/build
@@ -62,11 +33,11 @@ set(SUBJECTIVE_C_SOURCES
     src/hashmap.c
     src/hashset.c
     src/callbacks.c
+    src/debug_trace.c
     src/datetime_utc.c
     src/instant.c
     src/uuid.c
     src/regex.c
-    src/debug_trace.c
 
         # Regex engine (tiny-regex-c) compiled into subjective-c
         ${CMAKE_SOURCE_DIR}/external/tiny_regex.c
@@ -100,26 +71,26 @@ target_compile_options(subjective-c PRIVATE
 
 # Ensure DEBUG is defined for Debug builds (critical for CLJException struct layout)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    target_compile_definitions(subjective-c PRIVATE DEBUG)
+    target_compile_definitions(subjective-c PUBLIC DEBUG)
     message(STATUS "subjective-c: DEBUG build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 endif()
 
-if(ZOMBIE_ENABLED)
-    target_compile_definitions(subjective-c PRIVATE ZOMBIE_ENABLED)
+if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
+    target_compile_definitions(subjective-c PUBLIC ZOMBIE_ENABLED)
     message(STATUS "subjective-c: ZOMBIE_ENABLED")
 else()
     message(STATUS "subjective-c: ZOMBIE_DISABLED")
 endif()
 
 # Unity compatibility: flush stdout for error messages
-target_compile_definitions(subjective-c PRIVATE UNITY_USE_FLUSH_STDOUT)
+target_compile_definitions(subjective-c PUBLIC UNITY_USE_FLUSH_STDOUT)
 
 # Size-focused embedded builds: avoid pulling in printf-style formatting code.
 # Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
 if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
-    target_compile_definitions(subjective-c PRIVATE STRING_FORMATTING_ENABLED=0)
+    target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
     message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
 endif()
 
@@ -173,11 +144,11 @@ target_compile_definitions(subjective-c-tests PRIVATE
     DEBUG
     UNITY_TESTS
     UNITY_USE_COMMAND_LINE_ARGS
-    MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE}
-    META_ENABLED=${META_ENABLED_VALUE}
+    MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
+    META_ENABLED=${TINYCLJ_META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
 )
-if(ZOMBIE_ENABLED)
+if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
     target_compile_definitions(subjective-c-tests PRIVATE ZOMBIE_ENABLED)
 endif()
 # Force Debug compiler flags for all build types

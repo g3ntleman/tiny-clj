@@ -4,7 +4,7 @@
     {
       "label": "build-repl",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj",
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -55,7 +55,7 @@
     {
       "label": "build-image",
       "type": "shell",
-      "command": "./build_idf.sh --product tiny-clj",
+      "command": "./build_idf.sh",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -70,7 +70,7 @@
     {
       "label": "flash image",
       "type": "shell",
-      "command": "./build_idf.sh --product tiny-clj --flash",
+      "command": "./build_idf.sh --flash",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -185,6 +185,25 @@
       "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --product tiny-fx --monitor",
       "group": "none",
       "detail": "Incremental ESP32 build for the tiny-fx product, then flash and monitor.",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 2
+      }
+    },
+    {
+      "label": "run-repl",
+      "type": "shell",
+      "command": "pkill -f '/build/tiny-clj-repl' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",
+      "group": "none",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

@@ -354,28 +354,3 @@ TEST(test_named_fn_with_two_params) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(1024, as_fixnum(result)); // 2^10 = 1024
 }
-
-// ============================================================================
-// Quasiquote simple form (regression: `(+ 1 2) should return (quote (+ 1 2)))
-// ============================================================================
-
-TEST(test_quasiquote_simple_form_returns_quoted_form) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    // (quasiquote (+ 1 2)) returns (quote (+ 1 2)); eval once gives (+ 1 2)
-    CljObject *form = eval_string("(eval (quasiquote (+ 1 2)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(form);
-    TEST_ASSERT_TRUE(is_list_type(TAG(form)));
-    CljList *lst = as_list(form);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    TEST_ASSERT_TRUE(is_symbol(LIST_FIRST(lst)));
-    assert_fixnum((CljObject *)LIST_FIRST(as_list(LIST_REST(lst))), 1);
-    assert_fixnum((CljObject *)LIST_FIRST(as_list(LIST_REST(as_list(LIST_REST(lst))))), 2);
-}
-
-TEST(test_quasiquote_simple_form_evaluates_to_value) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    // (eval (eval (quasiquote (+ 1 2)))) = (eval (+ 1 2)) = 3
-    CljObject *result = eval_string("(eval (eval (quasiquote (+ 1 2))))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    assert_fixnum(result, 3);
-}

@@ -25,6 +25,8 @@
 #include "memory.h"
 #include "memory_profiler.h"
 #include "value.h"
+#include "meta.h"
+#include "strings.h"
 #include "environment.h"
 #include "ast.h"
 #include "ast_canon.h"

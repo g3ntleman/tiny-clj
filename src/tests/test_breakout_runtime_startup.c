@@ -1876,6 +1876,270 @@ TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segm
                              "after first brick hit, expected either further segment-id-seq advance or a clean serve/game-over transition");
 }
 
+TEST(test_breakout_runtime_startup_many_brick_hit_events_do_not_hang_runloop) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
+
+    ID payload = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (let [bricks (vec (take 12 (:bricks @tiny-breakout.runtime/state*))) "
+        "        events (mapv (fn [b] "
+        "                       (let [bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "                         {:source :spatial "
+        "                          :id :ball-vs-brick "
+        "                          :rule {:id :ball-vs-brick} "
+        "                          :phase :enter "
+        "                          :other (:id b) "
+        "                          :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "                          :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}})) "
+        "                     bricks) "
+        "        expected-score (loop [remaining bricks total 0] "
+        "                         (if (empty? remaining) "
+        "                           total "
+        "                           (recur (rest remaining) (+ total (:points (first remaining))))))] "
+        "    {:events events :expected-score expected-score}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(payload);
+    TEST_ASSERT_TRUE(is_map(payload));
+
+    ID events_kw = intern_symbol_global(":events");
+    ID expected_score_kw = intern_symbol_global(":expected-score");
+    ID score_kw = intern_symbol_global(":score");
+    ID phase_kw = intern_symbol_global(":phase");
+    ID level_clear_kw = intern_symbol_global(":level-clear");
+    ID serve_kw = intern_symbol_global(":serve");
+    TEST_ASSERT_NOT_NULL(events_kw);
+    TEST_ASSERT_NOT_NULL(expected_score_kw);
+    TEST_ASSERT_NOT_NULL(score_kw);
+    TEST_ASSERT_NOT_NULL(phase_kw);
+    TEST_ASSERT_NOT_NULL(level_clear_kw);
+    TEST_ASSERT_NOT_NULL(serve_kw);
+
+    ID events = map_get_sentinel(payload, events_kw, NULL);
+    ID expected_score = map_get_sentinel(payload, expected_score_kw, NULL);
+    TEST_ASSERT_NOT_NULL(events);
+    TEST_ASSERT_TRUE(TAG(events) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_TRUE(is_fixnum(expected_score));
+    CljPersistentVector *events_vec = as_vector(events);
+    TEST_ASSERT_NOT_NULL(events_vec);
+    TEST_ASSERT_TRUE(vector_count(events_vec) >= 8u);
+
+    ID state_atom_id = eval_string("tiny-breakout.runtime/state*", ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+    CljAtom *state_atom = as_atom(state_atom_id);
+    TEST_ASSERT_NOT_NULL(state_atom);
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    for (uint32_t i = 0; i < vector_count(events_vec); i++) {
+        ID event = vector_nth(events_vec, i);
+        TEST_ASSERT_NOT_NULL(event);
+        ID retained_event = RETAIN(event);
+        TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
+        RELEASE(retained_event);
+    }
+
+    bool reached_expected_score = false;
+    bool reached_transition = false;
+    for (int i = 0; i < 240; i++) {
+        usleep(10000);
+        ID state = atom_deref_owned(state_atom);
+        if (state && is_map(state)) {
+            ID score = map_get_sentinel(state, score_kw, NULL);
+            ID phase = map_get_sentinel(state, phase_kw, NULL);
+            if (score && is_fixnum(score) && as_fixnum(score) == as_fixnum(expected_score)) {
+                reached_expected_score = true;
+            }
+            if (phase == level_clear_kw || phase == serve_kw) {
+                reached_transition = true;
+            }
+        }
+        RELEASE(state);
+        if (reached_expected_score || reached_transition) {
+            break;
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_fx_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(reached_expected_score || reached_transition,
+                             "many queued brick-hit events should keep progressing instead of hanging the runloop");
+}
+
+TEST(test_breakout_runtime_startup_many_brick_hits_then_launch_advances_after_level_clear) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
+
+    ID resolved = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  [tiny-breakout.runtime/apply-input! {:launch true}])",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *resolved_vec = as_vector(resolved);
+    TEST_ASSERT_NOT_NULL(resolved_vec);
+    TEST_ASSERT_EQUAL_UINT(2u, vector_count(resolved_vec));
+    ID input_fn = vector_nth(resolved_vec, 0u);
+    ID launch_arg = vector_nth(resolved_vec, 1u);
+    TEST_ASSERT_NOT_NULL(input_fn);
+    TEST_ASSERT_NOT_NULL(launch_arg);
+
+    ID payload = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (let [bricks (vec (:bricks @tiny-breakout.runtime/state*)) "
+        "        events (mapv (fn [b] "
+        "                       (let [bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "                         {:source :spatial "
+        "                          :id :ball-vs-brick "
+        "                          :rule {:id :ball-vs-brick} "
+        "                          :phase :enter "
+        "                          :other (:id b) "
+        "                          :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "                          :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}})) "
+        "                     bricks)] "
+        "    {:events events :brick-count (count bricks)}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(payload);
+    TEST_ASSERT_TRUE(is_map(payload));
+
+    ID events_kw = intern_symbol_global(":events");
+    ID brick_count_kw = intern_symbol_global(":brick-count");
+    TEST_ASSERT_NOT_NULL(events_kw);
+    TEST_ASSERT_NOT_NULL(brick_count_kw);
+    ID events = map_get_sentinel(payload, events_kw, NULL);
+    ID brick_count = map_get_sentinel(payload, brick_count_kw, NULL);
+    TEST_ASSERT_NOT_NULL(events);
+    TEST_ASSERT_TRUE(TAG(events) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_TRUE(is_fixnum(brick_count));
+    TEST_ASSERT_TRUE(as_fixnum(brick_count) > 0);
+    CljPersistentVector *events_vec = as_vector(events);
+    TEST_ASSERT_NOT_NULL(events_vec);
+    TEST_ASSERT_EQUAL_UINT((uint32_t)as_fixnum(brick_count), vector_count(events_vec));
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    for (uint32_t i = 0; i < vector_count(events_vec); i++) {
+        ID event = vector_nth(events_vec, i);
+        TEST_ASSERT_NOT_NULL(event);
+        ID retained_event = RETAIN(event);
+        TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
+        RELEASE(retained_event);
+    }
+
+    bool saw_level_clear = false;
+    for (int i = 0; i < 240; i++) {
+        usleep(10000);
+        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
+        if (state && is_map(state)) {
+            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+            if (phase == intern_symbol_global(":level-clear")) {
+                saw_level_clear = true;
+                break;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(saw_level_clear,
+                             "many brick-hit events should still reach :level-clear");
+
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)input_fn, launch_arg));
+
+    bool advanced = false;
+    for (int i = 0; i < 240; i++) {
+        usleep(10000);
+        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
+        if (state && is_map(state)) {
+            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
+            if (phase == intern_symbol_global(":serve") &&
+                level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
+                advanced = true;
+                break;
+            }
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_fx_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(advanced,
+                             "launch after many brick hits should still advance from :level-clear to the next :serve");
+}
+
+TEST(test_breakout_runtime_startup_render_thread_collision_bounces_without_main_thread_poll) {
+    BreakoutViewerTestContext ctx = {0};
+    VgSlotChangeTracker slot_change_tracker = {0};
+    VgFrameBuffer fb = {0};
+    ID seeded = NULL;
+    ID state_atom_id = NULL;
+    ID final_state = NULL;
+    ID k_ball_vy = intern_symbol_global(":ball-vy");
+    ID final_ball_vy = NULL;
+
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(fx_init_slot_runtime_buffers(&ctx.bundle));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
+    memset(g_render_buffer, 0, sizeof(g_render_buffer));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, VIEW_W, VIEW_H, g_render_buffer, VIEW_W * VIEW_H));
+
+    seeded = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (let [now-ms (current-time-ms) "
+        "        s (-> @tiny-breakout.runtime/state* "
+        "              (assoc :phase :play) "
+        "              (assoc :events []) "
+        "              (assoc :paddle-x 140) "
+        "              (assoc :ball-x 158 :ball-y 210) "
+        "              (assoc :ball-vx 0 :ball-vy 2) "
+        "              (assoc :segment-id-seq 1) "
+        "              (assoc :ball-segment {:id 1 :start-ms now-ms :end-ms (+ now-ms 256) :to-x 158 :to-y 242 :wall :bottom}))] "
+        "    (tiny-breakout.runtime/publish-state! s) "
+        "    true))",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, seeded);
+    state_atom_id = eval_string("tiny-breakout.runtime/state*", ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+
+    fx_sync_and_publish_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+    fx_configure_render_thread_collision(&ctx.bundle, &ctx.spatial_rules, true);
+    tiny_renderer_lifecycle_set_callbacks(fx_renderer_start_callback,
+                                          fx_renderer_stop_callback,
+                                          &fb);
+    TEST_ASSERT_TRUE(tiny_renderer_lifecycle_start(NULL));
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+
+    for (int i = 0; i < 40; i++) {
+        usleep(16000);
+        fx_sync_and_publish_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+    }
+
+    final_state = atom_deref((CljAtom *)state_atom_id);
+    TEST_ASSERT_NOT_NULL(final_state);
+    TEST_ASSERT_TRUE(is_map(final_state));
+    final_ball_vy = map_get_sentinel((CljPersistentMap *)final_state, k_ball_vy, NULL);
+
+    stop_runloop_thread();
+    (void)tiny_renderer_lifecycle_stop();
+    tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
+    fx_configure_render_thread_collision(NULL, NULL, false);
+    vg_slot_change_tracker_destroy(&slot_change_tracker);
+    fx_destroy_slot_runtime_buffers();
+    breakout_fx_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE(is_fixnum(final_ball_vy) && as_fixnum(final_ball_vy) < 0);
+}
+
 TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_heap_limit) {
     BreakoutViewerTestContext ctx = {0};
     VgSlotChangeTracker slot_change_tracker = {0};
@@ -1965,3 +2229,4 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
                                         : "");
     TEST_ASSERT_EQUAL_PTR(play_phase, final_phase);
 }
+

@@ -1358,6 +1358,34 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 4]);
 }
 
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_clears_has_animation_after_non_loop_timeline_end) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {:tiny-fx.scene/root (->Line :tiny-fx.scene/root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false false]) 10 20 10 nil)}] "
+        "    (record-create (quote FrameScene) [:tiny-fx.scene/root entities [0 8 30 6] 0 true true 0 0 nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 0u, false, &dirty_pixels));
+    TEST_ASSERT_TRUE(state.has_animation);
+
+    dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 150u, true, &dirty_pixels));
+    TEST_ASSERT_FALSE(state.has_animation);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 14]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 4]);
+}
+
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_for_style_animation) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

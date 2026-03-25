@@ -1044,6 +1044,91 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
   sound_engine_shutdown();
 }
 
+TEST(test_sound_finished_callback_uses_snapshot_when_handler_changes_before_drain) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  sound_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":finish-snapshot-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  ID setup = eval_string(
+      "(do "
+      "  (def sound-finished-snapshot-calls (atom [])) "
+      "  (def sound-finished-cb-a "
+      "    (fn [event] "
+      "      (swap! sound-finished-snapshot-calls conj [:a (:track-id event)]) "
+      "      nil)) "
+      "  (def sound-finished-cb-b "
+      "    (fn [event] "
+      "      (swap! sound-finished-snapshot-calls conj [:b (:track-id event)]) "
+      "      nil)) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+  ID cb_a = eval_string("sound-finished-cb-a", g_test_eval_state);
+  ID cb_b = eval_string("sound-finished-cb-b", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(cb_a);
+  TEST_ASSERT_NOT_NULL(cb_b);
+
+  sound_engine_on_finished(cb_a);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick();
+  TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(),
+                           "finished callback should be pending before event-loop drain");
+
+  sound_engine_on_finished(cb_b);
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string("(= @sound-finished-snapshot-calls [[:a :finish-snapshot-test]])",
+                        g_test_eval_state);
+  TEST_ASSERT_EQUAL(clj_true, done);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_shutdown_drops_pending_finished_callback_before_drain) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  sound_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":finish-shutdown-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  ID setup = eval_string(
+      "(do "
+      "  (def sound-finished-after-shutdown (atom nil)) "
+      "  (def sound-finished-after-shutdown-cb "
+      "    (fn [event] "
+      "      (reset! sound-finished-after-shutdown (:track-id event)) "
+      "      nil)) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+  ID cb_fn = eval_string("sound-finished-after-shutdown-cb", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(cb_fn);
+
+  sound_engine_on_finished(cb_fn);
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick();
+  TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(),
+                           "finished callback should be queued before shutdown");
+
+  sound_engine_shutdown();
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string("@sound-finished-after-shutdown", g_test_eval_state);
+  TEST_ASSERT_NULL_MESSAGE(done,
+                           "shutdown should invalidate pending finished callbacks before drain");
+
+  RELEASE(ba);
+}
+
 /* ========================================================================= */
 /* Native API wiring tests (via eval_string)                                 */
 /* ========================================================================= */

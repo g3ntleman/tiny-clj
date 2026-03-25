@@ -92,7 +92,7 @@ ID eval_comparison_dispatch(CljList *list,
     }
     if (!eval_env) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Missing evaluation environment");
+                                         "Missing evaluation environment");
         return NULL;
     }
 

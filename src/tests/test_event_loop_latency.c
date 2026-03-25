@@ -218,6 +218,35 @@ static void *event_loop_native_eval_producer_thread(void *arg) {
     return NULL;
 }
 
+static void *event_loop_native_dispatch_producer_thread(void *arg) {
+    NativeIngressEvalArgs *args = (NativeIngressEvalArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->producer_thread = pthread_self();
+    args->enqueue_ok =
+        event_loop_dispatch_native(event_loop_native_eval_callback, args, NULL);
+    return NULL;
+}
+
+typedef struct {
+    uint32_t value;
+    uint32_t *values;
+    uint32_t *count;
+    pthread_t callback_thread;
+} NativeIngressOrderArgs;
+
+static void event_loop_native_order_callback(void *ctx, EvalState *st) {
+    (void)st;
+    NativeIngressOrderArgs *args = (NativeIngressOrderArgs *)ctx;
+    if (!args || !args->values || !args->count) {
+        return;
+    }
+    args->callback_thread = pthread_self();
+    args->values[*args->count] = args->value;
+    (*args->count)++;
+}
+
 TEST(test_event_loop_ingress_concurrent_producers_fifo_drain) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
@@ -301,6 +330,148 @@ TEST(test_event_loop_native_ingress_callback_can_call_clojure_on_drain_thread) {
 
     ID marker = eval_string("@event-loop-native-marker", g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":from-native"), marker);
+}
+
+TEST(test_event_loop_dispatch_native_runs_inline_without_registered_interpreter_thread) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+    subjective_c_clear_interpreter_thread();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-native-dispatch-marker (atom nil)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    NativeIngressEvalArgs args = {
+        .expr = "(do (reset! event-loop-native-dispatch-marker :inline-no-interpreter) true)",
+        .producer_thread = pthread_self(),
+    };
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_dispatch_native(event_loop_native_eval_callback, &args, NULL),
+                             "dispatch_native should succeed inline without interpreter registration");
+    TEST_ASSERT_TRUE_MESSAGE(args.ran, "dispatch_native should run callback immediately");
+    TEST_ASSERT_TRUE_MESSAGE(args.eval_ok, "inline callback should be able to evaluate Clojure");
+    TEST_ASSERT_TRUE_MESSAGE(pthread_equal(args.producer_thread, args.callback_thread),
+                             "inline dispatch should run on the caller thread");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(),
+                              "inline dispatch should not leave pending event-loop work behind");
+
+    ID marker = eval_string("@event-loop-native-dispatch-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":inline-no-interpreter"), marker);
+}
+
+TEST(test_event_loop_dispatch_native_runs_inline_on_registered_interpreter_thread) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+    subjective_c_clear_interpreter_thread();
+    subjective_c_register_interpreter_thread();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-native-dispatch-registered-marker (atom nil)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    NativeIngressEvalArgs args = {
+        .expr = "(do (reset! event-loop-native-dispatch-registered-marker :inline-registered) true)",
+        .producer_thread = pthread_self(),
+    };
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_dispatch_native(event_loop_native_eval_callback, &args, NULL),
+                             "dispatch_native should succeed inline on the interpreter thread");
+    TEST_ASSERT_TRUE_MESSAGE(args.ran, "dispatch_native should run immediately on interpreter thread");
+    TEST_ASSERT_TRUE_MESSAGE(args.eval_ok, "inline interpreter-thread callback should be able to evaluate Clojure");
+    TEST_ASSERT_TRUE_MESSAGE(pthread_equal(args.producer_thread, args.callback_thread),
+                             "interpreter-thread dispatch should stay on the same thread");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(),
+                              "interpreter-thread dispatch should not enqueue work");
+
+    ID marker = eval_string("@event-loop-native-dispatch-registered-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":inline-registered"), marker);
+
+    subjective_c_clear_interpreter_thread();
+}
+
+TEST(test_event_loop_dispatch_native_enqueues_from_foreign_thread_when_interpreter_registered) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+    subjective_c_clear_interpreter_thread();
+    subjective_c_register_interpreter_thread();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-native-dispatch-worker-marker (atom nil)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    NativeIngressEvalArgs args = {
+        .expr = "(do (reset! event-loop-native-dispatch-worker-marker :queued-from-worker) true)",
+    };
+    pthread_t producer;
+    int rc = pthread_create(&producer, NULL, event_loop_native_dispatch_producer_thread, &args);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+    rc = pthread_join(producer, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+
+    TEST_ASSERT_TRUE_MESSAGE(args.enqueue_ok, "dispatch_native should enqueue from foreign threads");
+    TEST_ASSERT_FALSE_MESSAGE(args.ran, "foreign-thread dispatch should not run callback inline");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(),
+                             "queued dispatch should make pending work visible");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "run_next should drain queued dispatch callback");
+    TEST_ASSERT_TRUE_MESSAGE(args.ran, "queued dispatch callback should eventually run");
+    TEST_ASSERT_TRUE_MESSAGE(args.eval_ok, "queued dispatch callback should be able to evaluate Clojure");
+    TEST_ASSERT_FALSE_MESSAGE(pthread_equal(args.producer_thread, args.callback_thread),
+                              "queued dispatch callback must not execute on producer thread");
+
+    ID marker = eval_string("@event-loop-native-dispatch-worker-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":queued-from-worker"), marker);
+
+    subjective_c_clear_interpreter_thread();
+}
+
+TEST(test_event_loop_native_ingress_tick_budget_limits_callbacks_per_run) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    uint32_t values[5] = {0};
+    uint32_t count = 0u;
+    NativeIngressOrderArgs args[5] = {
+        {.value = 1u, .values = values, .count = &count},
+        {.value = 2u, .values = values, .count = &count},
+        {.value = 3u, .values = values, .count = &count},
+        {.value = 4u, .values = values, .count = &count},
+        {.value = 5u, .values = values, .count = &count},
+    };
+
+    for (size_t i = 0; i < 5u; i++) {
+        TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_native(event_loop_native_order_callback,
+                                                                   &args[i],
+                                                                   NULL),
+                                 "native ingress enqueue should succeed");
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "run_next should drain a native-ingress tick");
+    TEST_ASSERT_EQUAL_UINT32(4u, count);
+    TEST_ASSERT_EQUAL_UINT32(1u, values[0]);
+    TEST_ASSERT_EQUAL_UINT32(2u, values[1]);
+    TEST_ASSERT_EQUAL_UINT32(3u, values[2]);
+    TEST_ASSERT_EQUAL_UINT32(4u, values[3]);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(),
+                             "native ingress beyond the tick budget should remain pending");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "second run_next should drain the remaining native callback");
+    TEST_ASSERT_EQUAL_UINT32(5u, count);
+    TEST_ASSERT_EQUAL_UINT32(5u, values[4]);
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(),
+                              "native ingress queue should be empty after the second tick");
 }
 
 TEST(test_event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain) {

@@ -1,37 +1,63 @@
 (ns tiny-breakout.audio
   (:require [tiny-fx.sound :as sound]))
 
-;; Runtime audio keeps only precompiled TRK1 payloads.
+(defmacro ^:private def-
+  [sym init]
+  `(def ~(with-meta sym (assoc (meta sym) :private true)) ~init))
+
+;; Runtime audio keeps precompiled TRK1 payloads in namespace defs so gameplay
+;; can reuse them directly without relying on backend-side preloading state.
 ;; The DSL compiler lives in tiny-breakout.audio-compiler and is intentionally
 ;; not required here.
-(def ^:private cue-specs
+(def- paddle-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 180 176 16 4 20 20 176 40 5 20 24 32]))
+
+(def- brick-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 200 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32]))
+
+(def- life-lost-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32]))
+
+(def- level-clear-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 210 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32]))
+
+(def- game-over-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32]))
+
+(def- victory-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32]))
+
+(def- wall-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32]))
+
+(def- cue-specs
   {:sfx/paddle-hit
    {:track-id :tiny-breakout/paddle-hit
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 180 176 16 4 20 20 176 40 5 20 24 32])}
+    :track-bytes paddle-hit-track-bytes}
 
    :sfx/brick-hit
    {:track-id :tiny-breakout/brick-hit
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 200 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32])}
+    :track-bytes brick-hit-track-bytes}
 
    :sfx/life-lost
    {:track-id :tiny-breakout/life-lost
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32])}
+    :track-bytes life-lost-track-bytes}
 
    :sfx/level-clear
    {:track-id :tiny-breakout/level-clear
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 210 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32])}
+    :track-bytes level-clear-track-bytes}
 
    :sfx/game-over
    {:track-id :tiny-breakout/game-over
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32])}
+    :track-bytes game-over-track-bytes}
 
    :sfx/victory
    {:track-id :tiny-breakout/victory
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32])}
+    :track-bytes victory-track-bytes}
 
    :sfx/wall-hit
    {:track-id :tiny-breakout/wall-hit
-    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32])}})
+    :track-bytes wall-hit-track-bytes}})
 
 (defn- event->cue
   [event-id]
@@ -56,25 +82,12 @@
                (if cue (conj out cue) out)))
       out)))
 
-(defn- cue-spec
-  [cue-id]
-  (get cue-specs cue-id))
-
-(defn preload-tracks!
-  "Compatibility no-op. Breakout cues are now played directly from their bytes."
-  []
-  nil)
-
-(defn unload-tracks!
-  "Compatibility no-op. Cue bytes are no longer retained across plays."
-  []
-  nil)
-
 (defn- play-cue!
   [cue-id]
-  (let [spec (cue-spec cue-id)]
+  (let [spec (get cue-specs cue-id)]
     (when (map? spec)
       (try
+        (sound/sound-stop-track! (:track-id spec))
         (sound/sound-play-sfx! (:track-id spec) (:track-bytes spec))
         (catch RuntimeException _
           nil)

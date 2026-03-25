@@ -664,6 +664,16 @@ static void mark_has_animation(bool *out_has_animation) {
     }
 }
 
+static bool timeline_info_is_animating(const TimelineResolveInfo *info) {
+    if (!info || !info->is_timeline) {
+        return false;
+    }
+    if (info->keyframe_count <= 1u) {
+        return false;
+    }
+    return info->loop || !info->at_end;
+}
+
 static bool timeline_record_fields(ID timeline_obj,
                                    const VgRecordSchema *sc,
                                    ID *out_keyframes,
@@ -711,7 +721,6 @@ static ID resolve_timeline_value_with_info(ID raw_value,
     if (!raw_value || !sc || !timeline_record_fields(raw_value, sc, &keyframes_obj, &loop_obj, &end_event_obj)) {
         return raw_value;
     }
-    mark_has_animation(out_has_animation);
     if (!id_is_vector(keyframes_obj)) {
         return NULL;
     }
@@ -761,6 +770,9 @@ static ID resolve_timeline_value_with_info(ID raw_value,
         out_info->loop = loop;
         out_info->end_event = end_event;
         out_info->at_end = (!loop && phase_ms >= last_ms);
+    }
+    if (count > 1u && (loop || phase_ms < last_ms)) {
+        mark_has_animation(out_has_animation);
     }
     if (!loop && phase_ms >= last_ms) {
         if (out_info) {
@@ -1291,7 +1303,7 @@ static bool render_record_node(ID node_obj,
     if (local_t_obj) {
         TimelineResolveInfo t_info;
         VgTransformFixed local_t = decode_transform_fixed_with_info(local_t_obj, now_ms, sc, &t_info);
-        if (t_info.is_timeline) {
+        if (timeline_info_is_animating(&t_info)) {
             mark_has_animation(out_has_animation);
         }
         capture_timeline_for_entity_field(entity_id, VG_RENDERED_FIELD_T, &t_info);

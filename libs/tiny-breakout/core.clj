@@ -292,38 +292,44 @@
               (let [other-id (:other event)
                     removal (remove-brick-by-id (:bricks state) other-id)
                     hit (:hit removal)
-                    remaining (:bricks removal)]
+                    remaining (:bricks removal)
+                    snapshot-gen (:snapshot-gen event)
+                    already-bounced? (and (number? snapshot-gen)
+                                         (= snapshot-gen (:last-brick-bounce-gen state)))]
                 (if (nil? hit)
                   (clear-events state)
-                  (let [self-aabb (:self-aabb event)
-                        other-aabb (:other-aabb event)
-                        overlap-x (overlap-width self-aabb other-aabb)
-                        overlap-y (overlap-height self-aabb other-aabb)
-                        horizontal? (< overlap-x overlap-y)
-                        bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
-                        bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
-                        snapped-x (if horizontal?
-                                    (if (> (:ball-vx state) 0)
-                                      (- (:min-x other-aabb) ball-size)
-                                      (+ (:max-x other-aabb) 1))
-                                    ball-x)
-                        snapped-y (if horizontal?
-                                    ball-y
-                                    (if (> (:ball-vy state) 0)
-                                      (- (:min-y other-aabb) ball-size)
-                                      (+ (:max-y other-aabb) 1)))
-                        state2 (-> state
-                                   (clear-events)
-                                   (anchor-ball snapped-x snapped-y)
-                                   (assoc :bricks remaining
-                                          :score (+ (:score state) (:points hit))
-                                          :ball-vx bounced-vx
-                                          :ball-vy bounced-vy
-                                          :events (conj (:events (clear-events state)) :brick-hit)))
-                        advanced (finish-brick-hit state2 remaining)]
-                    (if (= (:phase advanced) :play)
-                      (plan-next-segment advanced now-ms)
-                      advanced))))
+                  (if already-bounced?
+                    (clear-events state)
+                    (let [self-aabb (:self-aabb event)
+                          other-aabb (:other-aabb event)
+                          overlap-x (overlap-width self-aabb other-aabb)
+                          overlap-y (overlap-height self-aabb other-aabb)
+                          horizontal? (< overlap-x overlap-y)
+                          bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
+                          bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
+                          snapped-x (if horizontal?
+                                      (if (> (:ball-vx state) 0)
+                                        (- (:min-x other-aabb) ball-size)
+                                        (+ (:max-x other-aabb) 1))
+                                      ball-x)
+                          snapped-y (if horizontal?
+                                      ball-y
+                                      (if (> (:ball-vy state) 0)
+                                        (- (:min-y other-aabb) ball-size)
+                                        (+ (:max-y other-aabb) 1)))
+                          state2 (-> state
+                                     (clear-events)
+                                     (anchor-ball snapped-x snapped-y)
+                                     (assoc :bricks remaining
+                                            :score (+ (:score state) (:points hit))
+                                            :ball-vx bounced-vx
+                                            :ball-vy bounced-vy
+                                            :last-brick-bounce-gen snapshot-gen
+                                            :events (conj (:events (clear-events state)) :brick-hit)))
+                          advanced (finish-brick-hit state2 remaining)]
+                      (if (= (:phase advanced) :play)
+                        (plan-next-segment advanced now-ms)
+                        advanced)))))
 
               :else
               (clear-events state))]

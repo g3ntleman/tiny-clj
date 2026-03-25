@@ -163,6 +163,21 @@ int subjective_c_pthread_create_named(pthread_t *thread,
 //
 // Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
 
+static inline void exception_handler_unlink(ExceptionHandler *h) {
+    if (!h) return;
+    if (global_exception_stack.top == h) {
+        global_exception_stack.top = h->next;
+        return;
+    }
+    ExceptionHandler *prev = global_exception_stack.top;
+    while (prev && prev->next != h) {
+        prev = prev->next;
+    }
+    if (prev) {
+        prev->next = h->next;
+    }
+}
+
 #if MEMORY_PROFILING_ENABLED
 // -----------------------------------------------------------------------------
 // Internal allocations for TRY/CATCH handler nodes (profiling-enabled builds)
@@ -180,21 +195,6 @@ static inline ExceptionHandler* exception_handler_alloc_or_abort(void) {
 static inline void exception_handler_free(ExceptionHandler *h) {
     if (!h) return;
     CLJ_FREE(h);
-}
-
-static inline void exception_handler_unlink(ExceptionHandler *h) {
-    if (!h) return;
-    if (global_exception_stack.top == h) {
-        global_exception_stack.top = h->next;
-        return;
-    }
-    ExceptionHandler *prev = global_exception_stack.top;
-    while (prev && prev->next != h) {
-        prev = prev->next;
-    }
-    if (prev) {
-        prev->next = h->next;
-    }
 }
 
 #define TRY { \

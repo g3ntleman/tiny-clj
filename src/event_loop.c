@@ -84,6 +84,7 @@ static int        g_timer_count = 0;
  * by dumping unbounded work into the regular task queue in one tick.
  */
 #define EVENT_LOOP_INGRESS_DRAIN_BUDGET 1u
+#define EVENT_LOOP_NATIVE_TICK_BUDGET   4u
 typedef enum {
     EVENT_LOOP_INGRESS_KIND_CLOJURE = 0,
     EVENT_LOOP_INGRESS_KIND_NATIVE = 1,
@@ -927,24 +928,27 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     size_t preexisting_task_count =
         (task_vec && task_vec->backing) ? vector_count(task_vec->backing) : 0u;
 
-    // Consume cross-thread callback ingress before timer/task processing.
-    EventLoopIngressSlot native_slot = {0};
-    bool have_native_slot =
-        event_loop_ingress_drain(&native_slot, preexisting_task_count == 0u);
+    uint32_t native_processed = 0u;
+    while (native_processed < EVENT_LOOP_NATIVE_TICK_BUDGET) {
+        EventLoopIngressSlot native_slot = {0};
+        bool have_native = event_loop_ingress_drain(&native_slot,
+                                                     preexisting_task_count == 0u || native_processed > 0u);
+        if (!have_native) break;
+        (void)event_loop_run_native_ingress_callback(native_slot.native_callback,
+                                                      native_slot.native_ctx,
+                                                      st);
+        event_loop_ingress_slot_cleanup(&native_slot);
+        native_processed++;
+    }
 
     timer_process();
 
-    if (have_native_slot) {
-        bool ran_native =
-            event_loop_run_native_ingress_callback(native_slot.native_callback,
-                                                   native_slot.native_ctx,
-                                                   st);
-        event_loop_ingress_slot_cleanup(&native_slot);
+    if (native_processed > 0u) {
         uint64_t tick_end_ns = event_loop_monotonic_now_ns();
         if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
             event_loop_warn_if_slow_tick(tick_end_ns - tick_start_ns, tick_end_ns);
         }
-        return ran_native;
+        return true;
     }
 
     task_vec = task_queue_get();

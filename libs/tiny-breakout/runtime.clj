@@ -32,6 +32,8 @@
 (def ^:private timeline-kick-timer-spec {:id timeline-kick-timer-id
                                          :fn kick-timeline-watchers-task})
 
+(def ^:private scene-flush-timer-id :tiny-breakout/scene-flush)
+
 (defn- button-down-event?
   [event]
   (let [kind (get event :kind)]
@@ -143,12 +145,6 @@
 (defn- attached-ball-y
   []
   (- core/paddle-y 6))
-
-(defn- play-events!
-  [events]
-  (when (seq events)
-    (audio/play-events! events))
-  nil)
 
 (defn- stop-paddle-motion
   [state]
@@ -342,6 +338,18 @@
     (reset! segment-watch-active* true))
   nil)
 
+(defn- flush-scene!
+  "Rebuilds scene* from current state*. Used as coalesced timer target so
+  multiple spatial events within one tick cause only a single scene rebuild."
+  []
+  (let [state @state*]
+    (when (map? state)
+      (reset! scene* (scene-record state))))
+  nil)
+
+(def ^:private scene-flush-timer-spec {:id scene-flush-timer-id
+                                        :fn flush-scene!})
+
 (defn- store-published-state!
   [state]
   (let [state (scene/with-expanded-collision-rules state)
@@ -358,7 +366,9 @@
     (event/kick-timeline-watchers!))
   nil)
 
-(defn publish-state!
+(defn- publish-state-core!
+  "Updates state atom, plays audio, manages segment watchers. Returns
+  state-without-events for optional immediate scene rebuild by callers."
   [state]
   (let [previous-state @state*
         state (scene/with-expanded-collision-rules state)
@@ -389,16 +399,19 @@
                             :fn tiny-breakout.runtime/on-segment-fallback-timer!}))
       (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id))
     (reset! state* state-without-events)
-    (reset! scene* (scene-record state-without-events))
     (if (and (map? (:ball-segment state-without-events))
              @event/gfx-timeline-loaded?)
-      (do
-        ;; Defer kick: synchronous kick from inside a timeline poll/callback can
-        ;; re-enter poll-watchers! on the same C stack and overflow (runloop test).
-        ;; Keep this coalesced via named timer to prevent task-queue growth under collision bursts.
-        (schedule 1 tiny-breakout.runtime/timeline-kick-timer-spec))
+      (schedule 1 tiny-breakout.runtime/timeline-kick-timer-spec)
       nil)
-    (play-events! events))
+    (when (seq events)
+      (audio/play-events! events))
+    state-without-events))
+
+(defn publish-state!
+  "Full state publish with immediate scene rebuild."
+  [state]
+  (let [s (publish-state-core! state)]
+    (reset! scene* (scene-record s)))
   nil)
 
 (defn apply-input!
@@ -408,12 +421,16 @@
     (tiny-breakout.runtime/publish-state! next-state)))
 
 (defn on-spatial-event!
+  "Handles one spatial collision event from the render thread.
+  Uses publish-state-core! (no scene rebuild) plus a coalesced scene-flush timer
+  so multiple collision events within one tick cause only a single scene rebuild."
   [event]
   (let [now-ms (current-time-ms)
         next-state (swap! tiny-breakout.runtime/state*
                           (fn [current]
                             (core/apply-spatial-event current event now-ms)))]
-    (tiny-breakout.runtime/publish-state! next-state)
+    (publish-state-core! next-state)
+    (schedule 1 tiny-breakout.runtime/scene-flush-timer-spec)
     (gfx-collision/dispatch-spatial-watchers! event)
     nil))
 
@@ -450,7 +467,8 @@
             (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
     (reset! tiny-breakout.runtime/state* state-without-events)
     (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events))
-    (play-events! events))
+    (when (seq events)
+      (audio/play-events! events)))
   nil)
 
 (defn bootstrap-runtime!
@@ -458,12 +476,6 @@
   start-runtime! (startup callback) so the heavy work runs after config load
   and autorelease pool drain — avoids OOM during viewer_load_game_demo_config."
   []
-  (try
-    (audio/preload-tracks!)
-    (catch RuntimeException _
-      nil)
-    (catch Exception _
-      nil))
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
   (reset! tiny-breakout.runtime/overlay-animation* tiny-breakout.runtime/idle-overlay-animation)
   (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)

@@ -374,3 +374,4 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
     }
     return any_triggered;
 }
+

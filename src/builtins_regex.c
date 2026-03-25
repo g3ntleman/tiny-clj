@@ -16,18 +16,6 @@
 #include "strings.h"
 #include "value.h"
 
-static char *copy_string_cstr(CljString *str) {
-    if (!str) return NULL;
-    size_t len = string_length((ID)str);
-    const char *data = string_data((ID)str);
-    char *buf = CLJ_MALLOC(len + 1);
-    if (len > 0) {
-        memcpy(buf, data, len);
-    }
-    buf[len] = '\0';
-    return buf;
-}
-
 // regex?: Returns true if x is a compiled regex pattern
 ID native_regex_p(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "regex?");
@@ -52,12 +40,10 @@ ID native_re_pattern(ID *args, unsigned int argc) {
     }
 
     CljString *pattern_str = as_clj_string(pattern_arg);
-    char *pattern = copy_string_cstr(pattern_str);
-    if (!pattern) return NULL;
+    const char *pattern = clj_string_data(pattern_str);
 
     char error[256];
     CljRegex *re = regex_compile(pattern, error, sizeof(error));
-    CLJ_FREE(pattern);
     if (!re) {
         throw_exception(EXCEPTION_RUNTIME, error, __FILE__, __LINE__, 0);
         return NULL;
@@ -89,14 +75,12 @@ ID native_re_find(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str);
-    if (!text) return NULL;
+    const char *text = clj_string_data(str);
 
     const char *match_start = NULL;
     const char *match_end = NULL;
 
     if (!regex_find(re, text, &match_start, &match_end)) {
-        CLJ_FREE(text);
         return NULL; // nil - no match
     }
 
@@ -104,7 +88,6 @@ ID native_re_find(ID *args, unsigned int argc) {
     CljString *result = make_string_buffer(match_len);
     memcpy(result->data, match_start, match_len);
     result->data[match_len] = '\0';
-    CLJ_FREE(text);
     return AUTORELEASE(result);
 }
 
@@ -131,15 +114,12 @@ ID native_re_matches(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str);
-    if (!text) return NULL;
+    const char *text = clj_string_data(str);
 
     if (!regex_matches(re, text)) {
-        CLJ_FREE(text);
         return NULL; // nil - no match or partial match
     }
 
-    CLJ_FREE(text);
     // Return the matched string (entire string in this case)
     return str_arg;
 }
@@ -167,8 +147,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str);
-    if (!text) return NULL;
+    const char *text = clj_string_data(str);
     const char *pos = text;
 
     // Build list of matches (in reverse, then reverse at end)
@@ -187,9 +166,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
         memcpy(match_str->data, match_start, match_len);
         match_str->data[match_len] = '\0';
 
-        CljList *old_result = result;
         result = make_list(match_str, result);
-        RELEASE(old_result);
         RELEASE(match_str);
 
         pos = match_end;
@@ -200,22 +177,17 @@ ID native_re_seq(ID *args, unsigned int argc) {
     }
 
     if (!result) {
-        CLJ_FREE(text);
         return NULL;
     }
 
-    // Reverse the list to get correct order.
-    // Build a new list to keep retain/release balanced (avoid in-place pointer rewrites).
+    // Reverse the list to get correct order
     CljList *reversed = NULL;
-    for (CljList *cur = result; cur; cur = as_list(cur->rest)) {
-        ID elem = cur->first;
-        CljList *old_reversed = reversed;
-        reversed = make_list(elem, reversed);
-        RELEASE(old_reversed);
+    while (result) {
+        CljList *next = as_list(result->rest);
+        result->rest = (ID)reversed;
+        reversed = result;
+        result = next;
     }
-    // Release original list; reversed retains elements.
-    RELEASE(result);
-    CLJ_FREE(text);
 
-    return reversed ? AUTORELEASE(reversed) : NULL;
+    return AUTORELEASE(reversed);
 }
