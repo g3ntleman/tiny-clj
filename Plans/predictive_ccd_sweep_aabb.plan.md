@@ -11,82 +11,85 @@ overview: >
 todos:
   - id: step-1a-no-hit-test
     content: "Test: vg_sweep_aabb gibt no-hit zurueck wenn Velocity am Obstacle vorbeilaeuft"
-    status: pending
+    status: done
   - id: step-1b-single-hit-test
     content: "Test: vg_sweep_aabb findet Kollision, liefert korrekten gap_num/gap_denom und normal_axis"
-    status: pending
+    status: done
   - id: step-1c-earliest-hit-test
     content: "Test: vg_sweep_aabb waehlt naehestes Obstacle (Kreuzprodukt-Vergleich korrekt)"
-    status: pending
+    status: done
   - id: step-1d-tie-test
     content: "Test: gleiche Distanz, zwei Obstacles – konsistente Auswahl (niedrigste obstacle_id)"
-    status: pending
+    status: done
   - id: step-1e-max-time-test
     content: "Test: Obstacle ausserhalb max_t_ms wird nicht gemeldet"
-    status: pending
+    status: done
   - id: step-1f-impl
     content: "Impl: vg_sweep_aabb() in src/fx_collision.h + src/fx_collision.c"
-    status: pending
+    status: done
   - id: step-2a-clj-nil-test
     content: "Test: fx/sweep-aabb gibt nil zurueck wenn kein Obstacle im Weg"
-    status: pending
+    status: done
   - id: step-2b-clj-hit-test
-    content: "Test: fx/sweep-aabb gibt {:hit-id :time-ms :normal} Map zurueck"
-    status: pending
+    content: "Test: fx/sweep-aabb gibt {:hit-id :normal} Map zurueck"
+    status: done
   - id: step-2c-clj-impl
     content: "Impl: fx/sweep-aabb Builtin – liest Clojure-Seq direkt via subjective-c"
-    status: pending
+    status: done
   - id: step-2d-interpolate-test
-    content: "Test: fx/interpolate-segment liefert Positionen an Grenzen und in der Mitte (gleiche Werte wie Renderer)"
-    status: pending
+    content: "Test: fx/interpolate-segment liefert Positionen an Grenzen und in der Mitte"
+    status: done
   - id: step-2e-interpolate-impl
-    content: "Impl: fx/interpolate-segment als C-Builtin via vg_anim_progress_q13 + vg_anim_lerp_q13"
-    status: pending
+    content: "Impl: fx/interpolate-segment als C-Builtin (integer-Lerp)"
+    status: done
   - id: step-3a-validate-hit-test
-    content: "Test: apply-segment-end mit :collision, Obstacle vorhanden – on-collision! wird aufgerufen"
-    status: pending
+    content: "Test: apply-segment-end mit :collision, Obstacle vorhanden – Response korrekt"
+    status: done
   - id: step-3b-phantom-test
     content: "Test: apply-segment-end mit :collision, Obstacle verschwunden – Phantom ignoriert, replan"
-    status: pending
+    status: done
   - id: step-3c-impl
-    content: "Impl: Validate-at-End in apply-segment-end mit obstacle-lookup-fn + on-collision!-fn"
-    status: pending
+    content: "Impl: Validate-at-End in apply-segment-end-at-ms"
+    status: done
   - id: step-4a-brick-in-path-test
     content: "Test: choose-segment-target gibt Segment mit :collision zurueck wenn Brick in Bahn"
-    status: pending
+    status: done
   - id: step-4b-brick-before-wall-test
     content: "Test: Brick naeher als Wand – Brick gewinnt"
-    status: pending
+    status: done
   - id: step-4c-hit-response-test
     content: "Test: Segment-Ende Brick-Hit entfernt Brick, kehrt Velocity, plant neues Segment"
-    status: pending
+    status: done
   - id: step-4d-sound-test
     content: "Test: :brick-hit in :events, kein separates on-spatial-event! noetig"
-    status: pending
+    status: done
   - id: step-4e-choose-impl
-    content: "Impl: choose-segment-wall -> choose-segment-target in libs/tiny-breakout/core.clj"
-    status: pending
+    content: "Impl: choose-segment-wall -> choose-segment-target via fx/sweep-aabb"
+    status: done
   - id: step-4f-end-impl
     content: "Impl: apply-segment-end-at-ms Brick-Fall mit Validate-at-End"
-    status: pending
+    status: done
+  - id: step-4g-bricks-hashmap
+    content: "Impl: :bricks als {id->brick} HashMap fuer O(1) lookup; levels.clj + scene.clj migriert"
+    status: done
   - id: step-5a-no-brick-rules-test
     content: "Test: Breakout-Szene enthaelt keine :ball-vs-brick SpatialRules"
-    status: pending
+    status: done
   - id: step-5b-rules-impl
     content: "Impl: Ball-vs-Brick SpatialRules aus with-expanded-collision-rules entfernen"
-    status: pending
+    status: done
   - id: step-5c-paddle-only-impl
     content: "Impl: on-spatial-event! / flush-scene! auf Paddle-only reduzieren"
-    status: pending
+    status: done
   - id: step-5d-direct-dispatch-impl
-    content: "Impl: on-spatial-event! zu direktem Dispatch vereinfachen, pending-spatial-events* entfernen"
-    status: pending
+    content: "Impl: on-spatial-event! zu direktem Dispatch vereinfachen"
+    status: done
   - id: step-5e-coalescing-timer-impl
-    content: "Impl: schedule-1 Coalescing-Timer entfernen oder auf schedule-0 fuer Paddle reduzieren"
-    status: pending
+    content: "Impl: scene-flush Coalescing-Timer entfernt; paddle-only braucht kein Batching"
+    status: done
   - id: step-5f-brick-ranker-cleanup
-    content: "Cleanup: brick-event-backtrack-rank, split-same-snapshot-brick-events, select-earliest-brick-event, better-brick-event?, pending-brick-snapshot-gen*, last-brick-bounce-gen entfernen"
-    status: pending
+    content: "Cleanup: overlap-width/height, ball-vs-brick branch, brick-rule-* Helpers entfernt"
+    status: done
 isProject: true
 ---
 
