@@ -32,6 +32,7 @@ endif()
 
 # Include common paths configuration
 include(cmake_include_paths.cmake)
+include("${CMAKE_SOURCE_DIR}/cmake/embedded_clojure_sources.cmake")
 
 # Set C standard
 set(CMAKE_C_STANDARD 99)
@@ -99,6 +100,30 @@ endif()
 # accidentally picked up by includes.
 include_directories(${CMAKE_SOURCE_DIR} include src ${CMAKE_SOURCE_DIR}/subjective-c/src/subjective-c)
 include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
+
+# Generate embedded Clojure include fragments for host builds as well so
+# src/embedded_sources.c always uses up-to-date sources.
+tinyclj_setup_embedded_clojure_generation(
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}"
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
+    TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
+)
+include_directories(${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR})
+
+if(TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS)
+    add_custom_target(
+        tinyclj_embedded_clojure_sources
+        DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS}
+    )
+endif()
+
+function(tinyclj_add_embedded_clojure_dependency target_name)
+    if(TARGET tinyclj_embedded_clojure_sources AND TARGET ${target_name})
+        add_dependencies(${target_name} tinyclj_embedded_clojure_sources)
+    endif()
+endfunction()
 
 # Subjective-C subproject (static library + early tests)
 #
@@ -509,6 +534,13 @@ if(APPLE)
     endif()
 endif()
 
+tinyclj_add_embedded_clojure_dependency(tiny-clj)
+tinyclj_add_embedded_clojure_dependency(tiny-clj-repl)
+tinyclj_add_embedded_clojure_dependency(tiny-clj-esp32-repl)
+if(TARGET tiny-fx)
+    tinyclj_add_embedded_clojure_dependency(tiny-fx)
+endif()
+
 # Profiling Build - Optimized but with visible functions for profiling
 add_executable(tiny-clj-profile
     src/repl.c
@@ -528,6 +560,7 @@ set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
+tinyclj_add_embedded_clojure_dependency(tiny-clj-profile)
 
 # ============================================================================
 # CATEGORIZED TEST EXECUTABLES
@@ -678,6 +711,7 @@ target_include_directories(unit-tests
         ${TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR}
         ${CMAKE_SOURCE_DIR}
 )
+tinyclj_add_embedded_clojure_dependency(unit-tests)
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size,

@@ -4,33 +4,10 @@
 #include <stddef.h>
 
 #if defined(__has_include)
-#  if __has_include("clojure.core.clj.inc")
-#    define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 1
-#  else
-#    define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 0
+#  if !__has_include("clojure.core.clj.inc")
+#    error "Missing generated embedded Clojure includes (clojure.core.clj.inc). Run CMake configure/build to generate build/generated/embedded_clojure/*.inc."
 #  endif
-#else
-#  define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 0
 #endif
-
-#if !TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES
-
-void embedded_source_map_init(void) {
-    // No-op when generated embedded source includes are unavailable.
-}
-
-bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out_len) {
-    (void)path;
-    if (out_data) {
-        *out_data = NULL;
-    }
-    if (out_len) {
-        *out_len = 0;
-    }
-    return false;
-}
-
-#else
 
 #define EMBEDDED_SOURCE_ENTRY(path_literal, source_array) \
   {                                                       \
@@ -318,5 +295,3 @@ bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out
 }
 
 #undef EMBEDDED_SOURCE_ENTRY
-
-#endif
