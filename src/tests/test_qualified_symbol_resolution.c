@@ -125,6 +125,53 @@ TEST(test_resolve_clojure_core_reverse_in_function) {
 }
 
 // ============================================================================
+// TESTS FOR QUALIFIED clojure.core MACRO-LIKE FORMS (NATIVE DISPATCH)
+// ============================================================================
+
+// Regression: qualified clojure.core special forms must dispatch identically to unqualified forms.
+TEST(test_eval_clojure_core_if_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string("(clojure.core/if false 1 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+// Regression: clojure.core/doseq must resolve in call position for Clojure compatibility.
+TEST(test_eval_clojure_core_doseq_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string(
+        "(let [sum (atom 0)] (clojure.core/doseq [x [1 2 3]] (swap! sum + x)) @sum)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// Regression: qualified clojure.core/dotimes must use dotimes lexical scope, not outer frame slots.
+TEST(test_eval_clojure_core_dotimes_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string(
+        "(let [sum (atom 0)] (clojure.core/dotimes [i 4] (swap! sum + i)) @sum)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// ============================================================================
 // TESTS FOR clojure.string QUALIFIED SYMBOLS
 // ============================================================================
 

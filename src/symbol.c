@@ -1269,11 +1269,24 @@ CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname) {
 
     CljSymbol *existing = symbol_table_find(ns_name, cname);
     if (existing) {
+        if (ns_name && !existing->unqualified) {
+            CljSymbol *unqualified = symbol_table_find(NULL, cname);
+            if (unqualified) {
+                existing->unqualified = unqualified;
+            }
+        }
         return existing;
     }
 
     CljSymbol *symbol = make_symbol(cname, ns_name);
     if (!symbol) return NULL;
+
+    if (ns_name) {
+        CljSymbol *unqualified = symbol_table_find(NULL, cname);
+        if (unqualified) {
+            symbol->unqualified = unqualified;
+        }
+    }
 
     symbol_table_add(symbol);
 

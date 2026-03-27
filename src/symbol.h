@@ -294,6 +294,44 @@ CljSymbol* symbol_table_lookup(CljSymbol *ns_name, const char *cname);
 void symbol_table_cleanup(void);
 void symbol_table_fit_startup_reserve(unsigned int reserve_percent);
 
+// Returns the cached unqualified symbol for a qualified symbol when available.
+// On miss, performs a one-time lookup and caches it on the symbol object.
+static inline CljSymbol *symbol_get_cached_unqualified(CljSymbol *sym) {
+    if (!sym || !sym->ns_name || !sym->cname) {
+        return sym;
+    }
+    if (!sym->unqualified) {
+        CljSymbol *resolved = symbol_table_lookup(NULL, sym->cname);
+        if (resolved) {
+            sym->unqualified = resolved;
+        }
+    }
+    return sym->unqualified ? sym->unqualified : sym;
+}
+
+static inline bool symbol_is_core_call_dispatch_symbol(CljSymbol *sym) {
+    if (!sym) {
+        return false;
+    }
+    if (sym == SYM_DOSEQ || sym == SYM_DOTIMES) {
+        return true;
+    }
+    return is_special_symbol(sym);
+}
+
+// Normalize qualified clojure.core operators to their unqualified interned
+// symbols for native call-position dispatch (special forms + native loop forms).
+static inline CljSymbol *symbol_normalize_core_dispatch_symbol(CljSymbol *sym) {
+    if (!sym || sym->ns_name != SYM_CLOJURE_CORE || !sym->cname) {
+        return sym;
+    }
+    CljSymbol *unqualified = symbol_get_cached_unqualified(sym);
+    if (unqualified == sym) {
+        return sym;
+    }
+    return symbol_is_core_call_dispatch_symbol(unqualified) ? unqualified : sym;
+}
+
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);
 const char* symbol_get_namespace_name(CljSymbol *sym);

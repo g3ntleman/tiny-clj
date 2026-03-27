@@ -1784,13 +1784,14 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
   if (op_tag == CLJ_SYMBOL) {
     CljSymbol *original_op_sym = as_symbol(op);
     if (original_op_sym) {
+      CljSymbol *dispatch_op_sym = symbol_normalize_core_dispatch_symbol(original_op_sym);
       ID result = NULL;
       bool handled = false;
 
       // --- Tail-call optimized: inline if ---
       // Saves ~500 bytes of stack per if-level by avoiding
       // eval_special_if → eval_body → eval_body_with_params → eval_ast_call recursion.
-      if (original_op_sym == SYM_IF) {
+      if (dispatch_op_sym == SYM_IF) {
         unsigned int argc = args ? vector_count(args) : 0;
         if (argc >= 2) {
           ID cond_expr = vector_nth(args, 0);
@@ -1817,7 +1818,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
       }
 
       // --- Tail-call optimized: inline when ---
-      if (original_op_sym == SYM_WHEN) {
+      if (dispatch_op_sym == SYM_WHEN) {
         unsigned int argc = args ? vector_count(args) : 0;
         ID cond_expr = (argc >= 1) ? vector_nth(args, 0) : NULL;
         ID cond_val = eval_arg_from_expr_with_context(cond_expr, effective_env, effective_st, ctx);
@@ -1855,7 +1856,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
         return NULL;
       }
 
-      if (original_op_sym == SYM_DEF) {
+      if (dispatch_op_sym == SYM_DEF) {
 #if defined(META_ENABLED) && META_ENABLED
         // Preserve def form metadata by attaching it to the args vector.
         if (call && call->args) {
@@ -1867,22 +1868,22 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
 #endif
         result = eval_def(args, effective_env, effective_st);
         handled = true;
-      } else if (original_op_sym == SYM_DEFMACRO) {
+      } else if (dispatch_op_sym == SYM_DEFMACRO) {
         result = eval_special_defmacro(args, effective_env, effective_st, ctx);
         handled = true;
-      } else if (original_op_sym == SYM_NS) {
+      } else if (dispatch_op_sym == SYM_NS) {
         result = eval_ns(args, effective_env, effective_st);
         handled = true;
-      } else if (original_op_sym == SYM_DOSEQ) {
+      } else if (dispatch_op_sym == SYM_DOSEQ) {
         result = eval_doseq(args, effective_env, effective_st, ctx);
         handled = true;
-      } else if (original_op_sym == SYM_DOTIMES) {
+      } else if (dispatch_op_sym == SYM_DOTIMES) {
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
         EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
         result = eval_dotimes(args, effective_env, eval_st, ctx);
         handled = true;
-      } else if (is_special_symbol(original_op_sym)) {
-        CljSpecialSymbol *special = (CljSpecialSymbol *)original_op_sym;
+      } else if (is_special_symbol(dispatch_op_sym)) {
+        CljSpecialSymbol *special = (CljSpecialSymbol *)dispatch_op_sym;
         if (special->eval_fn) {
           SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
           result = fn(args, effective_env, effective_st, ctx);
