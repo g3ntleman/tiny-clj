@@ -36,6 +36,21 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <inttypes.h>
+#if defined(ESP32_BUILD) || defined(ESP_PLATFORM)
+#if defined(__has_include) && __has_include(<esp_memory_utils.h>)
+#include <esp_memory_utils.h>
+#define SUBJECTIVE_C_HAVE_ESP_MEMORY_UTILS 1
+#elif defined(__has_include) && __has_include(<soc/soc.h>)
+#include <soc/soc.h>
+#define SUBJECTIVE_C_HAVE_SOC_MEMORY_RANGES 1
+#endif
+#endif
+#ifndef SUBJECTIVE_C_HAVE_ESP_MEMORY_UTILS
+#define SUBJECTIVE_C_HAVE_ESP_MEMORY_UTILS 0
+#endif
+#ifndef SUBJECTIVE_C_HAVE_SOC_MEMORY_RANGES
+#define SUBJECTIVE_C_HAVE_SOC_MEMORY_RANGES 0
+#endif
 // Optional stack trace support (execinfo/backtrace), gated in object.h.
 // On ESP-IDF/newlib this is not available.
 #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
@@ -185,6 +200,11 @@ bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size)
   return projected > g_heap_limit_bytes;
 }
 
+/** @brief malloc via out-of-line call: Xtensa GCC -Wmaybe-uninitialized false positive on `void *x = malloc(n)`. */
+__attribute__((noinline)) static void *alloc_raw_heap_bytes(size_t n) {
+  return malloc(n);
+}
+
 /**
  * @brief Allocate memory for Clojure objects.
  * @param type_size Size of object type
@@ -203,7 +223,7 @@ void *alloc(size_t type_size, size_t count, CljType obj_type) {
     throw_oom();
     abort();
   }
-  void *result = malloc(requested);
+  void *result = alloc_raw_heap_bytes(requested);
   if (!result) {
     fprintf(stderr,
             "OOM alloc request: bytes=%zu type=%s(%d)\n",
@@ -1042,14 +1062,52 @@ static void release_object_default(CljObject *v) {
   }
 }
 
+#if defined(ESP32_BUILD) || defined(ESP_PLATFORM)
+static bool pointer_in_half_open_range(const void *ptr, const void *start, const void *end) {
+  uintptr_t p = (uintptr_t)ptr;
+  uintptr_t lo = (uintptr_t)start;
+  uintptr_t hi = (uintptr_t)end;
+  return hi > lo && p >= lo && p < hi;
+}
+#endif
+
 bool is_pointer_in_data_segment(const void *ptr) {
-  if (!ptr)
+  if (!ptr) {
     return false;
+  }
+
+#if defined(ESP32_BUILD) || defined(ESP_PLATFORM)
+  extern char _data_start[];
+  extern char _data_end[];
+  extern char _bss_start[];
+  extern char _bss_end[];
+
+#if SUBJECTIVE_C_HAVE_ESP_MEMORY_UTILS
+  if (esp_ptr_in_drom(ptr)) {
+    return true;
+  }
+#elif SUBJECTIVE_C_HAVE_SOC_MEMORY_RANGES
+  if ((intptr_t)ptr >= SOC_DROM_LOW && (intptr_t)ptr < SOC_DROM_HIGH) {
+    return true;
+  }
+#endif
+
+  // .data/.bss are static lifetime objects in DRAM (heap/stack are outside these ranges).
+  if (pointer_in_half_open_range(ptr, _data_start, _data_end)) {
+    return true;
+  }
+  if (pointer_in_half_open_range(ptr, _bss_start, _bss_end)) {
+    return true;
+  }
+
+  return false;
+#else
   uintptr_t a = (uintptr_t)ptr;
 #if UINTPTR_MAX == UINT64_MAX
   return a < 0x100000000ULL;
 #else
   return a < 0x08000000UL;
+#endif
 #endif
 }
 

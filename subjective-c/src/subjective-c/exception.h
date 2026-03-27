@@ -156,7 +156,12 @@ static inline void clj_callstack_pop(void) {}
  * @brief Read-only view of a registered process-global thread role.
  */
 typedef struct SubjectiveCThreadState {
+#if defined(ESP_PLATFORM)
+    /** FreeRTOS task handle (app main is not a pthread; pthread_self() is invalid there). */
+    void *task_handle;
+#else
     pthread_t value;
+#endif
     bool initialized;
 } SubjectiveCThreadState;
 

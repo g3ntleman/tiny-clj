@@ -163,3 +163,35 @@ TEST(test_is_pointer_on_stack_caller_frame) {
     volatile int *ptr = &caller_local;
     TEST_ASSERT_TRUE(is_pointer_on_stack((void*)ptr));
 }
+
+// =============================================================================
+// is_pointer_in_data_segment() Tests
+// =============================================================================
+
+TEST(test_is_pointer_in_data_segment_heap_pointer_false) {
+    char *heap_ptr = (char *)malloc(16);
+    TEST_ASSERT_NOT_NULL(heap_ptr);
+    TEST_ASSERT_FALSE(is_pointer_in_data_segment(heap_ptr));
+    free(heap_ptr);
+}
+
+TEST(test_is_pointer_in_data_segment_stack_pointer_false) {
+    char stack_buf[8] = {0};
+    TEST_ASSERT_FALSE(is_pointer_in_data_segment(stack_buf));
+}
+
+TEST(test_is_pointer_in_data_segment_null_false) {
+    TEST_ASSERT_FALSE(is_pointer_in_data_segment(NULL));
+}
+
+#if defined(ESP32_BUILD) || defined(ESP_PLATFORM)
+TEST(test_is_pointer_in_data_segment_literal_true_on_esp32) {
+    static const char *literal = "tiny-clj-static-literal";
+    TEST_ASSERT_TRUE(is_pointer_in_data_segment(literal));
+}
+
+TEST(test_is_pointer_in_data_segment_static_data_true_on_esp32) {
+    static int static_data = 42;
+    TEST_ASSERT_TRUE(is_pointer_in_data_segment(&static_data));
+}
+#endif

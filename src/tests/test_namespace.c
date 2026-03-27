@@ -39,8 +39,7 @@ TEST(test_namespace_lookup_core_functions) {
         TEST_ASSERT_TRUE(TAG(resolved) == CLJ_CLOSURE || TAG(resolved) == CLJ_FUNC);
     }
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: ns_resolve returns a borrowed value.
     RELEASE(map_sym);
 }
 
@@ -64,9 +63,30 @@ TEST(test_namespace_lookup_user_namespace) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved));
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: ns_resolve returns a borrowed value.
     RELEASE(test_sym);
+    RELEASE(value);
+}
+
+// Regression: ns_resolve must return borrowed values (no implicit retain).
+TEST(test_ns_resolve_returns_borrowed_value) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljSymbol *sym = intern_symbol_global("borrowed-value");
+    TEST_ASSERT_NOT_NULL(sym);
+    CljString *value = make_string("ok");
+    TEST_ASSERT_NOT_NULL(value);
+
+    ns_define(g_test_eval_state->current_ns, sym, value);
+
+    int before = retain_count(value);
+    ID resolved = ns_resolve(g_test_eval_state, sym);
+    int after = retain_count(value);
+
+    TEST_ASSERT_EQUAL_PTR(value, resolved);
+    TEST_ASSERT_EQUAL_INT(before, after);
+
+    RELEASE(sym);
     RELEASE(value);
 }
 
@@ -433,8 +453,7 @@ TEST(test_namespace_variable_storage) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)retrieved));
     TEST_ASSERT_EQUAL(123, as_fixnum((CljValue)retrieved));
 
-    // Cleanup
-    RELEASE(retrieved);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(var_sym);
     RELEASE(value);
 }
@@ -468,9 +487,7 @@ TEST(test_namespace_multiple_variables) {
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)retrieved1));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)retrieved2));
 
-    // Cleanup
-    RELEASE(retrieved1);
-    RELEASE(retrieved2);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(var1_sym);
     RELEASE(var2_sym);
     RELEASE(value1);
@@ -488,8 +505,7 @@ TEST(test_symbol_resolution_fallback) {
     TEST_ASSERT_NOT_NULL(resolved);
     TEST_ASSERT_TRUE(TAG(resolved) == CLJ_FUNC); // Should be a native function
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: eval_symbol result is autoreleased.
     RELEASE(plus_sym);
 }
 
@@ -512,8 +528,7 @@ TEST(test_namespace_special_characters) {
     TEST_ASSERT_NOT_NULL(retrieved);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
 
-    // Cleanup
-    RELEASE(retrieved);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(special_sym);
     RELEASE(value);
 }
@@ -657,10 +672,9 @@ TEST(test_ns_resolve_symbol_cache) {
     // Cache should make repeated lookups faster
     // This test establishes baseline - cache implementation will improve it further
 
-    // Cleanup
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(test_sym);
     RELEASE(test_value);
-    RELEASE(resolved1);
 }
 
 // Global resolve-cache no longer exists; callsite caches handle hot paths.

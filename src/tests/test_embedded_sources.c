@@ -311,6 +311,33 @@ TEST(test_embedded_sources_core_matches_libs_file_bytes)
     assert_resolved_bytes_match_repo_file("/libs/clojure/core.clj", "/libs/clojure/core.clj");
 }
 
+TEST(test_embedded_sources_clojure_string_matches_libs_file_bytes)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    assert_resolved_bytes_match_repo_file("/libs/clojure/string.clj", "/libs/clojure/string.clj");
+}
+
+TEST(test_embedded_sources_clojure_string_resolver_returns_embedded_view)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+
+    const uint8_t *embedded_data = NULL;
+    int embedded_len = 0;
+    TEST_ASSERT_TRUE(embedded_source_lookup("/libs/clojure/string.clj", &embedded_data, &embedded_len));
+    TEST_ASSERT_NOT_NULL(embedded_data);
+    TEST_ASSERT_TRUE(embedded_len > 0);
+
+    ID bytes = resolve_path_to_bytes("/libs/clojure/string.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_EQUAL_INT(embedded_len, ba->length);
+    TEST_ASSERT_EQUAL_PTR(embedded_data, ba->data);
+}
+
 TEST(test_embedded_sources_tiny_db_kv_matches_libs_file_bytes)
 {
     embedded_source_map_init();

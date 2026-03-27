@@ -16,6 +16,8 @@
 #include "strings.h"
 #if defined(ESP_PLATFORM)
 #include "esp_debug_helpers.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #endif
 
 static void errf(const char *fmt, ...) {
@@ -141,19 +143,34 @@ const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_mai
 const SubjectiveCThreadState *const subjective_c_interpreter_thread = &subjective_c_interpreter_thread_storage;
 
 static bool subjective_c_thread_state_matches_current(const SubjectiveCThreadState *state) {
-    return state && state->initialized && pthread_equal(state->value, pthread_self()) != 0;
+    if (!state || !state->initialized) {
+        return false;
+    }
+#if defined(ESP_PLATFORM)
+    return state->task_handle == (void *)xTaskGetCurrentTaskHandle();
+#else
+    return pthread_equal(state->value, pthread_self()) != 0;
+#endif
 }
 
 void subjective_c_register_main_thread(void) {
     if (!subjective_c_main_thread_storage.initialized) {
+#if defined(ESP_PLATFORM)
+        subjective_c_main_thread_storage.task_handle = (void *)xTaskGetCurrentTaskHandle();
+#else
         subjective_c_main_thread_storage.value = pthread_self();
+#endif
         subjective_c_main_thread_storage.initialized = true;
         subjective_c_set_thread_name("main");
     }
 }
 
 void subjective_c_register_interpreter_thread(void) {
+#if defined(ESP_PLATFORM)
+    subjective_c_interpreter_thread_storage.task_handle = (void *)xTaskGetCurrentTaskHandle();
+#else
     subjective_c_interpreter_thread_storage.value = pthread_self();
+#endif
     subjective_c_interpreter_thread_storage.initialized = true;
 }
 
