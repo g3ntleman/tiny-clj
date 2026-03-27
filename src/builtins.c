@@ -3093,6 +3093,8 @@ ID native_type(ID *args, unsigned int argc) {
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
   case CLJ_RECORD:
     return intern_symbol(SYM_CLOJURE_LANG, "Record");
+  case CLJ_NAMESPACE:
+    return intern_symbol(SYM_CLOJURE_LANG, "Namespace");
   case CLJ_LIST:
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
   case CLJ_FUNC:
@@ -3847,8 +3849,7 @@ ID native_bound_p(ID *args, unsigned int argc) {
 
 // all-ns: Returns a list of all namespace objects
 // Usage: (all-ns)
-ID native_all_ns(ID *args, unsigned int argc) {
-  (void)args;
+ID native_all_ns(__attribute__((unused)) ID *args, unsigned int argc) {
   if (argc != 0) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "all-ns expects no arguments, got %u", argc);
@@ -3861,12 +3862,12 @@ ID native_all_ns(ID *args, unsigned int argc) {
 
   ID result = NULL;
   MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
-    (void)key;
-    if (!val) {
+    /* Registry stores clojure.core twice (name key + NULL key for ns_find_by_symbol); list once. */
+    if (!key || !val) {
       continue;
     }
-    CljList *old_result = (CljList *)result;
-    result = make_list(val, (CljList *)result);
+    CljList *old_result = as_list(result);
+    result = make_list(val, as_list(result));
     RELEASE(old_result);
   }
 

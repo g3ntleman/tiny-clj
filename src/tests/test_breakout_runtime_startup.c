@@ -1285,13 +1285,13 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
 
 #if defined(__APPLE__)
 TEST(test_breakout_runtime_startup_maps_macos_virtual_keys_to_runtime_keys) {
-    TEST_ASSERT_EQUAL_INT(KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
 }
 #endif
 

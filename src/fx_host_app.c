@@ -98,9 +98,9 @@ static bool fx_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
         return false;
     }
-    bool esc = keys[KB_KEY_ESCAPE] != 0;
-    bool cmd_q = (keys[KB_KEY_Q] != 0) &&
-                 ((keys[KB_KEY_LEFT_SUPER] != 0) || (keys[KB_KEY_RIGHT_SUPER] != 0));
+    bool esc = keys[MFB_KB_KEY_ESCAPE] != 0;
+    bool cmd_q = (keys[MFB_KB_KEY_Q] != 0) &&
+                 ((keys[MFB_KB_KEY_LEFT_SUPER] != 0) || (keys[MFB_KB_KEY_RIGHT_SUPER] != 0));
     return esc || cmd_q;
 }
 
@@ -316,7 +316,7 @@ static bool fx_host_window_pump_events(ViewerHostWindow *window) {
 #if defined(__APPLE__)
     return tinyfx_macos_window_pump_events(window);
 #else
-    return mfb_update_events(window) == STATE_OK;
+    return mfb_update_events(window) == MFB_STATE_OK;
 #endif
 }
 

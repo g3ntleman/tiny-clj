@@ -1186,6 +1186,19 @@ TEST(test_ns_registry_iteration) {
     TEST_ASSERT_EQUAL_PTR(ns2, (CljNamespace*)found2);
 }
 
+// clojure.core is registered under its name and under NULL (see ns_get_or_create); (all-ns) must not duplicate.
+TEST(test_all_ns_lists_each_namespace_once) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljNamespace *core = ns_get_or_create("clojure.core", NULL);
+    TEST_ASSERT_NOT_NULL(core);
+    TEST_ASSERT_EQUAL_PTR(core, ns_find_by_symbol(NULL));
+
+    CljObject *res =
+        eval_string("(= (count (all-ns)) (count (distinct (all-ns))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(res);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(res, (CljObject *)clj_true, "all-ns entries must be unique");
+}
+
 // Test: Verify ns_registry can grow and still resolve entries
 TEST(test_ns_registry_growth_and_lookup) {
 
@@ -1368,6 +1381,23 @@ TEST(test_find_ns_returns_namespace) {
     TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
 
     // Cleanup
+}
+
+// Regression: type should expose namespace objects as clojure.lang/Namespace.
+TEST(test_type_reports_namespace_for_find_ns_result) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *result = eval_string("(type (find-ns 'clojure.core))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_SYMBOL);
+
+    CljSymbol *sym = as_symbol(result);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name->cname);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    TEST_ASSERT_EQUAL_STRING("clojure.lang", sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("Namespace", sym->cname);
 }
 
 // Test: Verify find-ns returns nil for non-existent namespace
