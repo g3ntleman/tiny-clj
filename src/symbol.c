@@ -1073,80 +1073,47 @@ void init_special_symbols() {
     #undef INIT_SYMBOL_NS
     #undef INIT_SPECIAL_SYMBOL
 
-    // Set function pointers for Special Forms (O(1) dispatch optimization)
-    // Cast to CljSpecialSymbol and set eval_fn pointer (with type cast for compatibility)
-    // Note: Using void* cast to bridge between placeholder type in symbol.h and real type in eval.h
-    if (is_special_symbol(SYM_IF)) {
-        ((CljSpecialSymbol*)SYM_IF)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_if;
+    // Set function pointers for Special Forms (O(1) dispatch optimization).
+    // Compact table-driven setup keeps startup code size smaller on embedded builds.
+    typedef struct {
+        CljSymbol *sym;
+        SpecialFormEvalFn eval_fn;
+    } SpecialEvalBinding;
+    const SpecialEvalBinding bindings[] = {
+        {SYM_IF, eval_special_if},
+        {SYM_TRY, eval_special_try},
+        {SYM_WHEN, eval_special_when},
+        {SYM_WHILE, eval_special_while},
+        {SYM_COND, eval_special_cond},
+        {SYM_DO, eval_special_do},
+        {SYM_AND, eval_special_and},
+        {SYM_OR, eval_special_or},
+        {SYM_FN, eval_special_fn},
+        {SYM_LET, eval_special_let},
+        {SYM_VAR, eval_special_var},
+        {SYM_QUOTE, eval_special_quote},
+        {SYM_RECUR, eval_special_recur},
+        {SYM_LOOP, eval_special_loop},
+        {SYM_THROW, eval_special_throw},
+        {SYM_GO, eval_special_go},
+        {SYM_TIME, eval_special_time},
+        {SYM_HEAP, eval_special_heap},
+        {SYM_BINDING, eval_special_binding},
+        {SYM_NS, eval_special_ns},
+        {SYM_QUASIQUOTE, eval_special_quasiquote},
+        {SYM_DEFMACRO, eval_special_defmacro},
+        {SYM_DEFRECORD, eval_special_defrecord},
+    };
+
+    for (size_t i = 0; i < (sizeof(bindings) / sizeof(bindings[0])); i++) {
+        CljSymbol *sym = bindings[i].sym;
+        if (!is_special_symbol(sym)) {
+            continue;
+        }
+        ((CljSpecialSymbol*)sym)->eval_fn =
+            (SpecialFormEvalFn_Placeholder)bindings[i].eval_fn;
     }
-    if (is_special_symbol(SYM_TRY)) {
-        ((CljSpecialSymbol*)SYM_TRY)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_try;
-    }
-    if (is_special_symbol(SYM_WHEN)) {
-        ((CljSpecialSymbol*)SYM_WHEN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_when;
-    }
-    if (is_special_symbol(SYM_WHILE)) {
-        ((CljSpecialSymbol*)SYM_WHILE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_while;
-    }
-    if (is_special_symbol(SYM_COND)) {
-        ((CljSpecialSymbol*)SYM_COND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_cond;
-    }
-    if (is_special_symbol(SYM_DO)) {
-        ((CljSpecialSymbol*)SYM_DO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_do;
-    }
-    if (is_special_symbol(SYM_AND)) {
-        ((CljSpecialSymbol*)SYM_AND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_and;
-    }
-    if (is_special_symbol(SYM_OR)) {
-        ((CljSpecialSymbol*)SYM_OR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_or;
-    }
-    if (is_special_symbol(SYM_FN)) {
-        ((CljSpecialSymbol*)SYM_FN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_fn;
-    }
-    if (is_special_symbol(SYM_LET)) {
-        ((CljSpecialSymbol*)SYM_LET)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_let;
-    }
-    if (is_special_symbol(SYM_VAR)) {
-        ((CljSpecialSymbol*)SYM_VAR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_var;
-    }
-    if (is_special_symbol(SYM_QUOTE)) {
-        ((CljSpecialSymbol*)SYM_QUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quote;
-    }
-    if (is_special_symbol(SYM_RECUR)) {
-        ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
-    }
-    if (is_special_symbol(SYM_LOOP)) {
-        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
-    }
-    if (is_special_symbol(SYM_THROW)) {
-        ((CljSpecialSymbol*)SYM_THROW)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_throw;
-    }
-    if (is_special_symbol(SYM_GO)) {
-        ((CljSpecialSymbol*)SYM_GO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_go;
-    }
-    if (is_special_symbol(SYM_TIME)) {
-        ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
-    }
-    if (is_special_symbol(SYM_HEAP)) {
-        ((CljSpecialSymbol*)SYM_HEAP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_heap;
-    }
-    if (is_special_symbol(SYM_BINDING)) {
-        ((CljSpecialSymbol*)SYM_BINDING)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_binding;
-    }
-    // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
-    
-    // Quasiquote Special Form - delegates to Clojure quasiquote-fn after bootstrap
-    if (is_special_symbol(SYM_QUASIQUOTE)) {
-        ((CljSpecialSymbol*)SYM_QUASIQUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quasiquote;
-    }
-    
-    // defmacro Special Form - defines macros in the current namespace
-    if (is_special_symbol(SYM_DEFMACRO)) {
-        ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
-    }
-    if (is_special_symbol(SYM_DEFRECORD)) {
-        ((CljSpecialSymbol*)SYM_DEFRECORD)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defrecord;
-    }
+    // Note: SYM_DOTIMES remains inline-dispatched in eval.c (not a special form).
     
 }
 

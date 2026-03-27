@@ -648,13 +648,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
 static INLINE bool is_ns_star_symbol(const CljSymbol *symbol);
 
 static INLINE bool is_ns_star_symbol(const CljSymbol *symbol) {
-  if (!symbol) {
-    return false;
-  }
-  if (symbol == SYM_NS_STAR) {
-    return true;
-  }
-  return symbol->cname && strcmp(symbol->cname, "*ns*") == 0;
+  return symbol_is_ns_star((CljSymbol *)symbol);
 }
 
 // Extended version that also searches in CallFrame
@@ -1868,19 +1862,11 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
 #endif
         result = eval_def(args, effective_env, effective_st);
         handled = true;
-      } else if (dispatch_op_sym == SYM_DEFMACRO) {
-        result = eval_special_defmacro(args, effective_env, effective_st, ctx);
-        handled = true;
-      } else if (dispatch_op_sym == SYM_NS) {
-        result = eval_ns(args, effective_env, effective_st);
-        handled = true;
       } else if (dispatch_op_sym == SYM_DOSEQ) {
         result = eval_doseq(args, effective_env, effective_st, ctx);
         handled = true;
       } else if (dispatch_op_sym == SYM_DOTIMES) {
-        // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-        EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
-        result = eval_dotimes(args, effective_env, eval_st, ctx);
+        result = eval_dotimes(args, effective_env, effective_st, ctx);
         handled = true;
       } else if (is_special_symbol(dispatch_op_sym)) {
         CljSpecialSymbol *special = (CljSpecialSymbol *)dispatch_op_sym;
@@ -2646,7 +2632,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
 
   // *ns* is represented as the current namespace object.
   // This makes it dynamically bindable by updating EvalState.current_ns in (binding ...).
-  if (symbol == SYM_NS_STAR || (symbol->cname && strcmp(symbol->cname, "*ns*") == 0)) {
+  if (is_ns_star_symbol(symbol)) {
     if (st && st->current_ns) {
       return (ID)st->current_ns;
     }

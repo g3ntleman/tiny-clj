@@ -309,6 +309,16 @@ static inline CljSymbol *symbol_get_cached_unqualified(CljSymbol *sym) {
     return sym->unqualified ? sym->unqualified : sym;
 }
 
+static inline bool symbol_is_ns_star(CljSymbol *sym) {
+    if (!sym) {
+        return false;
+    }
+    if (sym == SYM_NS_STAR) {
+        return true;
+    }
+    return symbol_get_cached_unqualified(sym) == SYM_NS_STAR;
+}
+
 static inline bool symbol_is_core_call_dispatch_symbol(CljSymbol *sym) {
     if (!sym) {
         return false;

@@ -654,6 +654,11 @@ ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalSt
   return eval_dotimes(args, env, st, ctx);
 }
 
+ID eval_special_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  (void)ctx;
+  return eval_ns(args, eval_env_or_ns_mappings(env, st), st);
+}
+
 ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   unsigned int argc = args_count(args);
   if (argc == 0)
@@ -916,7 +921,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
     ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
 
     // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
-    if (sym == SYM_NS_STAR || (sym->cname && strcmp(sym->cname, "*ns*") == 0)) {
+    if (symbol_is_ns_star(sym)) {
       if (!value) {
         RELEASE(frame);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "*ns* cannot be bound to nil", __FILE__, __LINE__, 0);
