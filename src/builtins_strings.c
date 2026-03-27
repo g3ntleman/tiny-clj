@@ -687,24 +687,347 @@ ID native_format(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+static inline bool string_is_ascii_whitespace(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static inline bool string_is_newline_char(char c) {
+    return c == '\n' || c == '\r';
+}
+
+// clojure.string/blank?: true for nil, empty strings, and all-whitespace strings.
+ID native_blank_p(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "blank?");
+
+    ID str_arg = args[0];
+    if (!str_arg) {
+        return clj_true;
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "blank? requires a string or nil");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    uint16_t str_len = string_length(str);
+    if (str_len == 0) {
+        return clj_true;
+    }
+
+    const char *data = string_data(str);
+    for (uint16_t i = 0; i < str_len; i++) {
+        if (!string_is_ascii_whitespace(data[i])) {
+            return clj_false;
+        }
+    }
+    return clj_true;
+}
+
+// clojure.string/capitalize: upper-case first char, lower-case the remainder.
+ID native_capitalize(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "capitalize");
+
+    ID str_arg = args[0];
+    if (!str_arg) {
+        return NULL;  // nil -> nil
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "capitalize requires a string argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    uint16_t str_len = string_length(str);
+    if (str_len == 0) {
+        return string_empty_singleton;
+    }
+
+    const char *data = string_data(str);
+    CljString *result = make_string_buffer(str_len);
+    if (!result) {
+        throw_exception(EXCEPTION_RUNTIME, "capitalize failed to allocate result", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    result->data[0] = (char)toupper((unsigned char)data[0]);
+    for (uint16_t i = 1; i < str_len; i++) {
+        result->data[i] = (char)tolower((unsigned char)data[i]);
+    }
+    result->data[str_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// clojure.string/includes?: true if s contains substr.
+ID native_includes_p(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 2, "includes?");
+
+    ID str_arg = args[0];
+    ID substr_arg = args[1];
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "includes? requires a string as first argument");
+        return NULL;
+    }
+    if (!substr_arg || TAG(substr_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "includes? requires a string as second argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    CljString *substr = as_clj_string(substr_arg);
+    const char *str_data = string_data(str);
+    const char *substr_data = string_data(substr);
+    uint16_t str_len = string_length(str);
+    uint16_t substr_len = string_length(substr);
+
+    if (substr_len == 0) {
+        return clj_true;
+    }
+    if (substr_len > str_len) {
+        return clj_false;
+    }
+
+    for (uint16_t i = 0; i <= (uint16_t)(str_len - substr_len); i++) {
+        if (memcmp(str_data + i, substr_data, substr_len) == 0) {
+            return clj_true;
+        }
+    }
+    return clj_false;
+}
+
+// clojure.string/starts-with?: true if s starts with prefix.
+ID native_starts_with_p(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 2, "starts-with?");
+
+    ID str_arg = args[0];
+    ID prefix_arg = args[1];
+    if (!str_arg || !prefix_arg) {
+        return clj_false;
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "starts-with? requires a string as first argument");
+        return NULL;
+    }
+    if (TAG(prefix_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "starts-with? requires a string as second argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    CljString *prefix = as_clj_string(prefix_arg);
+    const char *str_data = string_data(str);
+    const char *prefix_data = string_data(prefix);
+    uint16_t str_len = string_length(str);
+    uint16_t prefix_len = string_length(prefix);
+
+    if (prefix_len > str_len) {
+        return clj_false;
+    }
+    if (prefix_len == 0) {
+        return clj_true;
+    }
+    return (memcmp(str_data, prefix_data, prefix_len) == 0) ? clj_true : clj_false;
+}
+
+// clojure.string/ends-with?: true if s ends with suffix.
+ID native_ends_with_p(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 2, "ends-with?");
+
+    ID str_arg = args[0];
+    ID suffix_arg = args[1];
+    if (!str_arg || !suffix_arg) {
+        return clj_false;
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ends-with? requires a string as first argument");
+        return NULL;
+    }
+    if (TAG(suffix_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ends-with? requires a string as second argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    CljString *suffix = as_clj_string(suffix_arg);
+    const char *str_data = string_data(str);
+    const char *suffix_data = string_data(suffix);
+    uint16_t str_len = string_length(str);
+    uint16_t suffix_len = string_length(suffix);
+
+    if (suffix_len > str_len) {
+        return clj_false;
+    }
+    if (suffix_len == 0) {
+        return clj_true;
+    }
+    const char *tail = str_data + (str_len - suffix_len);
+    return (memcmp(tail, suffix_data, suffix_len) == 0) ? clj_true : clj_false;
+}
+
+// clojure.string/triml: remove leading ASCII whitespace.
+ID native_triml(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "triml");
+
+    ID str_arg = args[0];
+    if (!str_arg) {
+        return NULL;  // nil -> nil
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "triml requires a string argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    const char *data = string_data(str);
+    uint16_t str_len = string_length(str);
+    if (str_len == 0) {
+        return string_empty_singleton;
+    }
+
+    uint16_t start = 0;
+    while (start < str_len && string_is_ascii_whitespace(data[start])) {
+        start++;
+    }
+    if (start == 0) {
+        return str_arg;
+    }
+    if (start >= str_len) {
+        return string_empty_singleton;
+    }
+
+    uint16_t new_len = (uint16_t)(str_len - start);
+    CljString *result = make_string_buffer(new_len);
+    if (!result) {
+        throw_exception(EXCEPTION_RUNTIME, "triml failed to allocate result", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    memcpy(result->data, data + start, new_len);
+    result->data[new_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// clojure.string/trimr: remove trailing ASCII whitespace.
+ID native_trimr(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "trimr");
+
+    ID str_arg = args[0];
+    if (!str_arg) {
+        return NULL;  // nil -> nil
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "trimr requires a string argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    const char *data = string_data(str);
+    uint16_t str_len = string_length(str);
+    if (str_len == 0) {
+        return string_empty_singleton;
+    }
+
+    uint16_t end = str_len;
+    while (end > 0 && string_is_ascii_whitespace(data[end - 1])) {
+        end--;
+    }
+    if (end == str_len) {
+        return str_arg;
+    }
+    if (end == 0) {
+        return string_empty_singleton;
+    }
+
+    CljString *result = make_string_buffer(end);
+    if (!result) {
+        throw_exception(EXCEPTION_RUNTIME, "trimr failed to allocate result", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    memcpy(result->data, data, end);
+    result->data[end] = '\0';
+    return AUTORELEASE(result);
+}
+
+// clojure.string/trim-newline: remove trailing CR/LF bytes.
+ID native_trim_newline(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "trim-newline");
+
+    ID str_arg = args[0];
+    if (!str_arg) {
+        return NULL;  // nil -> nil
+    }
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "trim-newline requires a string argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    const char *data = string_data(str);
+    uint16_t str_len = string_length(str);
+    if (str_len == 0) {
+        return string_empty_singleton;
+    }
+
+    uint16_t end = str_len;
+    while (end > 0 && string_is_newline_char(data[end - 1])) {
+        end--;
+    }
+    if (end == str_len) {
+        return str_arg;
+    }
+    if (end == 0) {
+        return string_empty_singleton;
+    }
+
+    CljString *result = make_string_buffer(end);
+    if (!result) {
+        throw_exception(EXCEPTION_RUNTIME, "trim-newline failed to allocate result", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    memcpy(result->data, data, end);
+    result->data[end] = '\0';
+    return AUTORELEASE(result);
+}
+
 // ============================================================================
 // clojure.string native lookup (used by :native stubs)
 // ============================================================================
 
 typedef struct {
     CljSymbol *clojure_symbol;
+    const char *qualified_cname;
     BuiltinFn native_func;
 } BuiltinsStringsNativeFunctionEntry;
 
+#define BUILTINS_STRINGS_ENTRY(sym_ptr, fn) { (sym_ptr), NULL, (fn) }
+#define BUILTINS_STRINGS_ENTRY_QUALIFIED(cname, fn) { NULL, (cname), (fn) }
+
 static const BuiltinsStringsNativeFunctionEntry builtins_strings_native_function_table[] = {
-    {&sym_trim_data.sym, native_trim},
-    {&sym_upper_case_data.sym, native_upper_case},
-    {&sym_lower_case_data.sym, native_lower_case},
-    {&sym_pad_left_data.sym, native_pad_left},
-    {&sym_index_of_data.sym, native_index_of},
-    {&sym_last_index_of_data.sym, native_last_index_of},
-    {&sym_string_reverse_data.sym, native_string_reverse},
-    {NULL, NULL}
+    BUILTINS_STRINGS_ENTRY(&sym_trim_data.sym, native_trim),
+    BUILTINS_STRINGS_ENTRY(&sym_upper_case_data.sym, native_upper_case),
+    BUILTINS_STRINGS_ENTRY(&sym_lower_case_data.sym, native_lower_case),
+    BUILTINS_STRINGS_ENTRY(&sym_pad_left_data.sym, native_pad_left),
+    BUILTINS_STRINGS_ENTRY(&sym_index_of_data.sym, native_index_of),
+    BUILTINS_STRINGS_ENTRY(&sym_last_index_of_data.sym, native_last_index_of),
+    BUILTINS_STRINGS_ENTRY(&sym_string_reverse_data.sym, native_string_reverse),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/blank?", native_blank_p),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/capitalize", native_capitalize),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/includes?", native_includes_p),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/starts-with?", native_starts_with_p),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/ends-with?", native_ends_with_p),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/triml", native_triml),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/trimr", native_trimr),
+    BUILTINS_STRINGS_ENTRY_QUALIFIED("clojure.string/trim-newline", native_trim_newline),
+    {NULL, NULL, NULL}
 };
 
 BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
@@ -718,15 +1041,19 @@ BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
         snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
     }
 
-    for (int i = 0; builtins_strings_native_function_table[i].clojure_symbol != NULL; i++) {
+    for (int i = 0; builtins_strings_native_function_table[i].native_func != NULL; i++) {
         CljSymbol *table_sym = builtins_strings_native_function_table[i].clojure_symbol;
-        if (!table_sym) continue;
+        const char *qualified_entry = builtins_strings_native_function_table[i].qualified_cname;
 
-        if (table_sym == symbol) {
+        if (table_sym && table_sym == symbol) {
             return builtins_strings_native_function_table[i].native_func;
         }
 
-        if (!cname || !table_sym->cname) continue;
+        if (qualified_entry && ns_name && strcmp(qualified_entry, qualified_name) == 0) {
+            return builtins_strings_native_function_table[i].native_func;
+        }
+
+        if (!table_sym || !cname || !table_sym->cname) continue;
 
         const char *table_ns = table_sym->ns_name ? table_sym->ns_name->cname : NULL;
 
@@ -749,4 +1076,3 @@ BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
 
     return NULL;
 }
-

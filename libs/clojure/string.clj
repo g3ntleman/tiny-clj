@@ -23,36 +23,15 @@
 
 ;; blank? - True if s is nil, empty, or contains only whitespace
 ^#^{:doc "Returns true if s is nil, empty, or contains only whitespace."}
-(defn blank? [s]
-  (if (nil? s)
-    true
-    (if (= (count s) 0)
-      true
-      (let [trimmed (clojure.string/trim s)]
-        (= (count trimmed) 0)))))
+(defn blank? [s] :native)
 
 ;; capitalize - Converts first character to upper-case, rest to lower-case
 ^#^{:doc "Returns s with its first character upper-cased and the rest lower-cased. Returns s unchanged if nil or empty."}
-(defn capitalize [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (let [first-char (subs s 0 1)
-          rest-str (if (> (count s) 1) (subs s 1) "")]
-      (str (clojure.string/upper-case first-char) (clojure.string/lower-case rest-str)))))
+(defn capitalize [s] :native)
 
 ;; ends-with? - True if s ends with substr
 ^#^{:doc "Returns true if string s ends with substring substr."}
-(defn ends-with? [s substr]
-  (if (or (nil? s) (nil? substr))
-    false
-    (let [s-len (count s)
-          substr-len (count substr)]
-      (if (< s-len substr-len)
-        false
-        (let [last-idx (clojure.string/last-index-of s substr nil)]
-          (if (nil? last-idx)
-            false
-            (= last-idx (- s-len substr-len))))))))
+(defn ends-with? [s substr] :native)
 
 ;; escape - Escapes characters using cmap
 ^#^{:doc "Returns a string where each character of s is replaced using cmap when present. cmap maps 1-character strings to replacement values."}
@@ -78,8 +57,7 @@
 
 ;; includes? - True if s includes substr
 ^#^{:doc "Returns true if s contains substr."}
-(defn includes? [s substr]
-  (not (nil? (last-index-of s substr nil))))
+(defn includes? [s substr] :native)
 
 ;; index-of - Returns index of value in s, optionally searching from from-index
 ^#^{:doc "Returns the index of value in s, or nil if not found. If from-index is provided, starts searching from that index."}
@@ -147,11 +125,7 @@
 
 ;; starts-with? - True if s starts with substr
 ^#^{:doc "Returns true if string s starts with substring substr."}
-(defn starts-with? [s substr]
-  (if (or (nil? s) (nil? substr))
-    false
-    (let [idx (index-of s substr 0)]
-      (= idx 0))))
+(defn starts-with? [s substr] :native)
 
 ;; trim - Removes whitespace from both ends
 ^#^{:doc "Removes whitespace from both ends of string s. Returns s with all leading and trailing whitespace removed. Whitespace includes space, tab, newline, and return characters. Returns the original string if s is nil or empty."}
@@ -159,48 +133,15 @@
 
 ;; triml - Removes whitespace from left
 ^#^{:doc "Removes leading whitespace from string s. Returns s unchanged if nil or empty."}
-(defn triml [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (let [trim-left (fn [s idx]
-                      (if (>= idx (count s))
-                        ""
-                        (let [c (subs s idx (+ idx 1))
-                              c-char (first c)]
-                          (if (or (= c-char 32) (= c-char 9) (= c-char 10) (= c-char 13))
-                            (trim-left s (+ idx 1))
-                            (subs s idx)))))]
-      (trim-left s 0))))
+(defn triml [s] :native)
 
 ;; trimr - Removes whitespace from right
 ^#^{:doc "Removes trailing whitespace from string s. Returns s unchanged if nil or empty."}
-(defn trimr [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (let [trim-right (fn [s idx]
-                       (if (< idx 0)
-                         ""
-                         (let [c (subs s idx (+ idx 1))
-                               c-char (first c)]
-                           (if (or (= c-char 32) (= c-char 9) (= c-char 10) (= c-char 13))
-                             (trim-right s (- idx 1))
-                             (subs s 0 (+ idx 1))))))]
-      (trim-right s (- (count s) 1)))))
+(defn trimr [s] :native)
 
 ;; trim-newline - Removes trailing newlines
 ^#^{:doc "Removes trailing newline characters (\\n and \\r) from string s."}
-(defn trim-newline [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (let [trim-right (fn [s idx]
-                       (if (< idx 0)
-                         ""
-                         (let [c (subs s idx (+ idx 1))
-                               c-char (first c)]
-                           (if (or (= c-char 10) (= c-char 13))
-                             (trim-right s (- idx 1))
-                             (subs s 0 (+ idx 1))))))]
-      (trim-right s (- (count s) 1)))))
+(defn trim-newline [s] :native)
 
 ;; upper-case - Converts string to upper-case
 ^#^{:doc "Converts string to all upper-case."}
