@@ -14,11 +14,11 @@
 (def held-buttons* (atom idle-held-buttons))
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
-(def ^:private segment-watch-opts {:slot :game
-                                   :entity-id :ball
-                                   :field :x})
+(def ^:private segment-watch-base-opts {:slot :game
+                                        :entity-id :ball})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
+(def ^:private segment-watch-field* (atom nil))
 (def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
 ;; Coalesced timeline-kick timer: avoid schedule-0 burst buildup under heavy publish-state! churn.
 ;; Use a named non-zero-delay timer so repeated schedules upsert/cancel instead of queueing unbounded tasks.
@@ -328,14 +328,41 @@
       (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)))
   nil)
 
+(defn- segment-watch-field
+  [segment]
+  (let [from-x (:from-x segment)
+        to-x (:to-x segment)
+        from-y (:from-y segment)
+        to-y (:to-y segment)
+        vertical? (and (number? from-x)
+                       (number? to-x)
+                       (= from-x to-x)
+                       (number? from-y)
+                       (number? to-y)
+                       (not= from-y to-y))]
+    (if vertical?
+      :y
+      :x)))
+
+(defn- segment-watch-opts-for-state
+  [state]
+  (assoc segment-watch-base-opts
+         :field (segment-watch-field (:ball-segment state))))
+
+(defn- register-segment-watch!
+  [state]
+  (let [opts (segment-watch-opts-for-state state)]
+    (event/on {:source :timeline :id segment-watch-id}
+              on-segment-timeline-event!
+              opts)
+    (reset! segment-watch-active* true)
+    (reset! segment-watch-field* (:field opts))))
+
 (defn- activate-segment-watch!
   []
   (when (and (map? (:ball-segment @state*))
              (not @segment-watch-active*))
-    (event/on {:source :timeline :id segment-watch-id}
-              on-segment-timeline-event!
-              segment-watch-opts)
-    (reset! segment-watch-active* true))
+    (register-segment-watch! @state*))
   nil)
 
 (defn- store-published-state!
@@ -354,6 +381,14 @@
     (event/kick-timeline-watchers!))
   nil)
 
+(defn- schedule-audio-events!
+  [events]
+  (when (seq events)
+    (schedule 0 (fn breakout-audio-events-task []
+                  (audio/play-events! events)
+                  nil)))
+  nil)
+
 (defn- publish-state-core!
   "Updates state atom, plays audio, manages segment watchers. Returns
   state-without-events for optional immediate scene rebuild by callers."
@@ -364,22 +399,25 @@
         state-without-events (assoc state :events [])
         segment (:ball-segment state-without-events)
         segment-id (if (map? segment) (:id segment) nil)
+        segment-field (if (map? segment)
+                        (segment-watch-field segment)
+                        nil)
         end-ms (if (map? segment) (:end-ms segment) nil)]
     (sync-overlay-animation! previous-state state-without-events)
     (when (and (map? (:ball-segment state-without-events))
-               (not @tiny-breakout.runtime/segment-watch-active*)
                @event/gfx-timeline-loaded?)
-      (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id}
-                tiny-breakout.runtime/on-segment-timeline-event!
-                tiny-breakout.runtime/segment-watch-opts)
-      (reset! tiny-breakout.runtime/segment-watch-active* true))
+      (when (or (not @tiny-breakout.runtime/segment-watch-active*)
+                (not= segment-field @tiny-breakout.runtime/segment-watch-field*))
+        (register-segment-watch! state-without-events)))
     (if (and @tiny-breakout.runtime/segment-watch-active*
              (number? segment-id))
       (do
         (when (not= segment-id @tiny-breakout.runtime/segment-watch-segment-id*)
           (event/rearm-timeline-watch-edge! tiny-breakout.runtime/segment-watch-id))
         (reset! tiny-breakout.runtime/segment-watch-segment-id* segment-id))
-      (reset! tiny-breakout.runtime/segment-watch-segment-id* nil))
+      (do
+        (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
+        (reset! tiny-breakout.runtime/segment-watch-field* nil)))
     (if (and (number? segment-id)
              (number? end-ms))
       (let [delay-ms (max 1 (- end-ms (current-time-ms)))]
@@ -391,8 +429,7 @@
              @event/gfx-timeline-loaded?)
       (schedule 1 tiny-breakout.runtime/timeline-kick-timer-spec)
       nil)
-    (when (seq events)
-      (audio/play-events! events))
+    (schedule-audio-events! events)
     state-without-events))
 
 (defn publish-state!
@@ -441,6 +478,7 @@
   (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
   (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
   (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
+  (reset! tiny-breakout.runtime/segment-watch-field* nil)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))
@@ -465,6 +503,7 @@
   (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
   (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
   (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
+  (reset! tiny-breakout.runtime/segment-watch-field* nil)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))

@@ -458,6 +458,48 @@ TEST(test_breakout_contract_audio_events_play_from_deferred_event_loop_task) {
     event_loop_clear();
 }
 
+TEST(test_breakout_contract_wall_hit_audio_starts_only_after_deferred_publish_task) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.sound) "
+        "  (require 'tiny-fx.sound-debug) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (tiny-fx.sound/sound-stop-all!) "
+        "  (let [s0 (-> @tiny-breakout.runtime/state* "
+        "               (assoc :phase :play) "
+        "               (assoc :ball-x 0) "
+        "               (assoc :ball-y 120) "
+        "               (assoc :ball-vx -2) "
+        "               (assoc :ball-vy -2) "
+        "               (assoc :events []) "
+        "               (assoc :ball-segment {:id 7 "
+        "                                     :start-ms 10 "
+        "                                     :end-ms 20 "
+        "                                     :from-x 8 "
+        "                                     :from-y 128 "
+        "                                     :to-x 0 "
+        "                                     :to-y 120 "
+        "                                     :wall :left})) "
+        "        next-state (tiny-breakout.core/apply-segment-end-at-ms s0 7 20) "
+        "        before (tiny-fx.sound-debug/host-status!)] "
+        "    (tiny-breakout.runtime/publish-state! next-state) "
+        "    (let [immediate (tiny-fx.sound-debug/host-status!)] "
+        "      (let [ran (run-next-task) "
+        "            after-task (tiny-fx.sound-debug/host-status!)] "
+        "        (and (not (some true? (:engine-voice-active before))) "
+        "             (not (some true? (:engine-voice-active immediate))) "
+        "             ran))))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    event_loop_clear();
+}
+
 TEST(test_breakout_contract_core_input_flow_title_to_play_creates_segment) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
@@ -1332,6 +1374,41 @@ TEST(test_breakout_contract_segment_progression_no_longer_uses_named_segment_tim
         "  (tiny-clj.deployment/breakout-host-config) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  (= false (cancel-timer :tiny-breakout/segment-end)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_launch_vertical_segment_watches_y_and_replans_on_first_hit) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (let [watch-id :tiny-breakout/segment-end "
+        "        watcher (get @tiny-fx.gfx-timeline/timeline-watchers* watch-id) "
+        "        callback (:callback watcher) "
+        "        before @tiny-breakout.runtime/state* "
+        "        before-seg (:ball-segment before) "
+        "        before-collision (:collision before-seg) "
+        "        before-bricks (count (:bricks before)) "
+        "        _ (callback {:source :timeline "
+        "                     :id watch-id "
+        "                     :field :y "
+        "                     :progress {:end-event true :at-end true :phase-ms 1 :period-ms 1}}) "
+        "        _ (dotimes [_ 12] (run-next-task)) "
+        "        after @tiny-breakout.runtime/state* "
+        "        after-seg (:ball-segment after)] "
+        "    (and (= :y (:field watcher)) "
+        "         (fn? callback) "
+        "         (= (:from-x before-seg) (:to-x before-seg)) "
+        "         (map? before-collision) "
+        "         (map? after-seg) "
+        "         (not= (:id after-seg) (:id before-seg)) "
+        "         (> (:ball-vy after) 0) "
+        "         (= (- before-bricks 1) (count (:bricks after))))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
