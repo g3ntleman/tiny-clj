@@ -78,33 +78,7 @@
 ;; join2 - Iterative implementation using recur (works without TCO)
 ^#^{:doc "Joins coll with separator like join, using an iterative strategy to avoid deep recursion."}
 (defn join2 [separator coll]
-  (if (empty? coll)
-    ""
-    (let [sep (if (nil? separator) "" separator)
-          build-list (fn [separator coll acc]
-                       (let [step (fn [current-coll current-acc]
-                                    (if (empty? current-coll)
-                                      (if (empty? current-acc)
-                                        nil
-                                        (clojure.core/reverse current-acc))
-                                      (let [first-elem (first current-coll)
-                                            rest-coll (rest current-coll)]
-                                        (if (empty? rest-coll)
-                                          (step rest-coll (cons (str first-elem) current-acc))
-                                          (step rest-coll (cons separator (cons (str first-elem) current-acc)))))))]
-                         (step coll acc)))
-          concat-strings (fn [str-list]
-                           (let [step (fn [current-list acc]
-                                        (if (empty? current-list)
-                                          acc
-                                          (let [first-str (first current-list)
-                                                rest-list (rest current-list)]
-                                            (step rest-list (str acc first-str)))))]
-                             (step str-list "")))]
-      (let [result (build-list sep coll (list))]
-        (if (nil? result)
-          ""
-          (concat-strings result))))))
+  (join separator coll))
 
 ;; last-index-of - Returns last index of value in s
 ;; Note: from-index is optional, but we define it as required for now
@@ -244,7 +218,7 @@
     (vector)
     ;; Use split with "\n" and handle "\r\n"
     (let [normalized (replace s "\r\n" "\n")
-          lines (split normalized "\n")]
+          lines (split normalized "\n" nil)]
       lines)))
 
 ;; ============================================================================
