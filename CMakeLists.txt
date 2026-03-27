@@ -547,6 +547,7 @@ add_executable(unit-tests
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
+    src/tests/test_clojure_stacktrace.c
     src/tests/test_basics.c
     src/tests/test_list.c
     src/tests/test_namespace.c
@@ -624,6 +625,8 @@ add_executable(unit-tests
     src/tests/test_platform_mdns.c
     src/tests/test_sound_engine.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
+    src/tests/test_sweep_aabb.c
+    src/tests/test_breakout_contract.c
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)

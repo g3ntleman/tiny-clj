@@ -30,6 +30,7 @@ static void errf(const char *fmt, ...) {
 // Stacktrace support
 #if defined(DEBUG) && (defined(__APPLE__) || defined(__linux__))
 #include <execinfo.h>
+#include <dlfcn.h>
 #endif
 
 // Safe string copy helper
@@ -49,6 +50,45 @@ static const char* shorten_file_path(const char *file) {
     return file;
 }
 
+static const char *path_basename_const(const char *path) {
+    if (!path || path[0] == '\0') {
+        return "";
+    }
+    const char *last_slash = strrchr(path, '/');
+    return last_slash ? (last_slash + 1) : path;
+}
+
+#if defined(DEBUG) && (defined(__APPLE__) || defined(__linux__))
+static void exception_format_symbolized_frame(char *buf,
+                                              size_t buf_size,
+                                              int frame_index,
+                                              void *addr) {
+    if (!buf || buf_size == 0u) {
+        return;
+    }
+
+    Dl_info info;
+    memset(&info, 0, sizeof(info));
+    if (dladdr(addr, &info) != 0 && info.dli_sname) {
+        const char *image = path_basename_const(info.dli_fname);
+        uintptr_t offset = 0u;
+        if (info.dli_saddr) {
+            offset = (uintptr_t)addr - (uintptr_t)info.dli_saddr;
+        }
+        (void)mini_snprintf(buf, buf_size,
+                            "  %d: %s!%s + 0x%lx [%p]\n",
+                            frame_index,
+                            (image && image[0] != '\0') ? image : "<image>",
+                            info.dli_sname,
+                            (unsigned long)offset,
+                            addr);
+        return;
+    }
+
+    (void)mini_snprintf(buf, buf_size, "  %d: %p\n", frame_index, addr);
+}
+#endif
+
 // Forward declaration for stacktrace function
 #ifdef DEBUG
 struct CljString* stacktrace(void);
@@ -56,6 +96,29 @@ struct CljString* stacktrace(void);
 
 // Global exception stack (independent of EvalState)
 THREAD_LOCAL GlobalExceptionStack global_exception_stack = {0};
+
+#ifdef DEBUG
+// Thread-local Clojure call stack (function names, innermost frame at [depth-1])
+THREAD_LOCAL CljCallStack g_clj_callstack = { .depth = 0 };
+
+/**
+ * @brief Build a human-readable Clojure stacktrace from the current call stack.
+ * @return New CljString (rc=1) listing frames from innermost to outermost, or NULL if empty.
+ */
+struct CljString *clj_stacktrace_build(void) {
+    if (g_clj_callstack.depth == 0) return NULL;
+    char buf[CLJ_CALLSTACK_MAX * 40];
+    int pos = 0;
+    pos += mini_snprintf(buf + pos, (int)sizeof(buf) - pos, "Clojure call stack:\n");
+    for (int i = g_clj_callstack.depth - 1; i >= 0 && pos < (int)sizeof(buf) - 1; i--) {
+        int frame_num = g_clj_callstack.depth - i;
+        pos += mini_snprintf(buf + pos, (int)sizeof(buf) - pos, "  %2d: %s\n",
+                             frame_num,
+                             g_clj_callstack.frames[i] ? g_clj_callstack.frames[i] : "<anonymous>");
+    }
+    return make_string(buf);
+}
+#endif
 
 #define THREAD_NAME_MAX 32
 static THREAD_LOCAL char g_thread_name[THREAD_NAME_MAX] = {0};
@@ -240,8 +303,11 @@ CLJException* make_exception(const char *type, const char *message, const char *
     exc->col = col;
 
 #ifdef DEBUG
-    // Always generate stacktrace in DEBUG builds; exception must retain it
-    exc->stacktrace = stacktrace();
+    // Prefer Clojure-level call stack (useful to end users); fall back to native C backtrace
+    exc->stacktrace = clj_stacktrace_build();
+    if (!exc->stacktrace) {
+        exc->stacktrace = stacktrace();
+    }
     exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field
@@ -356,39 +422,36 @@ struct CljString* stacktrace(void) {
 #if defined(__APPLE__) || defined(__linux__)
     void *array[32];
     size_t size = backtrace(array, 32);
-    char **symbols = backtrace_symbols(array, size);
 
-    if (!symbols || size == 0) {
-        if (symbols) CLJ_FREE(symbols);
+    if (size == 0) {
         return NULL;
     }
 
-    // Calculate total length needed
+    // Calculate total length needed using our own symbolizer so the textual
+    // stacktrace matches crash-path output.
     size_t total_len = 0;
-    for (size_t i = 0; i < size; i++) {
-        if (symbols[i]) {
-            total_len += strlen(symbols[i]);
-            total_len += 1;  // newline
-        }
+    char line_buf[512];
+    size_t last_index = (size > 0u) ? (size - 1u) : 0u;
+    for (size_t i = 0; i < last_index; i++) {
+        exception_format_symbolized_frame(line_buf, sizeof(line_buf), (int)i, array[i]);
+        total_len += strlen(line_buf);
     }
 
     // Allocate buffer for stacktrace string
     char *buffer = (char*)CLJ_MALLOC(total_len + 1);
+    if (!buffer) {
+        return NULL;
+    }
 
     // Build stacktrace string, skipping the last line (often contains loader frames).
     size_t pos = 0;
-    size_t last_index = (size > 0) ? size - 1 : 0;
     for (size_t i = 0; i < last_index; i++) {
-        if (symbols[i]) {
-            size_t len = strlen(symbols[i]);
-            memcpy(buffer + pos, symbols[i], len);
-            pos += len;
-            buffer[pos++] = '\n';
-        }
+        exception_format_symbolized_frame(line_buf, sizeof(line_buf), (int)i, array[i]);
+        size_t len = strlen(line_buf);
+        memcpy(buffer + pos, line_buf, len);
+        pos += len;
     }
     buffer[pos] = '\0';
-
-    CLJ_FREE(symbols);
 
     // Create CljString from buffer
     struct CljString *result = make_string(buffer);
@@ -428,6 +491,29 @@ void exception_print_native_backtrace(void) {
 #endif
 #else
     // Release builds / ESP32 do not emit backtraces here
+#endif
+}
+
+void exception_print_native_backtrace_symbolized(void) {
+#if defined(ESP_PLATFORM)
+    (void)esp_backtrace_print(100);
+#elif defined(DEBUG) && !defined(ESP32_BUILD)
+#if defined(__APPLE__) || defined(__linux__)
+    void *array[32];
+    int size = backtrace(array, 32);
+    if (size <= 0) {
+        return;
+    }
+    char line_buf[512];
+    for (int i = 0; i < size; i++) {
+        exception_format_symbolized_frame(line_buf, sizeof(line_buf), i, array[i]);
+        fputs(line_buf, stderr);
+    }
+#else
+    exception_print_native_backtrace();
+#endif
+#else
+    exception_print_native_backtrace();
 #endif
 }
 

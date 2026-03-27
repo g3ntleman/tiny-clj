@@ -57,6 +57,9 @@ void print_exception(CLJException *ex);
 /** Print native stack trace to stderr (used by CLJ_ASSERT). */
 void exception_print_native_backtrace(void);
 
+/** Print symbolized native stack trace to stderr when platform support exists. */
+void exception_print_native_backtrace_symbolized(void);
+
 // Exception throwing functions
 /** Throw exception via longjmp; transfers ownership to runtime. */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col);
@@ -91,6 +94,9 @@ typedef struct ExceptionHandler {
     struct ExceptionHandler *next;       // Previous handler (stack)
     struct CljPersistentVector *pool;   // Autorelease pool (weak vector) for cleanup after longjmp
     CLJException *exception;             // Exception stored in handler (replaces g_current_exception)
+#ifdef DEBUG
+    int saved_callstack_depth;           // Clojure call stack depth at TRY entry (restored on exception)
+#endif
 } ExceptionHandler;
 
 /**
@@ -103,6 +109,48 @@ typedef struct GlobalExceptionStack {
 
 /** @brief Global exception stack instance. */
 extern THREAD_LOCAL GlobalExceptionStack global_exception_stack;
+
+// ============================================================================
+// CLOJURE CALL STACK (thread-local, push/pop around every function call)
+// Only active in DEBUG builds; compiled away in Release.
+// ============================================================================
+
+#define CLJ_CALLSTACK_MAX 64
+
+/** @brief One frame in the Clojure-level call stack. */
+typedef struct {
+    const char *frames[CLJ_CALLSTACK_MAX];  // Borrowed pointers into interned symbol cnames
+    int depth;
+} CljCallStack;
+
+#ifdef DEBUG
+/** @brief Thread-local Clojure call stack for exception stacktraces. */
+extern THREAD_LOCAL CljCallStack g_clj_callstack;
+
+/** @brief Push a Clojure function name onto the call stack. */
+static inline void clj_callstack_push(const char *name) {
+    if (g_clj_callstack.depth < CLJ_CALLSTACK_MAX)
+        g_clj_callstack.frames[g_clj_callstack.depth++] = name ? name : "<anonymous>";
+}
+
+/** @brief Pop the top frame from the Clojure call stack. */
+static inline void clj_callstack_pop(void) {
+    if (g_clj_callstack.depth > 0) g_clj_callstack.depth--;
+}
+
+/** @brief Build a human-readable Clojure stacktrace string from the current call stack.
+ *  @return New CljString (rc=1) or NULL if stack is empty. Caller must RELEASE.
+ */
+struct CljString *clj_stacktrace_build(void);
+
+#define _TRY_SAVE_CALLSTACK(h)     ((h)->saved_callstack_depth = g_clj_callstack.depth)
+#define _CATCH_RESTORE_CALLSTACK(h) (g_clj_callstack.depth = (h)->saved_callstack_depth)
+#else
+static inline void clj_callstack_push(const char *name) { (void)name; }
+static inline void clj_callstack_pop(void) {}
+#define _TRY_SAVE_CALLSTACK(h)     ((void)0)
+#define _CATCH_RESTORE_CALLSTACK(h) ((void)0)
+#endif
 
 /**
  * @brief Read-only view of a registered process-global thread role.
@@ -201,6 +249,7 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     ExceptionHandler *_h = exception_handler_alloc_or_abort(); \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
+    _TRY_SAVE_CALLSTACK(_h); \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
@@ -209,7 +258,8 @@ static inline void exception_handler_free(ExceptionHandler *h) {
         exception_handler_unlink(_h); \
         exception_handler_free(_h); \
     } else { \
-        /* Exception path: get exception from handler */ \
+        /* Exception path: restore Clojure call stack then get exception */ \
+        _CATCH_RESTORE_CALLSTACK(_h); \
         CLJException *ex = _h->exception; \
         exception_handler_unlink(_h); \
         exception_handler_free(_h); \
@@ -229,6 +279,7 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     } \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
+    _TRY_SAVE_CALLSTACK(_h); \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
@@ -237,7 +288,8 @@ static inline void exception_handler_free(ExceptionHandler *h) {
         exception_handler_unlink(_h); \
         CLJ_FREE(_h); \
     } else { \
-        /* Exception path: get exception from handler */ \
+        /* Exception path: restore Clojure call stack then get exception */ \
+        _CATCH_RESTORE_CALLSTACK(_h); \
         CLJException *ex = _h->exception; \
         exception_handler_unlink(_h); \
         CLJ_FREE(_h); \
