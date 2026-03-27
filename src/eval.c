@@ -114,6 +114,141 @@ static bool literal_needs_evaluation(ID value) {
   return false;
 }
 
+static bool frame_chain_contains_symbol(const CallFrame *frame, CljSymbol *sym) {
+  if (!frame || !sym) {
+    return false;
+  }
+  for (const CallFrame *cur = frame; cur; cur = cur->parent) {
+    if (!cur->params || cur->param_count <= 0) {
+      continue;
+    }
+    for (int i = 0; i < cur->param_count; i++) {
+      if (cur->params[i] == (ID)sym) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool env_stack_contains_symbol(CljPersistentVector *env_stack, CljSymbol *sym) {
+  if (!env_stack || !sym) {
+    return false;
+  }
+  ENV_STACK_FOR_EACH_REVERSE(env_stack, env_obj_id) {
+    CljPersistentMap *env_map = as_map(env_obj_id);
+    if (!env_map) {
+      continue;
+    }
+    if (map_get_sentinel(env_map, (ID)sym, NOT_FOUND) != NOT_FOUND) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool expr_uses_context_binding(ID expr,
+                                      const CallFrame *frame,
+                                      CljPersistentVector *env_stack,
+                                      bool in_quote) {
+  if (!expr || IS_IMMEDIATE(expr)) {
+    return false;
+  }
+
+  CljType tag = TAG(expr);
+
+  if (tag == CLJ_SLOT_REF) {
+    const CljSlotRef *ref = (const CljSlotRef *)expr;
+    return ref && ref->depth > 0;
+  }
+
+  if (tag == CLJ_SYMBOL) {
+    if (in_quote || IS_KEYWORD(expr) || expr == SYM_NIL) {
+      return false;
+    }
+    CljSymbol *sym = as_symbol(expr);
+    if (!sym) {
+      return false;
+    }
+    if (frame_chain_contains_symbol(frame, sym)) {
+      return true;
+    }
+    return env_stack_contains_symbol(env_stack, sym);
+  }
+
+  if (tag == CLJ_AST_CALL) {
+    CljASTCall *call = as_ast_call(expr);
+    if (!call) {
+      return false;
+    }
+    bool child_in_quote = in_quote;
+    if (!in_quote && call->op == (ID)SYM_QUOTE) {
+      child_in_quote = true;
+    }
+    if (expr_uses_context_binding(call->op, frame, env_stack, child_in_quote)) {
+      return true;
+    }
+    if (!call->args) {
+      return false;
+    }
+    unsigned int argc = vector_count(call->args);
+    for (unsigned int i = 0; i < argc; i++) {
+      if (expr_uses_context_binding(vector_nth(call->args, i), frame, env_stack, child_in_quote)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT) {
+    CljPersistentVector *vec = as_vector(expr);
+    if (!vec) {
+      return false;
+    }
+    unsigned int count = vector_count(vec);
+    for (unsigned int i = 0; i < count; i++) {
+      if (expr_uses_context_binding(vector_nth(vec, i), frame, env_stack, in_quote)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT) {
+    CljPersistentMap *map = as_map(expr);
+    if (!map) {
+      return false;
+    }
+    MAP_FOR_EACH(map, key, map_value) {
+      if (expr_uses_context_binding(key, frame, env_stack, in_quote) ||
+          expr_uses_context_binding(map_value, frame, env_stack, in_quote)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (!is_list_type(tag)) {
+    return false;
+  }
+
+  CljList *list = as_list(expr);
+  bool child_in_quote = in_quote;
+  if (!in_quote && list && list->first && TAG(list->first) == CLJ_SYMBOL && list->first == (ID)SYM_QUOTE) {
+    child_in_quote = true;
+  }
+  while (list) {
+    if (expr_uses_context_binding(list->first, frame, env_stack, child_in_quote)) {
+      return true;
+    }
+    if (!list->rest || !is_list_type(TAG(list->rest))) {
+      break;
+    }
+    list = as_list(list->rest);
+  }
+  return false;
+}
+
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
   if (!slot || !unqualified || !qualified) {
     return;
@@ -476,6 +611,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
         .env = NULL,
         .env_stack = call_env_stack, // Closure environment stack (vector of maps)
         .frame = call_frame,         // Stack-based frame for parameters
+        .captured_frames = func->captured_frames,
         .st = st,
         .current_fn = fn,
         .recur_args = recur_args,
@@ -640,6 +776,54 @@ static const EvalContext *ensure_eval_context(CljPersistentMap *env,
   }
 
   return local_ctx;
+}
+
+static INLINE ID resolve_slot_ref_in_context(const EvalContext *ctx, const CljSlotRef *ref) {
+  ctx = sanitize_eval_context(ctx);
+  if (!ctx || !ref) {
+    return NOT_FOUND;
+  }
+
+  if (!ctx->frame && ref->depth == 0) {
+    return NOT_FOUND;
+  }
+
+  CallFrame *cur = ctx->frame;
+  uint8_t remaining_depth = ref->depth;
+  while (cur && remaining_depth > 0) {
+    cur = cur->parent;
+    remaining_depth--;
+  }
+
+  if (cur) {
+    if ((unsigned int)ref->slot >= (unsigned int)cur->param_count) {
+      return NOT_FOUND;
+    }
+    return frame_decode_value(cur->values[ref->slot]);
+  }
+
+  if (!ctx->captured_frames) {
+    return NOT_FOUND;
+  }
+
+  unsigned int captured_depth = (unsigned int)remaining_depth;
+  unsigned int captured_count = vector_count(ctx->captured_frames);
+  if (captured_depth >= captured_count) {
+    return NOT_FOUND;
+  }
+
+  ID frame_obj = vector_nth(ctx->captured_frames, captured_depth);
+  if (!frame_obj || TAG(frame_obj) != CLJ_VECTOR_PERSISTENT) {
+    return NOT_FOUND;
+  }
+
+  CljPersistentVector *frame_values = as_vector(frame_obj);
+  unsigned int slot_count = vector_count(frame_values);
+  if ((unsigned int)ref->slot >= slot_count) {
+    return NOT_FOUND;
+  }
+
+  return vector_nth(frame_values, ref->slot);
 }
 
 // Forward declarations (defined later in this file)
@@ -818,8 +1002,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
   // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain.
   if (body_tag == CLJ_SLOT_REF) {
     const CljSlotRef *ref = (const CljSlotRef *)body;
-    CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
-    ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+    CLJ_ASSERT(ctx && "CLJ_SLOT_REF requires eval context");
+    ID v = resolve_slot_ref_in_context(ctx, ref);
     if (v == NOT_FOUND || !v)
       return NULL;
     if (IS_IMMEDIATE(v))
@@ -1363,9 +1547,9 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
   // Lexical addressing: operator can be a SlotRef (e.g. higher-order calls like (pred x)).
   if (!op_is_immediate && op_tag == CLJ_SLOT_REF) {
     const CljSlotRef *ref = (const CljSlotRef *)op;
-    if (ctx && ctx->frame) {
+    if (ctx) {
       // NOTE: NULL means nil; NOT_FOUND means invalid slot/depth.
-      ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+      ID v = resolve_slot_ref_in_context(ctx, ref);
       return (v == NOT_FOUND) ? NULL : v;
     }
     return NULL;
@@ -1546,9 +1730,9 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
 
     ID target_expr = vector_nth(args, 0);
     ID target = NULL;
-    if (target_expr && !IS_IMMEDIATE(target_expr) && TAG(target_expr) == CLJ_SLOT_REF && ctx && ctx->frame) {
+    if (target_expr && !IS_IMMEDIATE(target_expr) && TAG(target_expr) == CLJ_SLOT_REF && ctx) {
       const CljSlotRef *target_ref = (const CljSlotRef *)target_expr;
-      ID slot_value = frame_get_slot(ctx->frame, target_ref->depth, target_ref->slot);
+      ID slot_value = resolve_slot_ref_in_context(ctx, target_ref);
       if (slot_value != NOT_FOUND) {
         target = slot_value;
       }
@@ -2452,17 +2636,51 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
   // Capture env_stack from context if available (vector of maps).
   CljPersistentVector *fn_env_stack = NULL;
   bool fn_env_stack_owned = false;
-  if (ctx && ctx->env_stack) {
+  CljPersistentVector *fn_captured_frames = NULL;
+  bool fn_captured_frames_owned = false;
+  bool body_uses_context_bindings = expr_uses_context_binding(
+      body, ctx ? ctx->frame : NULL, ctx ? ctx->env_stack : NULL, false);
+
+  if (ctx && ctx->env_stack && body_uses_context_bindings) {
     fn_env_stack = ctx->env_stack;
   } else {
     // Fallback: capture env only when it's not the current namespace mappings.
     // Avoid capturing namespace mappings to prevent cycles (fn -> env_stack -> ns map -> fn).
     CljPersistentMap *env_source = eval_env_or_ns_mappings(env, st);
     bool is_current_ns_env = st && st->current_ns && st->current_ns->mappings == env_source;
-    if (env_source && !is_current_ns_env) {
+    if (body_uses_context_bindings && env_source && !is_current_ns_env) {
       fn_env_stack = NULL;
       fn_env_stack_owned = true;
       env_stack_push_inplace(&fn_env_stack, env_source);
+    }
+  }
+
+  // Capture lexical frame snapshots for SlotRef(depth>0) runtime resolution.
+  if (body_uses_context_bindings && ctx && ctx->frame) {
+    fn_captured_frames = make_vector(4, STRONG);
+    if (fn_captured_frames) {
+      fn_captured_frames_owned = true;
+      int depth = 0;
+      for (CallFrame *f = ctx->frame; f && depth < 32; f = f->parent, depth++) {
+        unsigned int slot_count = (f->param_count > 0) ? (unsigned int)f->param_count : 0;
+        CljPersistentVector *captured_frame = make_vector((int)slot_count, STRONG);
+        if (!captured_frame) {
+          continue;
+        }
+        for (unsigned int i = 0; i < slot_count; i++) {
+          vector_conj_inplace(&captured_frame, frame_decode_value(f->values[i]));
+        }
+        vector_conj_inplace(&fn_captured_frames, (ID)captured_frame);
+        RELEASE(captured_frame);
+      }
+
+      // Keep transitive closure depth intact for deeper nested closures.
+      if (ctx->captured_frames) {
+        unsigned int inherited_count = vector_count(ctx->captured_frames);
+        for (unsigned int i = 0; i < inherited_count; i++) {
+          vector_conj_inplace(&fn_captured_frames, vector_nth(ctx->captured_frames, i));
+        }
+      }
     }
   }
 
@@ -2471,7 +2689,7 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
   // The captured param-map must be below any let frames so let-bindings still shadow params.
   // Capture when any frame in the chain has params (closure inside a let must see outer defn params).
   // Single loop: first phase walks chain (collect frames + total), second phase fills map (outer first).
-  if (ctx && ctx->frame) {
+  if (body_uses_context_bindings && ctx && ctx->frame) {
     CallFrame *frames[32];
     int depth = 0, di = 0;
     unsigned int total = 0;
@@ -2533,13 +2751,17 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
   }
 
   // Create function object
-  CljFunction *fn = make_function(params, param_count, body, fn_env_stack, fn_name, st ? st->current_ns : NULL);
+  CljFunction *fn = make_function(params, param_count, body, fn_env_stack, fn_captured_frames, fn_name,
+                                  st ? st->current_ns : NULL);
   if (body_owned) {
     RELEASE(body);
     body_owned = false;
   }
   if (fn_env_stack_owned) {
     RELEASE(fn_env_stack);
+  }
+  if (fn_captured_frames_owned) {
+    RELEASE(fn_captured_frames);
   }
 
   // Named local recursion is resolved via EvalContext.current_fn (cycle-free).
@@ -3032,8 +3254,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
 
   if (expr_tag == CLJ_SLOT_REF) {
     const CljSlotRef *ref = (const CljSlotRef *)expr;
-    CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
-    ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+    CLJ_ASSERT(ctx && "CLJ_SLOT_REF requires eval context");
+    ID v = resolve_slot_ref_in_context(ctx, ref);
     if (v == NOT_FOUND || !v)
       return NULL;
     return v;

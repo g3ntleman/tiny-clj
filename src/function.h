@@ -28,12 +28,15 @@ typedef struct {
     int8_t variadic_index;    // -1 = not variadic, >= 0 = index of & in params
     ID body;                  // Function body (AST to evaluate)
     CljPersistentVector *env_stack;  // Environment stack (vector of maps), COW-optimized
+    CljPersistentVector *captured_frames; // Vector of frame slot-vectors for SlotRef(depth>0)
     struct CljSymbol *name_sym;
     struct CljNamespace *ns;
     ID params[];              // Inline parameter array (flexible array member)
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, struct CljSymbol *name_sym, struct CljNamespace *ns);
+CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack,
+                           CljPersistentVector *captured_frames, struct CljSymbol *name_sym,
+                           struct CljNamespace *ns);
 
 // Native function constructor (CljCFunc)
 ID make_named_func_with_flags(BuiltinFn fn, struct CljSymbol *name_sym, uint8_t flags);

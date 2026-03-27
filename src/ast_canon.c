@@ -508,8 +508,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     return expr; // Actual string literal, leave unchanged
   }
 
-  // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
-  // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
+  // Lexical addressing: rewrite symbol references in lexical scope to (depth, slot).
   if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
     // Keywords evaluate to themselves and must never be rewritten.
     if (!IS_KEYWORD(expr)) {
@@ -522,11 +521,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
       if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
         uint8_t depth = 0, slot = 0;
         if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
-          if (depth == 0) {
-            ID ref = (ID)make_slot_ref(sym, 0, slot);
-            // Canonicalizer returns pool-safe heap values; SlotRef must match.
-            return AUTORELEASE(ref);
-          }
+          ID ref = (ID)make_slot_ref(sym, depth, slot);
+          // Canonicalizer returns pool-safe heap values; SlotRef must match.
+          return AUTORELEASE(ref);
         }
       }
     }
@@ -993,20 +990,22 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
               vector_conj_inplace(&param_scope, p);
             }
 
-            // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
-            // This prevents accidentally rewriting free variables (depth>0) before
-            // closure-capture support exists.
+            // Extend existing lexical scope (if any) so nested fn bodies can
+            // resolve both local params (depth=0) and free vars (depth>0).
             CljPersistentVector *fn_scope_stack = NULL;
-            scope_stack_push_inplace(&fn_scope_stack, param_scope);
+            CljPersistentVector **active_scope_stack = scope_stack ? scope_stack : &fn_scope_stack;
+            scope_stack_push_inplace(active_scope_stack, param_scope);
             RELEASE(param_scope);
 
             // Canonicalize body with param scope active.
             CljList *canon_body = body_rest
-                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
+                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, active_scope_stack)
                                       : NULL;
 
-            scope_stack_pop_inplace(&fn_scope_stack);
-            RELEASE(fn_scope_stack);
+            scope_stack_pop_inplace(active_scope_stack);
+            if (!scope_stack) {
+              RELEASE(fn_scope_stack);
+            }
 
             ID prefix_args[2] = {NULL, NULL};
             unsigned int prefix_count = named ? 2 : 1;

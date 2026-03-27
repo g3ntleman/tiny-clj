@@ -998,6 +998,8 @@ static void release_object_default(CljObject *v) {
     // Local self-recursion no longer relies on env_stack self-cycles.
     if (func->env_stack && !is_pointer_on_stack(func->env_stack))
       RELEASE(func->env_stack);
+    if (func->captured_frames && !is_pointer_on_stack(func->captured_frames))
+      RELEASE(func->captured_frames);
     RELEASE(func->ns);
     break;
   }

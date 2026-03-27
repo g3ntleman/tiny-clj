@@ -157,6 +157,24 @@ TEST(test_defn_closure_captures_parameter) {
 }
 
 // ============================================================================
+// TEST: nested closure without free vars must not capture outer frame
+// ============================================================================
+TEST(test_defn_no_capture_when_inner_fn_has_no_free_vars) {
+    WITH_AUTORELEASE_POOL({
+        const char *code = "((fn [x] (fn [y] y)) 7)";
+        CljValue result = eval_string(code, g_test_eval_state);
+
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_EQUAL_INT(CLJ_CLOSURE, TAG(result));
+
+        CljFunction *fn = as_function(result);
+        TEST_ASSERT_NOT_NULL(fn);
+        TEST_ASSERT_NULL_MESSAGE(fn->env_stack,
+                                 "inner closure should not capture outer frame when no free vars are used");
+    });
+}
+
+// ============================================================================
 // TEST: defn mit :native als Body registriert native Funktion
 // ============================================================================
 TEST(test_defn_native_stub_registers_native_function) {
