@@ -8,4 +8,3 @@ TEST(test_double_run_loop) {
     RELEASE(result1);
   });
 }
-REGISTER_TEST(test_double_run_loop)

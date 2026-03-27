@@ -57,6 +57,7 @@
 #include "builtins_gpio.h"
 #include "builtins_sound.h"
 #include "builtins_tiny_fx_gfx.h"
+#include "fx_collision.h"
 
 #ifndef TINYCLJ_WITH_TINY_FX
 #define TINYCLJ_WITH_TINY_FX 1
@@ -95,16 +96,31 @@ static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) 
   return *slot;
 }
 
+static void builtins_reset_gensym_state(void);
+
 static ID g_concat_thunk_fn_obj = NULL;
 static ID g_map_thunk_fn_obj = NULL;
 static ID g_mapcat_thunk_fn_obj = NULL;
 static ID g_range_inf_thunk_fn_obj = NULL;
 
 void builtins_reset_cached_funcs(void) {
+  if (g_concat_thunk_fn_obj && !IS_IMMEDIATE(g_concat_thunk_fn_obj)) {
+    RELEASE(g_concat_thunk_fn_obj);
+  }
+  if (g_map_thunk_fn_obj && !IS_IMMEDIATE(g_map_thunk_fn_obj)) {
+    RELEASE(g_map_thunk_fn_obj);
+  }
+  if (g_mapcat_thunk_fn_obj && !IS_IMMEDIATE(g_mapcat_thunk_fn_obj)) {
+    RELEASE(g_mapcat_thunk_fn_obj);
+  }
+  if (g_range_inf_thunk_fn_obj && !IS_IMMEDIATE(g_range_inf_thunk_fn_obj)) {
+    RELEASE(g_range_inf_thunk_fn_obj);
+  }
   g_concat_thunk_fn_obj = NULL;
   g_map_thunk_fn_obj = NULL;
   g_mapcat_thunk_fn_obj = NULL;
   g_range_inf_thunk_fn_obj = NULL;
+  builtins_reset_gensym_state();
   builtins_tiny_fx_gfx_reset_cached_state();
 }
 
@@ -1447,6 +1463,11 @@ ID native_destructure(ID *args, unsigned int argc) {
 // gensym: scoped counter so macro expansions reuse symbol names → O(1) interned symbols.
 static unsigned long g_gensym_fallback = 0;
 static unsigned long *g_gensym_active = &g_gensym_fallback;
+
+static void builtins_reset_gensym_state(void) {
+  g_gensym_fallback = 0;
+  g_gensym_active = &g_gensym_fallback;
+}
 
 unsigned long *gensym_use_local(unsigned long *counter) {
   unsigned long *prev = g_gensym_active;
@@ -3251,16 +3272,49 @@ ID native_with_pool(ID *args, unsigned int argc) {
   return result;
 }
 
+static void builtin_prepare_task_eval_state(EvalState *shared_state,
+                                            EvalState *task_state) {
+  if (!task_state) {
+    return;
+  }
+  memset(task_state, 0, sizeof(*task_state));
+  if (!shared_state) {
+    return;
+  }
+
+  task_state->current_ns = shared_state->current_ns;
+  task_state->resolve_ns = shared_state->resolve_ns ? shared_state->resolve_ns
+                                                    : shared_state->current_ns;
+  task_state->dynamic_bindings = shared_state->dynamic_bindings;
+}
+
+static void builtin_merge_task_eval_state(EvalState *shared_state,
+                                          const EvalState *task_state) {
+  if (!shared_state || !task_state) {
+    return;
+  }
+
+  shared_state->current_ns = task_state->current_ns;
+  shared_state->resolve_ns = task_state->resolve_ns ? task_state->resolve_ns
+                                                    : task_state->current_ns;
+}
+
 // Event-loop: run-next-task builtin
 ID native_run_next_task(ID *args, unsigned int argc) {
   (void)args;
   if (argc != 0)
     return NULL;
-  EvalState *st = get_global_eval_state();
+  EvalState *shared_state = get_global_eval_state();
+  EvalState task_state;
+  EvalThreadStateSnapshot eval_snapshot;
+  EvalState *saved_override = NULL;
+  builtin_prepare_task_eval_state(shared_state, &task_state);
+  eval_capture_thread_state(&eval_snapshot);
+  saved_override = evalstate_set_global_override(&task_state);
   CljPersistentMap *env = NULL;
   bool ran = false;
   TRY {
-    ran = event_loop_run_next(env, st);
+    ran = event_loop_run_next(env, shared_state ? &task_state : NULL);
   }
   CATCH(ex) {
     // Exception occurred - return false (no task was executed)
@@ -3268,6 +3322,9 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     ran = false;
   }
   END_TRY
+  (void)evalstate_set_global_override(saved_override);
+  eval_restore_thread_state(&eval_snapshot);
+  builtin_merge_task_eval_state(shared_state, &task_state);
   return ran ? clj_true : clj_false;
 }
 
@@ -3864,22 +3921,7 @@ ID native_ns_unload(ID *args, unsigned int argc) {
 
   // Explicitly release namespace-owned maps so objects stored in mappings are released
   // immediately (tests assert that function objects are released after ns-unload).
-  if (ns->mappings) {
-    RELEASE(ns->mappings);
-    ns->mappings = make_map(0);
-  }
-  if (ns->private_mappings) {
-    RELEASE(ns->private_mappings);
-    ns->private_mappings = NULL;
-  }
-  if (ns->aliases) {
-    RELEASE(ns->aliases);
-    ns->aliases = make_map(0);
-  }
-  if (ns->macro_mappings) {
-    RELEASE(ns->macro_mappings);
-    ns->macro_mappings = NULL;
-  }
+  ns_release_owned_state(ns, true);
 
   // Remove from registry; releasing the old registry map releases the namespace object.
   map_dissoc(g_runtime.ns_registry, name_sym);
@@ -4260,6 +4302,18 @@ static StaticSymbolData sym_tinyfx_gfx_color_qualified_data = {
             .unqualified = NULL,
             .cname = "tiny-fx.gfx/color"}};
 
+static StaticSymbolData sym_fx_sweep_aabb_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "fx/sweep-aabb"}};
+
+static StaticSymbolData sym_fx_interpolate_segment_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "fx/interpolate-segment"}};
+
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4489,6 +4543,8 @@ static const NativeFunctionEntry native_function_table[] = {
                       native_tinyclj_runtime_renderer_timeline_progress,
                       "tiny-clj.runtime/renderer-timeline-progress"),
     NATIVE_ENTRY(&sym_tinyfx_gfx_color_qualified_data.sym, native_tinyfx_color_color),
+    NATIVE_ENTRY(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb),
+    NATIVE_ENTRY(&sym_fx_interpolate_segment_qualified_data.sym, native_fx_interpolate_segment),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
@@ -5405,7 +5461,14 @@ static bool parse_require_option_keyword(ID elem, RequireOptions *options) {
 }
 
 void ns_register_init(const char *ns_name, NsInitFn init_fn) {
-  if (!ns_name || !init_fn || g_ns_init_count >= NS_INIT_TABLE_MAX) return;
+  if (!ns_name || !init_fn) return;
+  for (unsigned int i = 0; i < g_ns_init_count; i++) {
+    if (strcmp(g_ns_init_table[i].ns_name, ns_name) == 0 &&
+        g_ns_init_table[i].fn == init_fn) {
+      return;
+    }
+  }
+  if (g_ns_init_count >= NS_INIT_TABLE_MAX) return;
   g_ns_init_table[g_ns_init_count++] = (typeof(g_ns_init_table[0])){ns_name, init_fn};
 }
 
@@ -8270,6 +8333,10 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Builtin registered successfully
   } else {
     // Failed to register builtin
+  }
+
+  if (func_obj && !IS_IMMEDIATE(func_obj)) {
+    RELEASE(func_obj);
   }
 }
 

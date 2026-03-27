@@ -17,6 +17,7 @@
 ID canonicalize_ast(ID parsed_expr, EvalState *st);
 // Canonicalize data forms without turning lists into AST calls (EDN/data use).
 ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st);
+void ast_canon_reset_caches(void);
 
 /**
  * @brief One step of macro expansion (same rules as canonicalize/preprocess).
@@ -27,7 +28,6 @@ ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st);
 ID ast_canon_macroexpand_1(EvalState *st, ID form);
 
 #endif // AST_CANON_H
-
 
 
 

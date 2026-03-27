@@ -3940,3 +3940,12 @@ TEST(test_vector_scene_graph_collision_detect_aabb_overlap_bounds) {
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &far_obstacle));
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &high_obstacle));
 }
+
+TEST(test_vector_scene_graph_collision_detect_aabb_overlap_edge_touch_is_not_overlap) {
+    VgAabb player = {.min_x = 66, .max_x = 70, .min_y = 80, .max_y = 84};
+    VgAabb left_obstacle = {.min_x = 40, .max_x = 66, .min_y = 40, .max_y = 50};
+    VgAabb right_obstacle = {.min_x = 70, .max_x = 96, .min_y = 40, .max_y = 50};
+
+    TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &left_obstacle));
+    TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &right_obstacle));
+}

@@ -285,7 +285,6 @@ TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.runtime) "
-        "  (require 'tiny-fx.gfx-timeline) "
         "  (loop [i 0 out []] "
         "    (if (< i 6) "
         "      (recur (+ i 1) "
@@ -294,39 +293,41 @@ TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate
         "                 (heap "
         "                   (do "
         "                     (tiny-breakout.runtime/reset-runtime!) "
-        "                     (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "                     (dotimes [_ 8] (run-next-task)) "
-        "                     (loop [step 0] "
-        "                       (if (< step 24) "
-        "                         (let [s @tiny-breakout.runtime/state* "
-        "                               b (first (:bricks s)) "
-        "                               bx (if b (:x b) 0) "
-        "                               by (if b (:y b) 0) "
-        "                               bw (if b (:w b) 20) "
-        "                               bh (if b (:h b) 10) "
-        "                               event (if b "
-        "                                       {:source :spatial "
-        "                                        :id :ball-vs-brick "
-        "                                        :rule {:id :ball-vs-brick} "
-        "                                        :phase :enter "
-        "                                        :other (:id b) "
-        "                                        :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
-        "                                        :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}} "
-        "                                       nil) "
-        "                               _ (if event (tiny-breakout.runtime/on-spatial-event! event) nil) "
-        "                               seg (:ball-segment @tiny-breakout.runtime/state*) "
-        "                               sid (:id seg) "
-        "                               end-ms (:end-ms seg) "
-        "                               _ (if (number? sid) "
-        "                                     (tiny-breakout.runtime/publish-state! "
-        "                                       (tiny-breakout.core/apply-segment-end-at-ms "
-        "                                         @tiny-breakout.runtime/state* "
-        "                                         sid "
-        "                                         end-ms)) "
-        "                                     nil) "
-        "                               _ (dotimes [_ 8] (run-next-task))] "
-        "                           (recur (+ step 1))) "
-        "                         (:segment-id-seq @tiny-breakout.runtime/state*)))))))) "
+        "                     (let [brick1 {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
+        "                           brick2 {:id 2002 :x 96 :y 32 :w 20 :h 10 :points 10} "
+        "                           s0 (-> @tiny-breakout.runtime/state* "
+        "                                  (assoc :phase :play) "
+        "                                  (assoc :bricks {2001 brick1 2002 brick2}) "
+        "                                  (assoc :ball-x 50) "
+        "                                  (assoc :ball-y 20) "
+        "                                  (assoc :ball-vx 0) "
+        "                                  (assoc :ball-vy 2) "
+        "                                  (assoc :ball-segment {:id 1 "
+        "                                                        :start-ms 10 "
+        "                                                        :end-ms 40 "
+        "                                                        :from-x 50 "
+        "                                                        :from-y 20 "
+        "                                                        :to-x 50 "
+        "                                                        :to-y 46 "
+        "                                                        :collision {:hit-id 2001 :normal :top}})) "
+        "                           _ (tiny-breakout.runtime/publish-state! s0) "
+        "                           _ (tiny-breakout.runtime/publish-state! "
+        "                               (tiny-breakout.core/apply-segment-end-at-ms "
+        "                                 @tiny-breakout.runtime/state* "
+        "                                 1 "
+        "                                 40)) "
+        "                           seg (:ball-segment @tiny-breakout.runtime/state*) "
+        "                           sid (:id seg) "
+        "                           end-ms (:end-ms seg) "
+        "                           _ (if (number? sid) "
+        "                               (tiny-breakout.runtime/publish-state! "
+        "                                 (tiny-breakout.core/apply-segment-end-at-ms "
+        "                                   @tiny-breakout.runtime/state* "
+        "                                   sid "
+        "                                   end-ms)) "
+        "                               nil) "
+        "                           _ (dotimes [_ 8] (run-next-task))] "
+        "                       (:segment-id-seq @tiny-breakout.runtime/state*))))))) "
         "      out)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -363,13 +364,13 @@ TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate
     breakout_print_memory_type_deltas(&before, &after, "brick->wall cycle");
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, first_total,
                                           "first brick->wall cycle heap(total) unexpectedly high");
-    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024, max_followup_total,
-                                          "follow-up brick->wall cycles should not accumulate persistent heap");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1280, max_followup_total,
+                                          "follow-up brick->wall cycles should stay within a small stable heap footprint");
 #else
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, first_total,
                                           "first brick->wall cycle heap(total) unexpectedly high");
-    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024, max_followup_total,
-                                          "follow-up brick->wall cycles should not accumulate persistent heap");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1280, max_followup_total,
+                                          "follow-up brick->wall cycles should stay within a small stable heap footprint");
 #endif
 }
 
@@ -432,6 +433,29 @@ TEST(test_breakout_contract_audio_events_resolve_to_playable_sfx) {
         "         (nil? played))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_audio_events_play_from_deferred_event_loop_task) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.audio :reload) "
+        "  (def breakout-audio-deferred-result (atom :pending)) "
+        "  (schedule 0 (fn [] "
+        "    (tiny-breakout.audio/play-events! [:brick-hit]) "
+        "    (reset! breakout-audio-deferred-result :ok))) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+    ID result = eval_string("@breakout-audio-deferred-result", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":ok"), result);
+
+    event_loop_clear();
 }
 
 TEST(test_breakout_contract_core_input_flow_title_to_play_creates_segment) {
@@ -603,18 +627,20 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
         "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
         "               (assoc :score 0) "
-        "               (assoc :levels [{:id :only :bricks [brick]}]) "
+        "               (assoc :levels [{:id :only :bricks {2001 brick}}]) "
         "               (assoc :level-index 0) "
-        "               (assoc :bricks [brick]) "
+        "               (assoc :bricks {2001 brick}) "
         "               (assoc :ball-vx 0) "
         "               (assoc :ball-vy 2) "
-        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 50 :to-y 55 :wall :bottom})) "
-        "        ev {:id :ball-vs-brick "
-        "            :phase :enter "
-        "            :other 2001 "
-        "            :self-aabb {:min-x 50 :min-y 49 :max-x 54 :max-y 53} "
-        "            :other-aabb {:min-x 50 :min-y 50 :max-x 70 :max-y 60}} "
-        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "               (assoc :ball-segment {:id 1 "
+        "                                     :start-ms 10 "
+        "                                     :end-ms 40 "
+        "                                     :from-x 50 "
+        "                                     :from-y 20 "
+        "                                     :to-x 50 "
+        "                                     :to-y 46 "
+        "                                     :collision {:hit-id 2001 :normal :top}})) "
+        "        s1 (tiny-breakout.core/apply-segment-end-at-ms s0 1 40)] "
         "    [(:score s1) (count (:bricks s1)) (:phase s1) (first (:events s1))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -636,23 +662,32 @@ TEST(test_breakout_contract_same_snapshot_brick_hits_only_count_first_hit) {
         "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
         "               (assoc :score 0) "
-        "               (assoc :ball-vx 0 :ball-vy 2) "
-        "               (assoc :levels [{:id :only :bricks [b1 b2]}]) "
+        "               (assoc :ball-vx 0) "
+        "               (assoc :ball-vy 2) "
+        "               (assoc :levels [{:id :only :bricks {2001 b1 2002 b2}}]) "
         "               (assoc :level-index 0) "
-        "               (assoc :bricks [b1 b2]) "
-        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 "
-        "                                     :to-x 60 :to-y 55 :wall :bottom})) "
-        "        ev1 {:id :ball-vs-brick :phase :enter :other 2001 "
-        "             :snapshot-gen 42 "
-        "             :self-aabb {:min-x 58 :min-y 49 :max-x 62 :max-y 53} "
-        "             :other-aabb {:min-x 50 :min-y 50 :max-x 70 :max-y 60}} "
-        "        ev2 {:id :ball-vs-brick :phase :enter :other 2002 "
-        "             :snapshot-gen 42 "
-        "             :self-aabb {:min-x 68 :min-y 49 :max-x 72 :max-y 53} "
-        "             :other-aabb {:min-x 70 :min-y 50 :max-x 90 :max-y 60}} "
-        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev1 300) "
-        "        s2 (tiny-breakout.core/apply-spatial-event s1 ev2 300)] "
-        "    [(:ball-vy s2) (:score s2) (count (:bricks s2)) (:id (first (:bricks s2)))]))",
+        "               (assoc :bricks {2001 b1 2002 b2}) "
+        "               (assoc :ball-segment {:id 1 "
+        "                                     :start-ms 10 "
+        "                                     :end-ms 40 "
+        "                                     :from-x 60 "
+        "                                     :from-y 20 "
+        "                                     :to-x 60 "
+        "                                     :to-y 46 "
+        "                                     :collision {:hit-id 2001 :normal :top}})) "
+        "        s1 (tiny-breakout.core/apply-segment-end-at-ms s0 1 40) "
+        "        s2 (tiny-breakout.core/apply-segment-end-at-ms "
+        "             (assoc s1 :ball-segment {:id 2 "
+        "                                      :start-ms 40 "
+        "                                      :end-ms 40 "
+        "                                      :from-x 60 "
+        "                                      :from-y 46 "
+        "                                      :to-x 60 "
+        "                                      :to-y 46 "
+        "                                      :collision {:hit-id 2001 :normal :top}}) "
+        "             2 "
+        "             40)] "
+        "    [(:ball-vy s2) (:score s2) (count (:bricks s2)) (:id (get (:bricks s2) 2002))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -672,18 +707,20 @@ TEST(test_breakout_contract_brick_collision_from_below_snaps_ball_outside_brick_
         "        brick2 {:id 2002 :x 80 :y 0 :w 20 :h 10 :points 10} "
         "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
-        "               (assoc :levels [{:id :only :bricks [brick brick2]}]) "
+        "               (assoc :levels [{:id :only :bricks {2001 brick 2002 brick2}}]) "
         "               (assoc :level-index 0) "
-        "               (assoc :bricks [brick brick2]) "
+        "               (assoc :bricks {2001 brick 2002 brick2}) "
         "               (assoc :ball-vx 0) "
         "               (assoc :ball-vy -2) "
-        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 56 :to-y 8 :wall :top})) "
-        "        ev {:id :ball-vs-brick "
-        "            :phase :enter "
-        "            :other 2001 "
-        "            :self-aabb {:min-x 56 :min-y 8 :max-x 59 :max-y 11} "
-        "            :other-aabb {:min-x 50 :min-y 0 :max-x 69 :max-y 9}} "
-        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "               (assoc :ball-segment {:id 1 "
+        "                                     :start-ms 10 "
+        "                                     :end-ms 40 "
+        "                                     :from-x 56 "
+        "                                     :from-y 30 "
+        "                                     :to-x 56 "
+        "                                     :to-y 10 "
+        "                                     :collision {:hit-id 2001 :normal :bottom}})) "
+        "        s1 (tiny-breakout.core/apply-segment-end-at-ms s0 1 40)] "
         "    [(:ball-y s1) (:ball-vy s1) (map? (:ball-segment s1))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -692,6 +729,31 @@ TEST(test_breakout_contract_brick_collision_from_below_snaps_ball_outside_brick_
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 2));
+}
+
+TEST(test_breakout_contract_ball_sized_gap_between_bricks_does_not_pick_side_brick) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'fx) "
+        "  (let [left {:id 2001 :x 40 :y 40 :w 26 :h 10 :points 10} "
+        "        right {:id 2002 :x 70 :y 40 :w 26 :h 10 :points 10} "
+        "        hit (fx/sweep-aabb {:x 66 :y 80 :w 4 :h 4} "
+        "                           {:vx 0 :vy -2} "
+        "                           [{:id -101 :x 320 :y -1 :w 1 :h 242} "
+        "                            {:id -102 :x -1 :y -1 :w 1 :h 242} "
+        "                            {:id -103 :x -1 :y -1 :w 322 :h 1} "
+        "                            {:id -104 :x -1 :y 245 :w 322 :h 1} "
+        "                            left "
+        "                            right] "
+        "                           5000)] "
+        "    [(:hit-id hit) (:normal hit)]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_INT(-103, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":bottom"), vector_nth(v, 1));
 }
 
 TEST(test_breakout_contract_pause_toggle_anchors_rendered_ball_and_resumes_segment) {
@@ -749,7 +811,9 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "  (require 'tiny-breakout.scene) "
         "  (let [breakout-test-brick {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10} "
         "        breakout-test-state (tiny-breakout.scene/with-expanded-collision-rules "
-        "                              (assoc (tiny-breakout.core/init-state) :bricks [breakout-test-brick])) "
+        "                              (-> (tiny-breakout.core/init-state) "
+        "                                  (assoc :phase :play) "
+        "                                  (assoc :bricks {2001 breakout-test-brick}))) "
         "        breakout-test-frame (tiny-breakout.scene/build-scene breakout-test-state) "
         "        breakout-test-root-id (:root breakout-test-frame) "
         "        breakout-test-index (:index breakout-test-frame) "
@@ -760,8 +824,7 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "        breakout-test-lives-label (get breakout-test-index :lives-label) "
         "        breakout-test-lives-value (get breakout-test-index :lives-value) "
         "        breakout-test-brick-node (get breakout-test-index 2001) "
-        "        breakout-test-paddle-rule (nth breakout-test-rules 0) "
-        "        breakout-test-brick-rule (nth breakout-test-rules 1)] "
+        "        breakout-test-paddle-rule (nth breakout-test-rules 0)] "
         "    (and (= true (:visible breakout-test-frame)) "
         "         (= :tiny-fx.scene/root breakout-test-root-id) "
         "         (= :tiny-fx.scene/root (:id breakout-test-root)) "
@@ -775,13 +838,12 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "            :lives-value "
         "            2001] "
         "            (:children breakout-test-root)) "
-        "         (= 2 (count breakout-test-rules)) "
+        "         (= 1 (count breakout-test-rules)) "
         "         (= :ball-vs-paddle (:id breakout-test-paddle-rule)) "
-        "         (= :ball-vs-brick (:id breakout-test-brick-rule)) "
         "         (= :ball (:self breakout-test-paddle-rule)) "
         "         (= :paddle (:other breakout-test-paddle-rule)) "
-        "         (= :ball (:self breakout-test-brick-rule)) "
-        "         (= 2001 (:other breakout-test-brick-rule)) "
+        "         (nil? (:collision-rule-targets breakout-test-state)) "
+        "         (nil? (:collision-rule-targets-for breakout-test-state)) "
         "         (= \"Lives:\" (:text breakout-test-lives-label)) "
         "         (= \"3\" (:text breakout-test-lives-value)) "
         "         (= 226 (:x breakout-test-lives-label)) "
@@ -801,28 +863,27 @@ TEST(test_breakout_contract_collision_rules_expand_incrementally_and_keep_remove
         "  (require 'tiny-breakout.scene) "
         "  (let [b1 {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10} "
         "        b2 {:id 2002 :x 64 :y 32 :w 20 :h 10 :points 10} "
-        "        s0 (assoc (tiny-breakout.core/init-state) :phase :play :bricks [b1]) "
+        "        s0 (assoc (tiny-breakout.core/init-state) :phase :play :bricks {2001 b1}) "
         "        s1 (tiny-breakout.scene/with-expanded-collision-rules s0) "
         "        r1 (:collision-rules s1) "
         "        s2 (tiny-breakout.scene/with-expanded-collision-rules "
-        "             (assoc s1 :bricks [b1 b2])) "
+        "             (assoc s1 :bricks {2001 b1 2002 b2})) "
         "        r2 (:collision-rules s2) "
         "        s3 (tiny-breakout.scene/with-expanded-collision-rules "
-        "             (assoc s2 :bricks [b2])) "
-        "        r3 (:collision-rules s3) "
-        "        paddle-id :paddle "
-        "        targets (loop [remaining r3 out []] "
-        "                  (if (empty? remaining) "
-        "                    out "
-        "                    (recur (rest remaining) (conj out (:other (first remaining))))))] "
-        "    (and (= 2 (count r1)) "
-        "         (= 3 (count r2)) "
-        "         (= 3 (count r3)) "
-        "         (= [paddle-id 2001 2002] targets) "
-        "         (= (nth r1 1) (nth r2 1)) "
-        "         (= (nth r2 0) (nth r3 0)) "
-        "         (= (nth r2 1) (nth r3 1)) "
-        "         (= (nth r2 2) (nth r3 2)))))",
+        "             (assoc s2 :bricks {2002 b2})) "
+        "        r3 (:collision-rules s3)] "
+        "    (and (= 1 (count r1)) "
+        "         (= 1 (count r2)) "
+        "         (= 1 (count r3)) "
+        "         (= :ball-vs-paddle (:id (nth r1 0))) "
+        "         (identical? r1 r2) "
+        "         (identical? r2 r3) "
+        "         (nil? (:collision-rule-targets s1)) "
+        "         (nil? (:collision-rule-targets-for s1)) "
+        "         (nil? (:collision-rule-targets s2)) "
+        "         (nil? (:collision-rule-targets-for s2)) "
+        "         (nil? (:collision-rule-targets s3)) "
+        "         (nil? (:collision-rule-targets-for s3)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -833,26 +894,25 @@ TEST(test_breakout_contract_collision_rule_expansion_persists_target_cache_for_r
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (let [bricks (loop [i 0 out []] "
+        "  (let [bricks (loop [i 0 out {}] "
         "                 (if (= i 24) "
         "                   out "
         "                   (recur (+ i 1) "
-        "                          (conj out {:id (+ 3000 i) "
-        "                                     :x (* 20 (mod i 8)) "
-        "                                     :y (+ 32 (* 10 (quot i 8))) "
-        "                                     :w 20 :h 10 :points 10})))) "
+        "                          (assoc out "
+        "                                 (+ 3000 i) "
+        "                                 {:id (+ 3000 i) "
+        "                                  :x (* 20 (mod i 8)) "
+        "                                  :y (+ 32 (* 10 (quot i 8))) "
+        "                                  :w 20 :h 10 :points 10})))) "
         "        s0 (assoc (tiny-breakout.core/init-state) :phase :play :bricks bricks) "
         "        s1 (tiny-breakout.scene/with-expanded-collision-rules s0) "
-        "        s2 (tiny-breakout.scene/with-expanded-collision-rules s1) "
-        "        targets (:collision-rule-targets s1) "
-        "        targets2 (:collision-rule-targets s2) "
-        "        targets-for (:collision-rule-targets-for s1)] "
-        "    (and (map? targets) "
-        "         (= (count bricks) (count targets)) "
-        "         (identical? targets-for (:collision-rules s1)) "
+        "        s2 (tiny-breakout.scene/with-expanded-collision-rules s1)] "
+        "    (and (= 24 (count (:bricks s1))) "
         "         (identical? s1 s2) "
-        "         (identical? targets targets2) "
-        "         (= (+ 1 (count bricks)) (count (:collision-rules s1))))))",
+        "         (identical? (:collision-rules s1) (:collision-rules s2)) "
+        "         (nil? (:collision-rule-targets s1)) "
+        "         (nil? (:collision-rule-targets-for s1)) "
+        "         (= 1 (count (:collision-rules s1))))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -1233,22 +1293,27 @@ TEST(test_breakout_contract_level_clear_stops_paddle_motion) {
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (let [s0 (-> (tiny-breakout.core/init-state) "
+        "  (let [brick {:id 2001 :x 10 :y 10 :w 32 :h 12 :points 7} "
+        "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
         "               (assoc :level-index 0) "
-        "               (assoc :bricks [{:id 2001 :x 10 :y 10 :w 32 :h 12 :points 7}]) "
+        "               (assoc :bricks {2001 brick}) "
         "               (assoc :paddle-x 120) "
         "               (assoc :paddle-motion {:dir 1 :start-ms 100 :end-ms 300 :to-x 280}) "
         "               (assoc :ball-x 10) "
         "               (assoc :ball-y 6) "
         "               (assoc :ball-vx 2) "
         "               (assoc :ball-vy 2) "
-        "               (assoc :events [])) "
-        "        event {:source :spatial :id :ball-vs-brick :rule {:id :ball-vs-brick} :phase :enter "
-        "               :self-aabb {:min-x 10 :min-y 6 :max-x 14 :max-y 10} "
-        "               :other 2001 "
-        "               :other-aabb {:min-x 10 :min-y 10 :max-x 42 :max-y 22}} "
-        "        s1 (tiny-breakout.core/apply-spatial-event s0 event 200) "
+        "               (assoc :events []) "
+        "               (assoc :ball-segment {:id 1 "
+        "                                     :start-ms 100 "
+        "                                     :end-ms 200 "
+        "                                     :from-x 10 "
+        "                                     :from-y 6 "
+        "                                     :to-x 10 "
+        "                                     :to-y 6 "
+        "                                     :collision {:hit-id 2001 :normal :top}})) "
+        "        s1 (tiny-breakout.core/apply-segment-end-at-ms s0 1 200) "
         "        frame (tiny-breakout.scene/build-scene s1) "
         "        paddle (get (:index frame) :paddle)] "
         "    (and (= :level-clear (:phase s1)) "

@@ -1,5 +1,6 @@
 (ns tiny-breakout.core
-  (:require [tiny-breakout.levels :as levels]))
+  (:require [tiny-breakout.levels :as levels]
+            [fx]))
 
 (def playfield-width 320)
 (def playfield-height 240)
@@ -34,6 +35,10 @@
     (if xs
       (levels/level-bricks (nth xs level-index))
       (levels/level-bricks-by-index level-index))))
+
+(defn- normalize-bricks
+  [bricks]
+  (levels/normalize-bricks bricks))
 
 (defn- clear-events
   [state]
@@ -84,7 +89,7 @@
    :score 0
    :lives default-lives
    :level-index 0
-   :bricks []
+   :bricks {}
    :events []
    :paddle-x 140
    :ball-x 160
@@ -113,69 +118,161 @@
     (let [scaled (* distance segment-step-ms)]
       (quot (+ scaled (- speed 1)) speed))))
 
-(defn- candidate-segment
-  [wall duration-ms]
-  (if (> duration-ms 0)
-    {:wall wall
-     :duration-ms duration-ms}
-    nil))
-
-(defn- earlier-segment
-  [best candidate]
-  (if (nil? best)
-    candidate
-    (if (< (:duration-ms candidate) (:duration-ms best))
-      candidate
-      best)))
-
-(defn- choose-segment-wall
-  [ball-x ball-y vx vy]
-  (let [right-limit (- playfield-width ball-size)
-        bottom-limit (+ playfield-height 1)
-        best-x (if (> vx 0)
-                 (candidate-segment :right (duration-ms-for-distance (- right-limit ball-x) vx))
-                 (if (< vx 0)
-                   (candidate-segment :left (duration-ms-for-distance ball-x (- vx)))
-                   nil))
-        best-y (if (> vy 0)
-                 (candidate-segment :bottom (duration-ms-for-distance (- bottom-limit ball-y) vy))
-                 (if (< vy 0)
-                   (candidate-segment :top (duration-ms-for-distance ball-y (- vy)))
-                   nil))]
-    (earlier-segment best-x best-y)))
-
 (defn- project-axis
   [pos velocity duration-ms]
   (+ pos (quot (* velocity duration-ms) segment-step-ms)))
+
+;; Wall obstacles for fx/sweep-aabb.
+;; IDs are negative to distinguish from bricks (positive IDs).
+;; Avoid -1 because fx/sweep-aabb uses obstacle_id=-1 as its no-hit sentinel.
+;; Coordinates match the gap formula in duration-ms-for-distance:
+;;   right:  obs_min_x = playfield-width         (gap_x = pw - (bx+bs))
+;;   left:   obs_max_x = 0 (x=-1, w=1)           (gap_x = bx)
+;;   top:    obs_max_y = 0 (y=-1, h=1)           (gap_y = by)
+;;   bottom: obs_min_y = ph+1+ball-size           (gap_y = ph+1 - by)
+(def wall-obstacle-seq
+  [{:id -101 :x playfield-width :y -1 :w 1 :h (+ playfield-height 2)}
+   {:id -102 :x -1              :y -1 :w 1 :h (+ playfield-height 2)}
+   {:id -103 :x -1              :y -1 :w (+ playfield-width 2) :h 1}
+   {:id -104 :x -1 :y (+ playfield-height 1 ball-size) :w (+ playfield-width 2) :h 1}])
+
+(defn- bounce-velocity
+  "Returns {:vx :vy} with the velocity component mirrored by the hit face normal.
+  :left/:right normals flip vx; :top/:bottom normals flip vy."
+  [state normal]
+  (if (or (= normal :left) (= normal :right))
+    {:vx (- (:ball-vx state)) :vy (:ball-vy state)}
+    {:vx (:ball-vx state) :vy (- (:ball-vy state))}))
+
+(defn- wall-id->wall
+  [hit-id]
+  (cond
+    (= hit-id -101) :right
+    (= hit-id -102) :left
+    (= hit-id -103) :top
+    (= hit-id -104) :bottom
+    :else nil))
+
+(defn- create-wall-chosen
+  [ball-x ball-y vx vy wall]
+  (let [right-limit  (- playfield-width ball-size)
+        bottom-limit (+ playfield-height 1)]
+    (cond
+      (= wall :right)
+      (let [d (duration-ms-for-distance (- right-limit ball-x) vx)]
+        {:wall :right :duration-ms d :to-x right-limit :to-y (project-axis ball-y vy d)})
+
+      (= wall :left)
+      (let [d (duration-ms-for-distance ball-x (- vx))]
+        {:wall :left :duration-ms d :to-x 0 :to-y (project-axis ball-y vy d)})
+
+      (= wall :top)
+      (let [d (duration-ms-for-distance ball-y (- vy))]
+        {:wall :top :duration-ms d :to-x (project-axis ball-x vx d) :to-y 0})
+
+      (= wall :bottom)
+      (let [d (duration-ms-for-distance (- bottom-limit ball-y) vy)]
+        {:wall :bottom :duration-ms d :to-x (project-axis ball-x vx d) :to-y bottom-limit})
+
+      :else nil)))
+
+(defn- create-brick-chosen
+  [ball-x ball-y vx vy brick normal]
+  (let [bx (:x brick) by (:y brick) bw (:w brick) bh (:h brick)
+        duration
+        (cond
+          (= normal :left)   (duration-ms-for-distance (max 0 (- bx (+ ball-x ball-size))) vx)
+          (= normal :right)  (duration-ms-for-distance (max 0 (- ball-x (+ bx bw))) (- vx))
+          (= normal :top)    (duration-ms-for-distance (max 0 (- by (+ ball-y ball-size))) vy)
+          (= normal :bottom) (duration-ms-for-distance (max 0 (- ball-y (+ by bh))) (- vy))
+          :else 0)
+        to-x
+        (cond
+          (= normal :left)  (- bx ball-size)
+          (= normal :right) (+ bx bw)
+          :else (project-axis ball-x vx duration))
+        to-y
+        (cond
+          (= normal :top)    (- by ball-size)
+          (= normal :bottom) (+ by bh)
+          :else (project-axis ball-y vy duration))]
+    {:collision {:hit-id (:id brick) :normal normal}
+     :duration-ms duration
+     :to-x to-x
+     :to-y to-y}))
+
+(defn- hit->chosen
+  [ball-x ball-y vx vy bricks hit]
+  (let [hit-id (:hit-id hit)
+        normal (:normal hit)]
+    (if (< hit-id 0)
+      (create-wall-chosen ball-x ball-y vx vy (wall-id->wall hit-id))
+      (let [brick (get bricks hit-id)]
+        (when brick
+          (create-brick-chosen ball-x ball-y vx vy brick normal))))))
+
+(defn- choose-segment-target
+  "Calls fx/sweep-aabb against walls + bricks and returns a chosen-segment map:
+    wall hit  → {:wall kw :duration-ms N :to-x N :to-y N}
+    brick hit → {:collision {:hit-id N :normal kw} :duration-ms N :to-x N :to-y N}
+    no hit    → nil"
+  [ball-x ball-y vx vy bricks]
+  (let [bricks (normalize-bricks bricks)
+        all (concat wall-obstacle-seq (vals bricks))
+        hit (fx/sweep-aabb {:x ball-x :y ball-y :w ball-size :h ball-size}
+                           {:vx vx :vy vy}
+                           all
+                           5000)]
+    (when hit
+      (hit->chosen ball-x ball-y vx vy bricks hit))))
+
+(defn- reflect-velocity-away-from-boundaries
+  "Avoids zero-duration wall segments when the ball is already anchored on a wall
+  and a freshly applied response would send it straight back into that wall."
+  [state]
+  (let [ball-x (let [v (:ball-x state)] (if (number? v) v 0))
+        ball-y (let [v (:ball-y state)] (if (number? v) v 0))
+        vx (let [v (:ball-vx state)] (if (number? v) v 0))
+        vy (let [v (:ball-vy state)] (if (number? v) v 0))
+        right-limit (- playfield-width ball-size)
+        vx2 (if (or (and (<= ball-x 0) (< vx 0))
+                    (and (>= ball-x right-limit) (> vx 0)))
+              (- vx)
+              vx)
+        vy2 (if (and (<= ball-y 0) (< vy 0))
+              (- vy)
+              vy)]
+    (assoc state
+           :ball-vx vx2
+           :ball-vy vy2)))
 
 (defn- plan-next-segment
   [state now-ms]
   (if (not= (:phase state) :play)
     (clear-ball-segment state)
-    (let [ball-x (let [v (:ball-x state)] (if (number? v) v 0))
+    (let [state (-> state
+                    (assoc :bricks (normalize-bricks (:bricks state)))
+                    reflect-velocity-away-from-boundaries)
+          ball-x (let [v (:ball-x state)] (if (number? v) v 0))
           ball-y (let [v (:ball-y state)] (if (number? v) v 0))
           vx (let [v (:ball-vx state)] (if (number? v) v 0))
           vy (let [v (:ball-vy state)] (if (number? v) v 0))
-          chosen (choose-segment-wall ball-x ball-y vx vy)]
+          chosen (choose-segment-target ball-x ball-y vx vy (:bricks state))]
       (if (nil? chosen)
         (clear-ball-segment state)
         (let [duration-ms (:duration-ms chosen)
-              segment-id (+ (let [v (:segment-id-seq state)] (if (number? v) v 0)) 1)
-              wall (:wall chosen)
-              target-x (if (or (= wall :left) (= wall :right))
-                         (if (= wall :left) 0 (- playfield-width ball-size))
-                         (project-axis ball-x vx duration-ms))
-              target-y (if (or (= wall :top) (= wall :bottom))
-                         (if (= wall :top) 0 (+ playfield-height 1))
-                         (project-axis ball-y vy duration-ms))]
+              segment-id (+ (let [v (:segment-id-seq state)] (if (number? v) v 0)) 1)]
           (assoc state
                  :segment-id-seq segment-id
                  :ball-segment {:id segment-id
                                 :start-ms now-ms
                                 :end-ms (+ now-ms duration-ms)
-                                :to-x target-x
-                                :to-y target-y
-                                :wall wall}))))))
+                                :from-x ball-x
+                                :from-y ball-y
+                                :to-x (:to-x chosen)
+                                :to-y (:to-y chosen)
+                                :wall (:wall chosen)
+                                :collision (:collision chosen)}))))))
 
 (defn- apply-bottom-out
   [state]
@@ -218,18 +315,6 @@
         rule-id (if rule (:id rule) nil)]
     (if (nil? id) rule-id id)))
 
-(defn- overlap-width
-  [self-aabb other-aabb]
-  (let [x0 (max (:min-x self-aabb) (:min-x other-aabb))
-        x1 (min (:max-x self-aabb) (:max-x other-aabb))]
-    (- x1 x0)))
-
-(defn- overlap-height
-  [self-aabb other-aabb]
-  (let [y0 (max (:min-y self-aabb) (:min-y other-aabb))
-        y1 (min (:max-y self-aabb) (:max-y other-aabb))]
-    (- y1 y0)))
-
 (defn- ball-anchor-from-event
   [event]
   (let [self-aabb (:self-aabb event)]
@@ -238,15 +323,9 @@
 
 (defn- remove-brick-by-id
   [bricks brick-id]
-  (loop [remaining bricks
-         kept []
-         hit nil]
-    (if (empty? remaining)
-      {:hit hit :bricks kept}
-      (let [brick (first remaining)]
-        (if (and (nil? hit) (= (:id brick) brick-id))
-          (recur (rest remaining) kept brick)
-          (recur (rest remaining) (conj kept brick) hit))))))
+  (let [bricks (normalize-bricks bricks)
+        hit (get bricks brick-id)]
+    {:hit hit :bricks (dissoc bricks brick-id)}))
 
 (defn- finish-brick-hit
   [state remaining]
@@ -265,75 +344,29 @@
     state))
 
 (defn apply-spatial-event
-  "Pure domain transition for one host-provided spatial event."
+  "Pure domain transition for one host-provided spatial event.
+  Only handles :ball-vs-paddle; brick collisions are handled predictively
+  by fx/sweep-aabb inside choose-segment-target."
   [state event now-ms]
   (let [phase (:phase state)
         event-phase (:phase event)
         rule-id (event-rule-id event)]
     (if (or (not= phase :play) (not= event-phase :enter))
       (clear-events state)
-      (let [anchor (ball-anchor-from-event event)
-            ball-x (:x anchor)
-            ball-y (:y anchor)
-            result
-            (cond
-              (= rule-id :ball-vs-paddle)
-              (let [other-aabb (:other-aabb event)
-                    paddle-x (:min-x other-aabb)
-                    next-state (-> state
-                                   (clear-events)
-                                   (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
-                                   (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
-                                          :ball-vy (- (max 2 (abs (:ball-vy state))))
-                                          :events (conj (:events (clear-events state)) :paddle-hit)))]
-                (plan-next-segment next-state now-ms))
-
-              (= rule-id :ball-vs-brick)
-              (let [other-id (:other event)
-                    removal (remove-brick-by-id (:bricks state) other-id)
-                    hit (:hit removal)
-                    remaining (:bricks removal)
-                    snapshot-gen (:snapshot-gen event)
-                    already-bounced? (and (number? snapshot-gen)
-                                         (= snapshot-gen (:last-brick-bounce-gen state)))]
-                (if (nil? hit)
-                  (clear-events state)
-                  (if already-bounced?
-                    (clear-events state)
-                    (let [self-aabb (:self-aabb event)
-                          other-aabb (:other-aabb event)
-                          overlap-x (overlap-width self-aabb other-aabb)
-                          overlap-y (overlap-height self-aabb other-aabb)
-                          horizontal? (< overlap-x overlap-y)
-                          bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
-                          bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
-                          snapped-x (if horizontal?
-                                      (if (> (:ball-vx state) 0)
-                                        (- (:min-x other-aabb) ball-size)
-                                        (+ (:max-x other-aabb) 1))
-                                      ball-x)
-                          snapped-y (if horizontal?
-                                      ball-y
-                                      (if (> (:ball-vy state) 0)
-                                        (- (:min-y other-aabb) ball-size)
-                                        (+ (:max-y other-aabb) 1)))
-                          state2 (-> state
-                                     (clear-events)
-                                     (anchor-ball snapped-x snapped-y)
-                                     (assoc :bricks remaining
-                                            :score (+ (:score state) (:points hit))
-                                            :ball-vx bounced-vx
-                                            :ball-vy bounced-vy
-                                            :last-brick-bounce-gen snapshot-gen
-                                            :events (conj (:events (clear-events state)) :brick-hit)))
-                          advanced (finish-brick-hit state2 remaining)]
-                      (if (= (:phase advanced) :play)
-                        (plan-next-segment advanced now-ms)
-                        advanced)))))
-
-              :else
-              (clear-events state))]
-        result))))
+      (if (= rule-id :ball-vs-paddle)
+        (let [anchor (ball-anchor-from-event event)
+              ball-x (:x anchor)
+              ball-y (:y anchor)
+              other-aabb (:other-aabb event)
+              paddle-x (:min-x other-aabb)
+              next-state (-> state
+                             (clear-events)
+                             (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
+                             (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
+                                    :ball-vy (- (max 2 (abs (:ball-vy state))))
+                                    :events [:paddle-hit]))]
+          (plan-next-segment next-state now-ms))
+        (clear-events state)))))
 
 (defn- bounce-off-wall
   [state wall]
@@ -350,22 +383,49 @@ now-ms may be nil; in that case the segment end timestamp is used."
         result
         (if (or (nil? segment) (not= (:id segment) segment-id))
           (clear-events state)
-          (let [wall (:wall segment)
-                end-ms (:end-ms segment)
+          (let [end-ms    (:end-ms segment)
                 resume-ms (if (number? now-ms) now-ms end-ms)
-                anchored (-> state
-                             (clear-events)
-                             (anchor-ball (:to-x segment) (:to-y segment)))]
-            (cond
-              (or (= wall :left) (= wall :right) (= wall :top))
-              (plan-next-segment (bounce-off-wall anchored wall)
-                                 resume-ms)
+                collision (:collision segment)]
+            (if collision
+              ;; Brick hit: Validate-at-End
+              (let [hit-id (:hit-id collision)
+                    bricks (normalize-bricks (:bricks state))
+                    brick  (get bricks hit-id)]
+                (if brick
+                  ;; Brick still present → bounce + replan
+                  (let [normal  (:normal collision)
+                        vel     (bounce-velocity state normal)
+                        removal (remove-brick-by-id bricks hit-id)
+                        state2  (-> state
+                                    (clear-events)
+                                    (anchor-ball (:to-x segment) (:to-y segment))
+                                    (assoc :bricks   (:bricks removal)
+                                           :ball-vx  (:vx vel)
+                                           :ball-vy  (:vy vel)
+                                           :score    (+ (:score state) (:points (:hit removal)))
+                                           :events   [:brick-hit]))
+                        advanced (finish-brick-hit state2 (:bricks removal))]
+                    (if (= (:phase advanced) :play)
+                      (plan-next-segment advanced resume-ms)
+                      advanced))
+                  ;; Phantom: brick gone → replan without response
+                  (plan-next-segment
+                    (anchor-ball state (:to-x segment) (:to-y segment))
+                    resume-ms)))
+              ;; Wall hit
+              (let [wall    (:wall segment)
+                    anchored (-> state
+                                 (clear-events)
+                                 (anchor-ball (:to-x segment) (:to-y segment)))]
+                (cond
+                  (or (= wall :left) (= wall :right) (= wall :top))
+                  (plan-next-segment (bounce-off-wall anchored wall) resume-ms)
 
-              (= wall :bottom)
-              (apply-bottom-out anchored)
+                  (= wall :bottom)
+                  (apply-bottom-out anchored)
 
-              :else
-              anchored)))]
+                  :else
+                  anchored)))))]
     result))
 
 (defn apply-segment-end

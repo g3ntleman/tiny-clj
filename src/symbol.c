@@ -85,6 +85,7 @@ CljSymbol *SYM_TRIM = NULL;
 CljSymbol *SYM_UPPER_CASE = NULL;
 CljSymbol *SYM_LOWER_CASE = NULL;
 CljSymbol *SYM_PAD_LEFT = NULL;
+CljSymbol *SYM_INDEX_OF = NULL;
 CljSymbol *SYM_LAST_INDEX_OF = NULL;
 CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
@@ -442,6 +443,7 @@ DEFINE_EXTERN_SYMBOL(sym_trim_data, "trim");
 DEFINE_EXTERN_SYMBOL(sym_upper_case_data, "upper-case");
 DEFINE_EXTERN_SYMBOL(sym_lower_case_data, "lower-case");
 DEFINE_EXTERN_SYMBOL(sym_pad_left_data, "pad-left");
+DEFINE_EXTERN_SYMBOL(sym_index_of_data, "index-of");
 DEFINE_EXTERN_SYMBOL(sym_last_index_of_data, "last-index-of");
 DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
 
@@ -858,6 +860,8 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_LOWER_CASE, sym_lower_case_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_PAD_LEFT, sym_pad_left_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_INDEX_OF, sym_index_of_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
 
@@ -1334,12 +1338,21 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
     return ns_sym->cname;
 }
 
-// Clean up symbol table (ONLY for test cleanup, not regular symbols)
-// This function will be eliminated by dead-code-elimination in production builds
-// since it's only called from test files
+// Test-only symbol table cleanup.
+// Interned symbols are singleton-style and intentionally long-lived, so dropping
+// the table outright would force re-interning the same names on the next setup
+// cycle and leak those singleton allocations. Instead we compact the hashset
+// while preserving the existing symbol entries.
 void symbol_table_cleanup() {
-    RELEASE(g_runtime.symbol_table);
-    g_runtime.symbol_table = NULL;
+    if (!g_runtime.symbol_table) return;
+
+    CljHashSet *current = g_runtime.symbol_table;
+    hashset_set_max_load_percent(current, SYMBOL_TABLE_LOAD_POST_STARTUP);
+    CljHashSet *fitted = hashset_fit_count_with_reserve(current, 0u);
+    if (fitted && fitted != current) {
+        RELEASE(current);
+        g_runtime.symbol_table = fitted;
+    }
 }
 
 void symbol_table_fit_startup_reserve(unsigned int reserve_percent) {

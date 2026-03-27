@@ -16,6 +16,7 @@
 #include "hash.h"           // For clj_hash_full()
 #include "symbol.h"         // For init_special_symbols()
 #include "builtins.h"       // For builtins_reset_cached_funcs()
+#include "ast_canon.h"      // For ast_canon_reset_caches()
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
 #include "embedded_sources.h"
 #ifndef ESP32_BUILD
@@ -184,6 +185,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     meta_registry_cleanup();
     macro_cache_reset();
     builtins_reset_cached_funcs();
+    ast_canon_reset_caches();
     eval_special_forms_reset_caches();
     reset_eval_arg_depth();
     

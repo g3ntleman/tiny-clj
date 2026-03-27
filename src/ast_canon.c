@@ -282,6 +282,14 @@ static bool lexical_lookup(CljPersistentVector *scope_stack, CljSymbol *sym, uin
 
 // Cached destructure function (resolved once after bootstrap)
 static ID destructure_fn = NULL;
+static unsigned long param_gensym_counter = 0;
+static unsigned long loop_gensym_counter = 0;
+
+void ast_canon_reset_caches(void) {
+  destructure_fn = NULL;
+  param_gensym_counter = 0;
+  loop_gensym_counter = 0;
+}
 
 // Call Clojure (destructure bindings), returns NULL if not available (bootstrap)
 static CljPersistentVector *destructure(EvalState *st, CljPersistentVector *bindings) {
@@ -296,9 +304,6 @@ static CljPersistentVector *destructure(EvalState *st, CljPersistentVector *bind
   ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
   return (TAG(result) == CLJ_VECTOR_PERSISTENT) ? as_vector(result) : NULL;
 }
-
-// Gensym counter for fn/defn/loop param destructuring
-static unsigned long param_gensym_counter = 0;
 
 // Transform params with destructuring, returns new_params and let_bindings
 // Returns NULL for let_bindings if no destructuring needed
@@ -328,7 +333,8 @@ static CljPersistentVector *transform_params(EvalState *st, CljPersistentVector 
   } else {
     *out_let_bindings = NULL;
   }
-  return new_params;
+  RELEASE(let_bindings);
+  return AUTORELEASE(new_params);
 }
 
 /**
@@ -691,7 +697,6 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
           CljPersistentVector *bindings = as_vector(rest1->first);
           if (bindings_need_destructuring(bindings)) {
-            static unsigned long gensym_counter = 0;
             unsigned int count = vector_count(bindings);
             CljPersistentVector *loop_bindings = make_vector(count, STRONG);
             CljPersistentVector *let_bindings = make_vector(count, STRONG);
@@ -704,7 +709,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
               if (TAG(binding_form) != CLJ_SYMBOL) {
                 // Destructuring binding - create gensym
                 char name[64];
-                mini_snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                mini_snprintf(name, sizeof(name), "loop__%lu", ++loop_gensym_counter);
                 CljSymbol *gsym = intern_symbol_global(name);
                 ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
                 ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
@@ -778,13 +783,19 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
             if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
               ID body = body_rest ? body_rest->first : NULL;
-              CljList *let_form = make_list(SYM_LET,
-                                            make_list(expanded_let_bindings,
-                                                      make_list(body, NULL)));
-              ID new_form = named
-                                ? (ID)make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
-                                : (ID)make_list(first, make_list(new_params, make_list(let_form, NULL)));
-              return canonicalize_expr_with_scope(AUTORELEASE(new_form), st, in_quote, scope_stack);
+              ID let_form = AUTORELEASE(make_list(SYM_LET,
+                                                  AUTORELEASE(make_list(expanded_let_bindings,
+                                                                        AUTORELEASE(make_list(body, NULL))))));
+              ID new_form =
+                  named
+                      ? AUTORELEASE(make_list(first,
+                                              AUTORELEASE(make_list(second,
+                                                                    AUTORELEASE(make_list(new_params,
+                                                                                          AUTORELEASE(make_list(let_form, NULL))))))))
+                      : AUTORELEASE(make_list(first,
+                                              AUTORELEASE(make_list(new_params,
+                                                                    AUTORELEASE(make_list(let_form, NULL))))));
+              return canonicalize_expr_with_scope(new_form, st, in_quote, scope_stack);
             }
           }
         }
@@ -1149,8 +1160,17 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
   CljPersistentVector *scope_stack = NULL;
+  unsigned long prev_param_gensym_counter = param_gensym_counter;
+  unsigned long prev_loop_gensym_counter = loop_gensym_counter;
+  unsigned long local_builtin_gensym = 0;
+  unsigned long *prev_builtin_gensym = gensym_use_local(&local_builtin_gensym);
+  param_gensym_counter = 0;
+  loop_gensym_counter = 0;
   ID out = canonicalize_expr_with_scope(expr, st, in_quote, &scope_stack);
   RELEASE(scope_stack);
+  param_gensym_counter = prev_param_gensym_counter;
+  loop_gensym_counter = prev_loop_gensym_counter;
+  gensym_use_local(prev_builtin_gensym);
   return out;
 }
 

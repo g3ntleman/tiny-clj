@@ -62,7 +62,7 @@ extern volatile sig_atomic_t g_clojure_core_last_form;
 static void __attribute__((unused)) repl_sigtrap_handler(int signo) {
   fprintf(stderr, "REPL SIGTRAP (signal %d) during core load; last form=%d\n",
           signo, (int)g_clojure_core_last_form);
-  exception_print_native_backtrace();
+  exception_print_native_backtrace_symbolized();
   _exit(128 + signo);
 }
 #endif

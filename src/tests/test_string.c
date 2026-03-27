@@ -150,15 +150,51 @@ TEST_SHARED(test_string_includes) {
 
 TEST_SHARED(test_string_index_of) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Load clojure.string namespace first
     load_clojure_string_namespace();
-    
-    // Test: (clojure.string/index-of "hello" "l" 0) => 2
-    CljObject *result1 = eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+
+    // Basic hit at start
+    CljObject *r1 = eval_string("(clojure.string/index-of \"hello\" \"h\" 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r1);
+    TEST_ASSERT_TRUE(is_fixnum(r1));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(r1));
+
+    // Hit in the middle (first occurrence returned)
+    CljObject *r2 = eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r2);
+    TEST_ASSERT_TRUE(is_fixnum(r2));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(r2));
+
+    // Hit at end
+    CljObject *r3 = eval_string("(clojure.string/index-of \"hello\" \"o\" 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r3);
+    TEST_ASSERT_TRUE(is_fixnum(r3));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(r3));
+
+    // Not found → nil
+    CljObject *r4 = eval_string("(clojure.string/index-of \"hello\" \"z\" 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(r4);
+
+    // from-index skips earlier occurrence
+    CljObject *r5 = eval_string("(clojure.string/index-of \"hello\" \"l\" 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r5);
+    TEST_ASSERT_TRUE(is_fixnum(r5));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(r5));
+
+    // Multi-char substring
+    CljObject *r6 = eval_string("(clojure.string/index-of \"abcabc\" \"bc\" 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r6);
+    TEST_ASSERT_TRUE(is_fixnum(r6));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(r6));
+
+    // Empty needle → 0
+    CljObject *r7 = eval_string("(clojure.string/index-of \"hello\" \"\" 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r7);
+    TEST_ASSERT_TRUE(is_fixnum(r7));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(r7));
+
+    // Search in empty string → nil for non-empty needle
+    CljObject *r8 = eval_string("(clojure.string/index-of \"\" \"a\" 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(r8);
 }
 
 // ============================================================================

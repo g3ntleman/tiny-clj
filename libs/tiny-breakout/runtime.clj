@@ -32,7 +32,7 @@
 (def ^:private timeline-kick-timer-spec {:id timeline-kick-timer-id
                                          :fn kick-timeline-watchers-task})
 
-(def ^:private scene-flush-timer-id :tiny-breakout/scene-flush)
+
 
 (defn- button-down-event?
   [event]
@@ -338,18 +338,6 @@
     (reset! segment-watch-active* true))
   nil)
 
-(defn- flush-scene!
-  "Rebuilds scene* from current state*. Used as coalesced timer target so
-  multiple spatial events within one tick cause only a single scene rebuild."
-  []
-  (let [state @state*]
-    (when (map? state)
-      (reset! scene* (scene-record state))))
-  nil)
-
-(def ^:private scene-flush-timer-spec {:id scene-flush-timer-id
-                                        :fn flush-scene!})
-
 (defn- store-published-state!
   [state]
   (let [state (scene/with-expanded-collision-rules state)
@@ -422,17 +410,13 @@
 
 (defn on-spatial-event!
   "Handles one spatial collision event from the render thread.
-  Uses publish-state-core! (no scene rebuild) plus a coalesced scene-flush timer
-  so multiple collision events within one tick cause only a single scene rebuild."
+  Paddle-only since brick collisions are resolved predictively by fx/sweep-aabb."
   [event]
   (let [now-ms (current-time-ms)
-        next-state (swap! tiny-breakout.runtime/state*
-                          (fn [current]
-                            (core/apply-spatial-event current event now-ms)))]
-    (publish-state-core! next-state)
-    (schedule 1 tiny-breakout.runtime/scene-flush-timer-spec)
-    (gfx-collision/dispatch-spatial-watchers! event)
-    nil))
+        next-state (core/apply-spatial-event @tiny-breakout.runtime/state* event now-ms)]
+    (publish-state! next-state)
+    (gfx-collision/dispatch-spatial-watchers! event))
+  nil)
 
 (defn configure-input-watchers!
   []

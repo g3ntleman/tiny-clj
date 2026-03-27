@@ -1021,8 +1021,13 @@ static void release_object_default(CljObject *v) {
   case CLJ_NAMESPACE: {
     CljNamespace *ns = (CljNamespace *)v;
     RELEASE(ns->mappings);
+    ns->mappings = NULL;
     RELEASE(ns->private_mappings);
+    ns->private_mappings = NULL;
+    RELEASE(ns->macro_mappings);
+    ns->macro_mappings = NULL;
     RELEASE(ns->aliases);
+    ns->aliases = NULL;
     if (ns->filename) {
 #ifdef ZOMBIE_ENABLED
       memory_profiler_track_raw_free((void *)ns->filename, __FILE__, __LINE__);

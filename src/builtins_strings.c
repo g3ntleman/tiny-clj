@@ -346,6 +346,70 @@ ID native_pad_left(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// String index-of: (index-of s value from-index)
+ID native_index_of(ID *args, unsigned int argc) {
+    CHECK_ARITY_RANGE(argc, 2, 3, "index-of");
+
+    ID str_arg = args[0];
+    ID value_arg = args[1];
+    ID from_index_arg = argc == 3 ? args[2] : NULL;
+
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "index-of requires a string as first argument");
+        return NULL;
+    }
+    if (!value_arg || TAG(value_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "index-of requires a string as second argument");
+        return NULL;
+    }
+
+    CljString *str   = as_clj_string(str_arg);
+    CljString *value = as_clj_string(value_arg);
+    if (!str || !value) return NULL;
+
+    const char *str_data   = string_data(str);
+    const char *value_data = clj_string_data(value);
+    uint16_t str_len   = string_length(str);
+    uint16_t value_len = string_length(value);
+
+    // Empty needle always found at from-index (or 0)
+    if (value_len == 0) {
+        int start = 0;
+        if (from_index_arg && TAG(from_index_arg) == CLJ_INT) {
+            start = as_fixnum(from_index_arg);
+            if (start < 0) start = 0;
+            if (start > str_len) start = str_len;
+        }
+        return fixnum(start);
+    }
+
+    int from_index = 0;
+    if (from_index_arg) {
+        if (TAG(from_index_arg) != CLJ_INT) {
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "index-of requires an integer as from-index");
+            return NULL;
+        }
+        from_index = as_fixnum(from_index_arg);
+        if (from_index < 0) from_index = 0;
+    }
+
+    for (int i = from_index; value_len <= str_len && i <= (int)(str_len - value_len); i++) {
+        bool match = true;
+        for (uint16_t j = 0; j < value_len; j++) {
+            if (str_data[i + j] != value_data[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return fixnum(i);
+    }
+
+    return NULL; // nil — not found
+}
+
 // String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc) {
     CHECK_ARITY_RANGE(argc, 2, 3, "last-index-of");
@@ -637,6 +701,7 @@ static const BuiltinsStringsNativeFunctionEntry builtins_strings_native_function
     {&sym_upper_case_data.sym, native_upper_case},
     {&sym_lower_case_data.sym, native_lower_case},
     {&sym_pad_left_data.sym, native_pad_left},
+    {&sym_index_of_data.sym, native_index_of},
     {&sym_last_index_of_data.sym, native_last_index_of},
     {&sym_string_reverse_data.sym, native_string_reverse},
     {NULL, NULL}

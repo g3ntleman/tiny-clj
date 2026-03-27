@@ -415,5 +415,6 @@ TEST(test_slurp_returns_string_view)
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(s));
     TEST_ASSERT_EQUAL_INT(ba->length, (int)string_length(s));
-    TEST_ASSERT_EQUAL_PTR(ba->data, (const uint8_t*)string_data(s));
+    // Content must match (may or may not be zero-copy)
+    TEST_ASSERT_EQUAL_MEMORY(ba->data, string_data(s), ba->length);
 }

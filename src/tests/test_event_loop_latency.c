@@ -4,7 +4,16 @@
 
 #include "tests_common.h"
 #include "../event_loop.h"
+#include "../function.h"
 #include <pthread.h>
+#include <unistd.h>
+
+static ID event_loop_test_slow_native_task(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    usleep(25000);
+    return NULL;
+}
 
 TEST(test_event_loop_time_until_next_timer_no_timer_returns_minus_one) {
     int t = event_loop_time_until_next_timer_ms();
@@ -51,6 +60,30 @@ TEST(test_event_loop_run_next_zero_delay_stress) {
     }
 
     TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "queue should be empty after stress loop");
+}
+
+TEST(test_event_loop_run_next_slow_task_warning_keeps_task_objects_alive_and_bounded) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    MemoryStats before = memory_profiler_get_stats();
+
+    for (int i = 0; i < 4; i++) {
+        ID fn = make_named_func(event_loop_test_slow_native_task,
+                                intern_symbol_global("event-loop-test/slow-native-task"));
+        TEST_ASSERT_NOT_NULL_MESSAGE(fn, "slow native task should be creatable");
+        event_loop_enqueue((CljObject *)fn, NULL);
+        RELEASE(fn);
+
+        bool ran = event_loop_run_next(NULL, g_test_eval_state);
+        TEST_ASSERT_TRUE_MESSAGE(ran, "run_next should execute the slow queued task");
+    }
+
+    MemoryStats after = memory_profiler_get_stats();
+    long long diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024,
+                                          (int)diff,
+                                          "slow-task warning path should not retain task objects or rendered log strings");
 }
 
 TEST(test_event_loop_time_until_next_timer_does_not_consume_timer_entry) {

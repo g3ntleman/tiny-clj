@@ -6,6 +6,7 @@
 #include "exception.h"
 #include "channel.h"
 #include "types.h"
+#include "function.h"
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
@@ -150,15 +151,87 @@ static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
     g_runloop_last_warn_ns = end_ns;
 }
 
-static const char *event_loop_log_value_cstr(ID value) {
+static void event_loop_append_symbol_name(char *buffer,
+                                          size_t buffer_size,
+                                          CljSymbol *sym) {
+    if (!buffer || buffer_size == 0u) {
+        return;
+    }
+
+    buffer[0] = '\0';
+    if (!sym || !sym->cname) {
+        (void)format_append(buffer, 0u, buffer_size, "<symbol>");
+        return;
+    }
+
+    size_t pos = 0u;
+    if (sym->ns_name) {
+        const char *ns_name = symbol_get_namespace_name(sym);
+        if (ns_name && ns_name[0] != '\0') {
+            pos = format_append(buffer, pos, buffer_size, ns_name);
+            pos = format_append_char(buffer, pos, buffer_size, '/');
+        }
+    }
+    (void)format_append(buffer, pos, buffer_size, sym->cname);
+}
+
+static void event_loop_log_value_to_buffer(ID value, char *buffer, size_t buffer_size) {
+    if (!buffer || buffer_size == 0u) {
+        return;
+    }
+
     if (!value) {
-        return "nil";
+        (void)mini_snprintf(buffer, buffer_size, "nil");
+        return;
     }
-    CljString *rendered = clj_to_string(value);
-    if (!rendered) {
-        return "<to_string failed>";
+
+    if (IS_IMMEDIATE(value)) {
+        CljType tag = TAG(value);
+        if (tag == CLJ_FIXNUM) {
+            (void)mini_snprintf(buffer, buffer_size, "%d", as_fixnum(value));
+            return;
+        }
+        if (tag == CLJ_BOOL) {
+            (void)mini_snprintf(buffer, buffer_size, "%s", clj_is_truthy(value) ? "true" : "false");
+            return;
+        }
+        (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(tag));
+        return;
     }
-    return string_data((ID)rendered);
+
+    CljType tag = TAG(value);
+    switch (tag) {
+        case CLJ_SYMBOL: {
+            event_loop_append_symbol_name(buffer, buffer_size, (CljSymbol *)value);
+            return;
+        }
+        case CLJ_STRING:
+            (void)mini_snprintf(buffer, buffer_size, "%s", string_data(value));
+            return;
+        case CLJ_FUNC: {
+            CljCFunc *native = (CljCFunc *)value;
+            char name_buf[96] = {0};
+            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
+                                          native ? native->name_sym : NULL);
+            size_t pos = format_append(buffer, 0u, buffer_size, "#<native-fn ");
+            pos = format_append(buffer, pos, buffer_size, name_buf);
+            (void)format_append_char(buffer, pos, buffer_size, '>');
+            return;
+        }
+        case CLJ_CLOSURE: {
+            CljFunction *closure = (CljFunction *)value;
+            char name_buf[96] = {0};
+            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
+                                          closure ? closure->name_sym : NULL);
+            size_t pos = format_append(buffer, 0u, buffer_size, "#<closure ");
+            pos = format_append(buffer, pos, buffer_size, name_buf);
+            (void)format_append_char(buffer, pos, buffer_size, '>');
+            return;
+        }
+        default:
+            (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(tag));
+            return;
+    }
 }
 
 static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
@@ -169,21 +242,23 @@ static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
         return;
     }
     unsigned long elapsed_ms = (unsigned long)(elapsed_ns / 1000000ull);
-    const char *fn_cstr = event_loop_log_value_cstr(fn);
+    char fn_buf[160] = {0};
+    event_loop_log_value_to_buffer(fn, fn_buf, sizeof(fn_buf));
     if (has_arg) {
-        const char *arg_cstr = event_loop_log_value_cstr(arg);
+        char arg_buf[160] = {0};
+        event_loop_log_value_to_buffer(arg, arg_buf, sizeof(arg_buf));
         fprintf(stdout,
                 "[viewer-runloop] warning: clojure runloop event took %lums "
                 "(threshold: 20ms, fn=%s, payload=%s)\n",
                 elapsed_ms,
-                fn_cstr,
-                arg_cstr);
+                fn_buf,
+                arg_buf);
     } else {
         fprintf(stdout,
                 "[viewer-runloop] warning: clojure runloop event took %lums "
                 "(threshold: 20ms, fn=%s)\n",
                 elapsed_ms,
-                fn_cstr);
+                fn_buf);
     }
     fflush(stdout);
 }
@@ -343,13 +418,15 @@ static bool event_loop_payload_matches_coalescing_key(ID queued_payload, ID cand
 
 static void event_loop_debug_log_coalesced_ingress_event(ID fn_one_arity,
                                                          ID payload) {
-    const char *fn_cstr = event_loop_log_value_cstr(fn_one_arity);
-    const char *payload_cstr = event_loop_log_value_cstr(payload);
+    char fn_buf[160] = {0};
+    char payload_buf[160] = {0};
+    event_loop_log_value_to_buffer(fn_one_arity, fn_buf, sizeof(fn_buf));
+    event_loop_log_value_to_buffer(payload, payload_buf, sizeof(payload_buf));
 
     event_loop_mini_fprintf(stderr,
                             "[runloop][ingress][coalesce] fn=%s payload=%s\n",
-                            fn_cstr,
-                            payload_cstr);
+                            fn_buf,
+                            payload_buf);
 }
 
 static bool event_loop_ingress_entry_matches_payload(const EventLoopIngressSlot *entry,
@@ -1049,9 +1126,6 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         RELEASE(result_chan);
     }
 
-    if (!IS_IMMEDIATE(result)) RELEASE(result);
-    RELEASE(arg);
-    RELEASE(fn);
     uint64_t tick_end_ns = event_loop_monotonic_now_ns();
     if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
         uint64_t elapsed_ns = tick_end_ns - tick_start_ns;
@@ -1060,6 +1134,9 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         });
         event_loop_warn_if_slow_tick(elapsed_ns, tick_end_ns);
     }
+    if (!IS_IMMEDIATE(result)) RELEASE(result);
+    RELEASE(arg);
+    RELEASE(fn);
     return true;
 }
 

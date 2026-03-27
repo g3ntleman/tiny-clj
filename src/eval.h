@@ -68,6 +68,19 @@ void set_suppress_time_output(bool suppress);
 
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void);
+
+typedef struct {
+  int eval_arg_depth;
+  int eval_ast_call_depth;
+  uintptr_t eval_stack_base;
+#ifdef DEBUG
+  ptrdiff_t eval_stack_peak;
+#endif
+} EvalThreadStateSnapshot;
+
+void eval_capture_thread_state(EvalThreadStateSnapshot *out_snapshot);
+void eval_restore_thread_state(const EvalThreadStateSnapshot *snapshot);
+
 /**
  * @brief Anchor C-stack depth measurement for eval (see eval_ast_call guard).
  *

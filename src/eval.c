@@ -341,6 +341,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     // It's a native C function (CljCFunc)
     CljCFunc *native_func = (CljCFunc *)fn;
     CLJ_ASSERT(native_func && native_func->fn);
+    clj_callstack_push(native_func->name_sym ? native_func->name_sym->cname : NULL);
     ID result;
     if (UNLIKELY((native_func->base.flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE) != 0u)) {
       extern void builtin_set_eval_state(EvalState * st);
@@ -350,6 +351,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     } else {
       result = native_func->fn(args, argc);
     }
+    clj_callstack_pop();
     /* Args are from eval (autoreleased); do not release them here or result may be
      * a structural tail of an arg (e.g. rest(list)) and would be double-freed. */
     return result;
@@ -360,6 +362,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (!func) {
     return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
   }
+  clj_callstack_push(func->name_sym ? func->name_sym->cname : NULL);
   CljNamespace *saved_ns = st ? st->current_ns : NULL;
   bool switched_ns = false;
   if (st && func->ns && st->current_ns != func->ns) {
@@ -551,6 +554,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (switched_ns) {
     st->current_ns = saved_ns;
   }
+  clj_callstack_pop();
 
   return result;
 }
@@ -1240,6 +1244,30 @@ static EVAL_THREAD_LOCAL ptrdiff_t s_eval_stack_peak = 0;
 void reset_eval_depths(void) {
   g_eval_arg_depth = 0;
   g_eval_ast_call_depth = 0;
+}
+
+void eval_capture_thread_state(EvalThreadStateSnapshot *out_snapshot) {
+  if (!out_snapshot) {
+    return;
+  }
+  out_snapshot->eval_arg_depth = g_eval_arg_depth;
+  out_snapshot->eval_ast_call_depth = g_eval_ast_call_depth;
+  out_snapshot->eval_stack_base = s_eval_stack_base;
+#ifdef DEBUG
+  out_snapshot->eval_stack_peak = s_eval_stack_peak;
+#endif
+}
+
+void eval_restore_thread_state(const EvalThreadStateSnapshot *snapshot) {
+  if (!snapshot) {
+    return;
+  }
+  g_eval_arg_depth = snapshot->eval_arg_depth;
+  g_eval_ast_call_depth = snapshot->eval_ast_call_depth;
+  s_eval_stack_base = snapshot->eval_stack_base;
+#ifdef DEBUG
+  s_eval_stack_peak = snapshot->eval_stack_peak;
+#endif
 }
 
 void eval_bind_task_stack_anchor(char *anchor) {

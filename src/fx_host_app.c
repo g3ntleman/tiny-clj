@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <unistd.h>
 #include <stdatomic.h>
 #include <time.h>
 #include <sched.h>
@@ -77,6 +79,19 @@ enum {
     FX_GPIO_KEY_BINDING_COUNT =
         (int)(sizeof(g_fx_gpio_key_bindings) / sizeof(g_fx_gpio_key_bindings[0]))
 };
+
+static void fx_host_app_signal_handler(int signo) {
+    fprintf(stderr, "tiny-fx host signal %d\n", signo);
+    exception_print_native_backtrace_symbolized();
+    _exit(128 + signo);
+}
+
+static void fx_host_app_install_signal_handlers(void) {
+    signal(SIGTRAP, fx_host_app_signal_handler);
+    signal(SIGABRT, fx_host_app_signal_handler);
+    signal(SIGSEGV, fx_host_app_signal_handler);
+    signal(SIGBUS, fx_host_app_signal_handler);
+}
 
 /* Handles immediate viewer exit shortcuts. */
 static bool fx_should_exit_for_keys(const uint8_t *keys) {
@@ -1303,6 +1318,7 @@ int fx_host_app_run(void) {
     fprintf(stderr, "MiniFB support is disabled for this build.\n");
     return 1;
 #else
+    fx_host_app_install_signal_handlers();
     uint16_t fb_pixels[VIEW_W * VIEW_H];
     uint32_t window_pixels[VIEW_W * VIEW_H];
     ViewerHostWindow *window = NULL;
@@ -1344,17 +1360,23 @@ int fx_host_app_run(void) {
     vg_rendered_state_reset_all();
     fx_seed_gpio_key_levels();
     tiny_fx_host_apply_heap_limit();
+    fprintf(stderr, "[heap-diag] after heap limit: %zu / %zu bytes\n",
+            memory_current_usage_bytes(), memory_get_heap_limit_bytes());
     EvalState *fx_eval_state = evalstate_new(true);
     if (!fx_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
         goto cleanup;
     }
+    fprintf(stderr, "[heap-diag] after evalstate_new: %zu / %zu bytes\n",
+            memory_current_usage_bytes(), memory_get_heap_limit_bytes());
     evalstate_set_ns(fx_eval_state, "user");
     if (!tiny_fx_gfx_require_records_namespace(fx_eval_state) ||
         !tiny_fx_gfx_ensure_schema(fx_eval_state)) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
+    fprintf(stderr, "[heap-diag] after gfx schema: %zu / %zu bytes\n",
+            memory_current_usage_bytes(), memory_get_heap_limit_bytes());
     ViewerConfigSource config_source = fx_default_config_source();
     TRY {
         if (!fx_load_deployment_config(fx_eval_state, config_source, &demo_bundle, &spatial_rules)) {
@@ -1368,6 +1390,8 @@ int fx_host_app_run(void) {
         }
         goto cleanup;
     } END_TRY
+    fprintf(stderr, "[heap-diag] after deployment config: %zu / %zu bytes\n",
+            memory_current_usage_bytes(), memory_get_heap_limit_bytes());
     demo_bundle_initialized = true;
     if (!fx_init_slot_runtime_buffers(&demo_bundle)) {
         fprintf(stderr, "Failed to initialize configured slot runtime\n");

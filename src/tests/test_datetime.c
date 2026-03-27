@@ -93,7 +93,7 @@ TEST(test_now_has_ms_value) {
 
 TEST(test_datetime_require) {
     // Load the datetime library
-    ID result = eval_string("(require 'tinyclj.datetime)", g_test_eval_state);
+    ID result = eval_string("(require 'tiny-clj.datetime)", g_test_eval_state);
     TEST_ASSERT_NIL(result);  // require returns nil on success
 }
 
@@ -102,8 +102,8 @@ TEST(test_datetime_require) {
 TEST(test_datetime_unix_epoch) {
     // Unix epoch: 1970-01-01 = day 0
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/days-from-civil 1970 1 1))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/days-from-civil 1970 1 1))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -113,8 +113,8 @@ TEST(test_datetime_unix_epoch) {
 TEST(test_datetime_y2k) {
     // Y2K: 2000-01-01 = day 10957
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/days-from-civil 2000 1 1))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/days-from-civil 2000 1 1))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -124,8 +124,8 @@ TEST(test_datetime_y2k) {
 TEST(test_datetime_christmas_2024) {
     // Christmas 2024: 2024-12-25
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/days-from-civil 2024 12 25))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/days-from-civil 2024 12 25))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -135,9 +135,9 @@ TEST(test_datetime_christmas_2024) {
 TEST(test_datetime_civil_from_days_epoch) {
     // Day 0 = 1970-01-01
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [c (tinyclj.datetime/civil-from-days 0)]"
-        "      (vector (:year c) (:month c) (:day c))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [c (tiny-clj.datetime/civil-from-days 0)]"
+        "      (vector (:tiny-clj.datetime/year c) (:tiny-clj.datetime/month c) (:tiny-clj.datetime/day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
@@ -150,9 +150,9 @@ TEST(test_datetime_civil_from_days_epoch) {
 TEST(test_datetime_civil_from_days_y2k) {
     // Day 10957 = 2000-01-01
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [c (tinyclj.datetime/civil-from-days 10957)]"
-        "      (vector (:year c) (:month c) (:day c))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [c (tiny-clj.datetime/civil-from-days 10957)]"
+        "      (vector (:tiny-clj.datetime/year c) (:tiny-clj.datetime/month c) (:tiny-clj.datetime/day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
@@ -165,12 +165,12 @@ TEST(test_datetime_civil_from_days_y2k) {
 TEST(test_datetime_roundtrip) {
     // Roundtrip: days-from-civil -> civil-from-days should return original date
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [days (tinyclj.datetime/days-from-civil 2024 6 15)"
-        "          civil (tinyclj.datetime/civil-from-days days)]"
-        "      (and (= 2024 (:year civil))"
-        "           (= 6 (:month civil))"
-        "           (= 15 (:day civil)))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [days (tiny-clj.datetime/days-from-civil 2024 6 15)"
+        "          civil (tiny-clj.datetime/civil-from-days days)]"
+        "      (and (= 2024 (:tiny-clj.datetime/year civil))"
+        "           (= 6 (:tiny-clj.datetime/month civil))"
+        "           (= 15 (:tiny-clj.datetime/day civil)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
@@ -181,9 +181,9 @@ TEST(test_datetime_roundtrip) {
 TEST(test_datetime_time_from_millis_midnight) {
     // Midnight: 0 ms
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [t (tinyclj.datetime/time-from-millis 0)]"
-        "      (vector (:hour t) (:minute t) (:second t))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [t (tiny-clj.datetime/time-from-millis 0)]"
+        "      (vector (:tiny-clj.datetime/hour t) (:tiny-clj.datetime/minute t) (:tiny-clj.datetime/second t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
@@ -196,9 +196,9 @@ TEST(test_datetime_time_from_millis_midnight) {
 TEST(test_datetime_time_from_millis_noon) {
     // Noon: 12:00:00 = 12 * 3600000 = 43200000 ms
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [t (tinyclj.datetime/time-from-millis 43200000)]"
-        "      (vector (:hour t) (:minute t))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [t (tiny-clj.datetime/time-from-millis 43200000)]"
+        "      (vector (:tiny-clj.datetime/hour t) (:tiny-clj.datetime/minute t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
@@ -210,9 +210,9 @@ TEST(test_datetime_time_from_millis_noon) {
 TEST(test_datetime_time_from_millis_specific) {
     // 14:30:45.123 = 14*3600000 + 30*60000 + 45*1000 + 123 = 52245123 ms
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [t (tinyclj.datetime/time-from-millis 52245123)]"
-        "      (vector (:hour t) (:minute t) (:second t) (:millis t))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [t (tiny-clj.datetime/time-from-millis 52245123)]"
+        "      (vector (:tiny-clj.datetime/hour t) (:tiny-clj.datetime/minute t) (:tiny-clj.datetime/second t) (:tiny-clj.datetime/millis t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
@@ -226,8 +226,8 @@ TEST(test_datetime_time_from_millis_specific) {
 TEST(test_datetime_millis_from_time) {
     // 14:30:45.123 = 52245123 ms
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/millis-from-time 14 30 45 123))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/millis-from-time 14 30 45 123))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -237,13 +237,13 @@ TEST(test_datetime_millis_from_time) {
 TEST(test_datetime_time_roundtrip) {
     // Roundtrip: millis-from-time -> time-from-millis should return original time
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [ms (tinyclj.datetime/millis-from-time 9 15 30 500)"
-        "          t (tinyclj.datetime/time-from-millis ms)]"
-        "      (and (= 9 (:hour t))"
-        "           (= 15 (:minute t))"
-        "           (= 30 (:second t))"
-        "           (= 500 (:millis t)))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [ms (tiny-clj.datetime/millis-from-time 9 15 30 500)"
+        "          t (tiny-clj.datetime/time-from-millis ms)]"
+        "      (and (= 9 (:tiny-clj.datetime/hour t))"
+        "           (= 15 (:tiny-clj.datetime/minute t))"
+        "           (= 30 (:tiny-clj.datetime/second t))"
+        "           (= 500 (:tiny-clj.datetime/millis t)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
@@ -254,13 +254,13 @@ TEST(test_datetime_time_roundtrip) {
 TEST(test_datetime_date_time_api) {
     // Convert Instant to full date-time map
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [dt (tinyclj.datetime/date-time #inst \"1970-01-01T12:00:00.000Z\")]"
-        "      (and (= 1970 (:year dt))"
-        "           (= 1 (:month dt))"
-        "           (= 1 (:day dt))"
-        "           (= 12 (:hour dt))"
-        "           (= 0 (:minute dt)))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [dt (tiny-clj.datetime/date-time #inst \"1970-01-01T12:00:00.000Z\")]"
+        "      (and (= 1970 (:tiny-clj.datetime/year dt))"
+        "           (= 1 (:tiny-clj.datetime/month dt))"
+        "           (= 1 (:tiny-clj.datetime/day dt))"
+        "           (= 12 (:tiny-clj.datetime/hour dt))"
+        "           (= 0 (:tiny-clj.datetime/minute dt)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
@@ -271,8 +271,8 @@ TEST(test_datetime_date_time_api) {
 TEST(test_datetime_format_iso) {
     // Format a date-time map as ISO-8601 string
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/format-iso {:year 2024 :month 12 :day 25 :hour 14 :minute 30 :second 45}))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/format-iso {:tiny-clj.datetime/year 2024 :tiny-clj.datetime/month 12 :tiny-clj.datetime/day 25 :tiny-clj.datetime/hour 14 :tiny-clj.datetime/minute 30 :tiny-clj.datetime/second 45}))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
@@ -282,8 +282,8 @@ TEST(test_datetime_format_iso) {
 TEST(test_datetime_format_iso_with_padding) {
     // Ensure proper zero-padding for single-digit values
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/format-iso {:year 2024 :month 1 :day 5 :hour 9 :minute 3 :second 7}))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/format-iso {:tiny-clj.datetime/year 2024 :tiny-clj.datetime/month 1 :tiny-clj.datetime/day 5 :tiny-clj.datetime/hour 9 :tiny-clj.datetime/minute 3 :tiny-clj.datetime/second 7}))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
@@ -293,15 +293,15 @@ TEST(test_datetime_format_iso_with_padding) {
 // --- Integration with now ---
 
 TEST(test_datetime_now_integration) {
-    // Use tinyclj.datetime with (now) to get full date-time
+    // Use tiny-clj.datetime with (now) to get full date-time
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [dt (tinyclj.datetime/date-time (now))]"
-        "      (and (> (:year dt) 2020)"
-        "           (>= (:month dt) 1)"
-        "           (<= (:month dt) 12)"
-        "           (>= (:day dt) 1)"
-        "           (<= (:day dt) 31))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [dt (tiny-clj.datetime/date-time (now))]"
+        "      (and (> (:tiny-clj.datetime/year dt) 2020)"
+        "           (>= (:tiny-clj.datetime/month dt) 1)"
+        "           (<= (:tiny-clj.datetime/month dt) 12)"
+        "           (>= (:tiny-clj.datetime/day dt) 1)"
+        "           (<= (:tiny-clj.datetime/day dt) 31))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
@@ -310,8 +310,8 @@ TEST(test_datetime_now_integration) {
 TEST(test_datetime_format_now) {
     // Format current time as ISO-8601
     ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (tinyclj.datetime/format-iso (tinyclj.datetime/date-time (now))))",
+        "(do (require 'tiny-clj.datetime)"
+        "    (tiny-clj.datetime/format-iso (tiny-clj.datetime/date-time (now))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);

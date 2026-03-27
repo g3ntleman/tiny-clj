@@ -3,8 +3,10 @@
 #include "tests_common.h"
 #include "../event_loop.h"
 #include "../atom.h"
+#include "../fs_layer.h"
 
 int load_clojure_core(EvalState *st);
+void clojure_core_set_quiet(bool quiet);
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 static void assert_memory_stats_not_increasing(const MemoryStats *before,
@@ -281,6 +283,11 @@ static bool debug_precore_mem_enabled(void) {
   return (v && v[0] != '\0' && strcmp(v, "0") != 0);
 }
 
+static bool debug_core_cycle_mem_enabled(void) {
+  const char *v = getenv("TINYCLJ_DEBUG_CORE_CYCLE_MEM");
+  return (v && v[0] != '\0' && strcmp(v, "0") != 0);
+}
+
 static void debug_precore_mem_step(const char *label, MemoryStats *prev) {
   if (!label)
     return;
@@ -312,6 +319,43 @@ static void debug_precore_mem_step(const char *label, MemoryStats *prev) {
   if (prev) {
     fprintf(stderr,
             " delta-current=%lld delta-raw=%lld delta-obj=%lld",
+            delta_current,
+            delta_raw,
+            delta_obj);
+  }
+  fputc('\n', stderr);
+}
+
+static void debug_core_cycle_mem_step(int cycle, const char *label, MemoryStats *prev) {
+  if (!label)
+    return;
+  MemoryStats s = memory_profiler_get_stats();
+  size_t obj_est = (s.current_memory_usage >= s.raw_bytes_current)
+                       ? (s.current_memory_usage - s.raw_bytes_current)
+                       : 0;
+  size_t prev_obj_est = 0;
+  long long delta_current = 0;
+  long long delta_raw = 0;
+  long long delta_obj = 0;
+  if (prev) {
+    prev_obj_est = (prev->current_memory_usage >= prev->raw_bytes_current)
+                       ? (prev->current_memory_usage - prev->raw_bytes_current)
+                       : 0;
+    delta_current = (long long)s.current_memory_usage - (long long)prev->current_memory_usage;
+    delta_raw = (long long)s.raw_bytes_current - (long long)prev->raw_bytes_current;
+    delta_obj = (long long)obj_est - (long long)prev_obj_est;
+    *prev = s;
+  }
+  fprintf(stderr,
+          "[core-cycle-mem] cycle=%d %-22s current=%zu raw=%zu obj-est=%zu",
+          cycle,
+          label,
+          s.current_memory_usage,
+          s.raw_bytes_current,
+          obj_est);
+  if (prev) {
+    fprintf(stderr,
+            " delta-current=%+lld delta-raw=%+lld delta-obj=%+lld",
             delta_current,
             delta_raw,
             delta_obj);
@@ -420,6 +464,349 @@ TEST(test_runtime_stats_runtime_init_reset_does_not_accumulate_task_queue_vector
       256,
       (int)vector_bytes_diff,
       "runtime_init/runtime_reset must not leak persistent task_queue backings");
+}
+
+TEST(test_runtime_stats_runtime_reset_releases_cached_builtin_funcs) {
+  runtime_reset(&g_runtime);
+
+  /* Warm-up once so one-time bootstrap allocations do not pollute the delta. */
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+    meta_registry_init();
+    register_builtins();
+    runtime_reset(&g_runtime);
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 64;
+  for (int i = 0; i < cycles; i++) {
+    WITH_AUTORELEASE_POOL({
+      runtime_init(&g_runtime);
+      meta_registry_init();
+      register_builtins();
+      runtime_reset(&g_runtime);
+    });
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_bytes_diff =
+      (long long)after.current_memory_usage -
+      (long long)before.current_memory_usage;
+  long long func_bytes_diff =
+      (long long)after.bytes_current_by_type[CLJ_FUNC] -
+      (long long)before.bytes_current_by_type[CLJ_FUNC];
+
+  fprintf(stderr,
+          "[runtime-reset-cached-builtins] cycles=%d total-bytes=%+lld func-bytes=%+lld\n",
+          cycles,
+          total_bytes_diff,
+          func_bytes_diff);
+  for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+    long long type_diff =
+        (long long)after.bytes_current_by_type[i] -
+        (long long)before.bytes_current_by_type[i];
+    if (type_diff != 0) {
+      fprintf(stderr,
+              "  [runtime-reset-cached-builtins] %s bytes=%+lld\n",
+              clj_type_name((CljType)i),
+              type_diff);
+    }
+  }
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      512,
+      (int)total_bytes_diff,
+      "runtime_init/register_builtins/runtime_reset must not accumulate retained heap");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      256,
+      (int)func_bytes_diff,
+      "runtime_reset must release cached native function objects between lifecycles");
+}
+
+TEST(test_runtime_stats_symbol_table_cleanup_does_not_reintern_builtin_symbols) {
+  runtime_reset(&g_runtime);
+
+  WITH_AUTORELEASE_POOL({
+    symbol_table_cleanup();
+    runtime_init(&g_runtime);
+    meta_registry_init();
+    register_builtins();
+    runtime_reset(&g_runtime);
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 64;
+  for (int i = 0; i < cycles; i++) {
+    WITH_AUTORELEASE_POOL({
+      symbol_table_cleanup();
+      runtime_reset(&g_runtime);
+      runtime_init(&g_runtime);
+      meta_registry_init();
+      register_builtins();
+      runtime_reset(&g_runtime);
+    });
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_bytes_diff =
+      (long long)after.current_memory_usage -
+      (long long)before.current_memory_usage;
+  long long raw_bytes_diff =
+      (long long)after.raw_bytes_current -
+      (long long)before.raw_bytes_current;
+
+  fprintf(stderr,
+          "[symbol-table-cleanup] cycles=%d total-bytes=%+lld raw-bytes=%+lld\n",
+          cycles,
+          total_bytes_diff,
+          raw_bytes_diff);
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      512,
+      (int)total_bytes_diff,
+      "symbol_table_cleanup must not force repeated builtin symbol allocations");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      512,
+      (int)raw_bytes_diff,
+      "symbol_table_cleanup must keep raw heap flat across repeated setup cycles");
+}
+
+TEST(test_runtime_stats_repeated_destructured_fn_canonicalization_stays_flat) {
+  const char *form = "(fn [[x y] {:keys [z]}] (+ x y z))";
+
+  WITH_AUTORELEASE_POOL({
+    ID warmup = parse_canonicalized(form, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(warmup, "destructured fn warm-up must canonicalize");
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 160;
+  for (int i = 0; i < cycles; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID canonical = parse_canonicalized(form, g_test_eval_state);
+      TEST_ASSERT_NOT_NULL_MESSAGE(canonical, "destructured fn must canonicalize repeatedly");
+    });
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_bytes_diff =
+      (long long)after.current_memory_usage -
+      (long long)before.current_memory_usage;
+  long long list_bytes_diff =
+      (long long)after.bytes_current_by_type[CLJ_LIST] -
+      (long long)before.bytes_current_by_type[CLJ_LIST];
+
+  fprintf(stderr,
+          "[destructured-fn-canonicalization] cycles=%d total-bytes=%+lld list-bytes=%+lld\n",
+          cycles,
+          total_bytes_diff,
+          list_bytes_diff);
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      1024,
+      (int)total_bytes_diff,
+      "repeated destructured fn canonicalization must not accumulate retained heap");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      256,
+      (int)list_bytes_diff,
+      "fn destructuring canonicalization must not leak temporary list nodes");
+}
+
+TEST(test_runtime_stats_repeated_core_load_setup_cycle_stays_flat) {
+  runtime_reset(&g_runtime);
+  bool debug = debug_core_cycle_mem_enabled();
+
+  WITH_AUTORELEASE_POOL({
+    symbol_table_cleanup();
+    runtime_reset(&g_runtime);
+    runtime_init(&g_runtime);
+    event_loop_init();
+    clojure_core_set_quiet(true);
+    init_special_symbols();
+    meta_registry_init();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+  });
+  if (g_test_eval_state) {
+    g_test_eval_state->current_ns = NULL;
+  }
+  autorelease_pool_free();
+  fs_global_store_reset();
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 64;
+  for (int i = 0; i < cycles; i++) {
+    MemoryStats cycle_prev = {0};
+    if (debug && i < 3) {
+      cycle_prev = memory_profiler_get_stats();
+      debug_core_cycle_mem_step(i, "cycle-start", &cycle_prev);
+    }
+    WITH_AUTORELEASE_POOL({
+      symbol_table_cleanup();
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after symbol_cleanup", &cycle_prev);
+      }
+      runtime_reset(&g_runtime);
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after runtime_reset", &cycle_prev);
+      }
+      runtime_init(&g_runtime);
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after runtime_init", &cycle_prev);
+      }
+      event_loop_init();
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after event_loop_init", &cycle_prev);
+      }
+      clojure_core_set_quiet(true);
+      init_special_symbols();
+      meta_registry_init();
+      register_builtins();
+      g_runtime.builtins_registered = true;
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after builtins", &cycle_prev);
+      }
+      evalstate_reset(&g_test_eval_state, true);
+      if (debug && i < 3) {
+        debug_core_cycle_mem_step(i, "after evalstate_reset", &cycle_prev);
+      }
+    });
+    if (g_test_eval_state) {
+      g_test_eval_state->current_ns = NULL;
+    }
+    autorelease_pool_free();
+    fs_global_store_reset();
+    if (debug && i < 3) {
+      debug_core_cycle_mem_step(i, "after pool+fs reset", &cycle_prev);
+      CljNamespace *core_ns = ns_find("clojure.core");
+      CljNamespace *user_ns = ns_find("user");
+      fprintf(stderr,
+              "[core-cycle-state] cycle=%d symbols=%u namespaces=%d core-map=%d core-macros=%d user-map=%d meta=%u record=%u\n",
+              i,
+              g_runtime.symbol_table ? hashset_count(g_runtime.symbol_table) : 0u,
+              g_runtime.ns_registry ? map_count(g_runtime.ns_registry) : 0,
+              (core_ns && core_ns->mappings) ? map_count(core_ns->mappings) : 0,
+              (core_ns && core_ns->macro_mappings) ? map_count(core_ns->macro_mappings) : 0,
+              (user_ns && user_ns->mappings) ? map_count(user_ns->mappings) : 0,
+              g_runtime.meta_registry ? hashmap_count(g_runtime.meta_registry) : 0u,
+              g_runtime.record_registry ? hashmap_count(g_runtime.record_registry) : 0u);
+    }
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_bytes_diff =
+      (long long)after.current_memory_usage -
+      (long long)before.current_memory_usage;
+  long long raw_bytes_diff =
+      (long long)after.raw_bytes_current -
+      (long long)before.raw_bytes_current;
+
+  fprintf(stderr,
+          "[core-load-setup-cycle] cycles=%d total-bytes=%+lld raw-bytes=%+lld\n",
+          cycles,
+          total_bytes_diff,
+          raw_bytes_diff);
+  for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+    long long type_diff =
+        (long long)after.bytes_current_by_type[i] -
+        (long long)before.bytes_current_by_type[i];
+    if (type_diff != 0) {
+      fprintf(stderr,
+              "  [core-load-setup-cycle] %s bytes=%+lld\n",
+              clj_type_name((CljType)i),
+              type_diff);
+    }
+  }
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      2048,
+      (int)total_bytes_diff,
+      "repeated setUp-like core-load cycles must not accumulate retained heap");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      2048,
+      (int)raw_bytes_diff,
+      "repeated setUp-like core-load cycles must keep raw heap bounded");
+}
+
+TEST(test_runtime_stats_runtime_reset_releases_namespace_closure_cycles) {
+  runtime_reset(&g_runtime);
+
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+    event_loop_init();
+    clojure_core_set_quiet(true);
+    init_special_symbols();
+    meta_registry_init();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, false);
+    (void)eval_string("(do (def warm-fn (fn [] nil)) (defmacro warm-m [] nil) true)", g_test_eval_state);
+    runtime_reset(&g_runtime);
+  });
+  if (g_test_eval_state) {
+    g_test_eval_state->current_ns = NULL;
+  }
+  autorelease_pool_free();
+  fs_global_store_reset();
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  const int cycles = 64;
+  for (int i = 0; i < cycles; i++) {
+    WITH_AUTORELEASE_POOL({
+      runtime_init(&g_runtime);
+      event_loop_init();
+      clojure_core_set_quiet(true);
+      init_special_symbols();
+      meta_registry_init();
+      register_builtins();
+      g_runtime.builtins_registered = true;
+      evalstate_reset(&g_test_eval_state, false);
+      ID ok = eval_string("(do (def retained-fn (fn [] nil)) (defmacro retained-m [] nil) true)",
+                          g_test_eval_state);
+      TEST_ASSERT_EQUAL_INT_MESSAGE(SPECIAL_TRUE, as_special(ok),
+                                    "closure-cycle regression setup must evaluate successfully");
+      runtime_reset(&g_runtime);
+    });
+    if (g_test_eval_state) {
+      g_test_eval_state->current_ns = NULL;
+    }
+    autorelease_pool_free();
+    fs_global_store_reset();
+  }
+
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_bytes_diff =
+      (long long)after.current_memory_usage -
+      (long long)before.current_memory_usage;
+  long long raw_bytes_diff =
+      (long long)after.raw_bytes_current -
+      (long long)before.raw_bytes_current;
+
+  fprintf(stderr,
+          "[namespace-closure-cycles] cycles=%d total-bytes=%+lld raw-bytes=%+lld\n",
+          cycles,
+          total_bytes_diff,
+          raw_bytes_diff);
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      1024,
+      (int)total_bytes_diff,
+      "runtime_reset must break namespace-owned closure cycles");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(
+      512,
+      (int)raw_bytes_diff,
+      "runtime_reset namespace cleanup must keep raw heap bounded");
 }
 #endif
 
