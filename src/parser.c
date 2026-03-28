@@ -404,6 +404,7 @@ static bool skip_form_no_alloc(Reader *reader) {
   }
 }
 
+#if !(defined(META_ENABLED) && META_ENABLED)
 static ID parse_after_skipping_meta_payload(Reader *reader, EvalState *st) {
   if (!skip_form_no_alloc(reader)) {
     return NULL;
@@ -411,6 +412,7 @@ static ID parse_after_skipping_meta_payload(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   return parse_expr(reader, st);
 }
+#endif
 
 /**
  * @brief Create CljObject by parsing expression from Reader

@@ -1,8 +1,30 @@
 (ns tiny-fx.sound-demos
-  (:require [tiny-fx.assets :as assets]))
+  (:require [tiny-fx.assets :as assets]
+            [tiny-clj.fs :as fs]
+            [tiny-fx.sound :as sound]))
 
 (def ^:private sfx-keys
   #{:rocket-launch-sfx :laser-sfx})
+
+(defn bytes-asset-under-prefix
+  "Loads raw bytes from `/assets/<ns-path>/<file-name>` via the embedded FS.
+  Returns nil if the asset is missing or unreadable."
+  [ns-path file-name]
+  (try
+    (fs/slurp-bytes (str "/assets/" ns-path "/" file-name))
+    (catch Exception _ nil)))
+
+(defn play-startup-entertainer!
+  "Plays precompiled TRK1 `the-entertainer.trk1` once at host startup.
+  Only the compiled payload is loaded from the asset store; the Clojure
+  reference to the byte-array is not retained after this call returns (the
+  sound engine keeps its own retain until playback ends)."
+  []
+  (when-let [b (bytes-asset-under-prefix "tiny-fx/sound-demos" "the-entertainer.trk1")]
+    (try
+      (sound/sound-play-music! :startup/the-entertainer b 1)
+      (catch Exception _ nil)))
+  nil)
 
 (defn load-song
   "Loads one demo song descriptor with :track-id, :steps, :opts and inferred :kind."

@@ -468,7 +468,6 @@ CljPersistentMap* make_map_from_kv(unsigned int count, ...) {
 
     va_end(args);
 
-    RETAIN(map);  // rc=1 for caller
     return map;
 }
 

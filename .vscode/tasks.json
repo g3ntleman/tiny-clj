@@ -142,9 +142,9 @@
     {
       "label": "build&run: tiny-fx.app",
       "type": "shell",
-      "command": "pkill -f 'tiny-fx.app/Contents/MacOS/tiny-fx' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-fx && open -n ./build/tiny-fx.app",
+      "command": "pkill -f 'tiny-fx.app/Contents/MacOS/tiny-fx' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-fx && ./build/tiny-fx.app/Contents/MacOS/tiny-fx </dev/null",
       "group": "none",
-      "detail": "Build the generic tiny-fx app bundle incrementally, then launch a fresh macOS app-bundle instance.",
+      "detail": "Build the generic tiny-fx app bundle incrementally, then run the bundle executable in the task terminal (no open).",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

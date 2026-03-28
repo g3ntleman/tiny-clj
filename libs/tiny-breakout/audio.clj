@@ -90,6 +90,17 @@
         (catch Exception _
           nil)))))
 
+(defn prewarm-engine!
+  "Starts native sound backend + tick path before first gameplay SFX.
+  Avoids a one-frame hitch when the first audible cue is :brick-hit (lazy init
+  otherwise happens inside sound-play-sfx!)."
+  []
+  (try
+    (sound/sound-stop-all!)
+    (catch RuntimeException _ nil)
+    (catch Exception _ nil))
+  nil)
+
 (defn play-events!
   "Plays all known breakout cue events as one-shot SFX."
   [events]

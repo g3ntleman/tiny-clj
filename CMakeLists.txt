@@ -307,6 +307,10 @@ function(tinyclj_ensure_minifb_target)
     if(NOT TARGET minifb)
         message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
     endif()
+    # MiniFB marks legacy enum names as [[deprecated]]; third-party headers spam the build.
+    if(APPLE)
+        target_compile_options(minifb PUBLIC -Wno-deprecated-declarations)
+    endif()
 endfunction()
 
 if(APPLE)

@@ -42,8 +42,9 @@ void meta_registry_cleanup() {
 void meta_set(ID v, ID meta) {
   if (!v)
     return;
-
-  CLJ_ASSERT(!IS_IMMEDIATE(v) && "meta_set: immediates cannot have metadata");
+  /* Heap objects only: tagged immediates (numbers, booleans, keywords, …) carry no metadata. */
+  if (IS_IMMEDIATE(v))
+    return;
 
   meta_registry_init();
   if (!g_runtime.meta_registry)

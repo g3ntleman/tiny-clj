@@ -29,7 +29,7 @@
 // String concatenation (variadic)
 ID native_str(ID *args, unsigned int argc) {
     if (argc == 0) {
-        return make_string("");
+        return (ID)string_empty_singleton;
     }
 
     // Optimization: If only one argument and it's already a string, return it directly
@@ -66,7 +66,7 @@ ID native_str(ID *args, unsigned int argc) {
         }
     }
 
-    return (CljObject*)result;
+    return AUTORELEASE((ID)result);
 }
 
 // String substring: (subs s start) or (subs s start end)

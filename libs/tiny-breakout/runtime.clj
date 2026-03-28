@@ -4,7 +4,8 @@
             [tiny-breakout.scene :as scene]
             [tiny-clj.event :as event]
             [tiny-clj.runtime :as runtime]
-            [tiny-fx.gfx-collision :as gfx-collision]))
+            [tiny-fx.gfx-collision :as gfx-collision]
+            [tiny-fx.sound-demos :as sound-demos]))
 
 (def state* (atom nil))
 (def scene* (atom nil))
@@ -478,6 +479,8 @@
 
 (defn start-runtime!
   [& _args]
+  (audio/prewarm-engine!)
+  (sound-demos/play-startup-entertainer!)
   (event/preload-timeline-runtime!)
   (tiny-breakout.runtime/configure-input-watchers!)
   (tiny-breakout.runtime/restart-overlay-animation!)

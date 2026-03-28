@@ -189,6 +189,15 @@ typedef struct {
   int len;
 } EmbeddedSourceEntry;
 
+#define EMBEDDED_ASSET_BYTES(path_literal, arr) \
+  { (path_literal), (uint16_t)(sizeof(path_literal) - 1u), (const uint8_t *)(arr), (int)sizeof(arr) }
+
+#if TINYCLJ_WITH_TINY_FX
+static const uint8_t tiny_fx_the_entertainer_trk1[] = {
+#include "the_entertainer_trk1.inc"
+};
+#endif
+
 static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core/async.clj", clojure_core_async_code),
@@ -208,6 +217,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
+    EMBEDDED_ASSET_BYTES("/assets/tiny-fx/sound-demos/the-entertainer.trk1", tiny_fx_the_entertainer_trk1),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif
@@ -295,3 +305,4 @@ bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out
 }
 
 #undef EMBEDDED_SOURCE_ENTRY
+#undef EMBEDDED_ASSET_BYTES

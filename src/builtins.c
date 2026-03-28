@@ -176,6 +176,7 @@ ID native_mark_private_bang(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
+ID native_inc(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
 ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
@@ -4544,8 +4545,10 @@ static const NativeFunctionEntry native_function_table[] = {
                       native_tinyclj_runtime_renderer_timeline_progress,
                       "tiny-clj.runtime/renderer-timeline-progress"),
     NATIVE_ENTRY(&sym_tinyfx_gfx_color_qualified_data.sym, native_tinyfx_color_color),
-    NATIVE_ENTRY(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb),
-    NATIVE_ENTRY(&sym_fx_interpolate_segment_qualified_data.sym, native_fx_interpolate_segment),
+    NATIVE_ENTRY_BOOT(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb, "fx/sweep-aabb"),
+    NATIVE_ENTRY_BOOT(&sym_fx_interpolate_segment_qualified_data.sym,
+                      native_fx_interpolate_segment,
+                      "fx/interpolate-segment"),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
@@ -4583,6 +4586,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_meta_data.sym, native_meta, "meta"),
     NATIVE_ENTRY_BOOT(&sym_with_meta_data.sym, native_with_meta, "with-meta"),
     NATIVE_ENTRY(&sym_reduce_data.sym, native_reduce),
+    NATIVE_ENTRY_BOOT_CNAME(native_inc, "inc"),
     NATIVE_ENTRY_BOOT(&sym_list_data.sym, native_list, "list"),
     NATIVE_ENTRY(&sym_destructure_data.sym, native_destructure),
     NATIVE_ENTRY(&sym_map_data.sym, native_map),
@@ -4640,7 +4644,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_some_data.sym, native_some),
     NATIVE_ENTRY_BOOT(&sym_cons_data.sym, native_cons, "cons"),
     NATIVE_ENTRY(&sym_count_data.sym, native_count),
-    NATIVE_ENTRY(&sym_nilp_data.sym, native_nilp),
+    NATIVE_ENTRY_BOOT(&sym_nilp_data.sym, native_nilp, "nil?"),
     NATIVE_ENTRY(&sym_reverse_data.sym, native_reverse),
     NATIVE_ENTRY(&sym_assoc_data.sym, native_assoc),
     NATIVE_ENTRY(&sym_dissoc_data.sym, native_dissoc),
@@ -5485,6 +5489,9 @@ static inline bool bootstrap_register_cname_allowed(const char *cname) {
   if (!cname || !cname[0]) {
     return false;
   }
+  if (strncmp(cname, "fx/", 3) == 0) {
+    return true;
+  }
   // Keep bootstrap minimal: only unqualified core names are eagerly registered.
   if (cname[0] == '/' && cname[1] == '\0') {
     return true;
@@ -6063,6 +6070,12 @@ ID native_add_variadic(ID *args, unsigned int argc) {
   }
 
   return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
+}
+
+ID native_inc(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "inc");
+  ID add_args[2] = {args[0], fixnum(1)};
+  return native_add_variadic(add_args, 2);
 }
 
 ID native_mul_variadic(ID *args, unsigned int argc) {
@@ -8242,6 +8255,9 @@ static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len)
   if (!cname) {
     return false;
   }
+  if (ns_len == 2 && cname[0] == 'f' && cname[1] == 'x') {
+    return true;
+  }
   if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
     return true;
   }
@@ -8310,7 +8326,7 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     init_special_symbols();
 
     // Create metadata map with :name and :ns
-    CljPersistentMap *meta_map = make_map(2);
+    CljPersistentMap *meta_map = make_map(3);
     if (meta_map) {
       // Add :name (function name as symbol for Clojure compatibility)
       if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
@@ -8323,6 +8339,10 @@ static void register_builtin(const char *cname, BuiltinFn func) {
       // Add :ns (namespace name as symbol)
       if (SYM_KW_NS && target_ns && target_ns->name) {
         ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, target_ns->name));
+      }
+      // Native functions have no parser location; expose a stable synthetic line.
+      if (SYM_KW_LINE) {
+        ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_LINE, fixnum(1)));
       }
 
       // Set metadata on function object

@@ -56,6 +56,77 @@ static INLINE void move_meta(ID src, ID dst) {
 #endif
 }
 
+// Minimal bootstrap fallback for defn when clojure.core macros are not loaded yet.
+// Supports: (defn name [params] body...) and skips optional docstring/attr-map.
+static ID expand_defn_without_macro(CljList *form) {
+  if (!form) {
+    return NULL;
+  }
+
+  CljList *cursor = list_rest_normalized(form); // after defn symbol
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID name = LIST_FIRST(cursor);
+  if (!name || TAG(name) != CLJ_SYMBOL || IS_KEYWORD(name)) {
+    return NULL;
+  }
+
+  cursor = list_rest_normalized(cursor);
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID head = LIST_FIRST(cursor);
+  if (head && TAG(head) == CLJ_STRING) {
+    cursor = list_rest_normalized(cursor); // optional docstring
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  head = LIST_FIRST(cursor);
+  if (head && is_map(head)) {
+    cursor = list_rest_normalized(cursor); // optional attr-map
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID params = LIST_FIRST(cursor);
+  if (!params) {
+    return NULL;
+  }
+  CljList *body = list_rest_normalized(cursor);
+  if (!body) {
+    return NULL;
+  }
+
+  ID fn_rest = AUTORELEASE(make_list(name,
+                                     AUTORELEASE(make_list(params, body))));
+  if (!fn_rest) {
+    return NULL;
+  }
+  ID fn_form = AUTORELEASE(make_list(SYM_FN, as_list(fn_rest)));
+  if (!fn_form) {
+    return NULL;
+  }
+
+  ID def_rest = AUTORELEASE(make_list(name,
+                                      AUTORELEASE(make_list(fn_form, NULL))));
+  if (!def_rest) {
+    return NULL;
+  }
+  ID def_form = AUTORELEASE(make_list(SYM_DEF, as_list(def_rest)));
+  if (!def_form) {
+    return NULL;
+  }
+
+  move_meta((ID)form, def_form);
+  return def_form;
+}
+
 static ID make_ast_call_with_body(ID op,
                                   ID *prefix_args,
                                   unsigned int prefix_count,
@@ -671,6 +742,13 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         RELEASE(macro_expanded);
         return result;
+      }
+
+      if (head_sym == SYM_DEFN) {
+        ID expanded_def = expand_defn_without_macro(list);
+        if (expanded_def) {
+          return canonicalize_expr_with_scope(expanded_def, st, in_quote, scope_stack);
+        }
       }
     }
 
