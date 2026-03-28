@@ -33,6 +33,10 @@
   [bricks]
   (keys bricks))
 
+(defn- number-or
+  [v fallback]
+  (if (number? v) v fallback))
+
 ;; Cached paddle-only rule vector. Brick collisions are handled predictively
 ;; by fx/sweep-aabb; no per-brick SpatialRule is needed at runtime.
 (def ^:private paddle-only-rules [(paddle-rule)])
@@ -79,6 +83,7 @@
 (def ^:private ease-in-dark-gray 24)
 (def ^:private ease-in-light-gray 255)
 (def ^:private ease-in-stop-count 11)
+(def ^:private segment-end-event-id :tiny-breakout/segment-end)
 
 (defn- ease-in-stop-times
   []
@@ -137,32 +142,33 @@
           prototype))
 
 (defn maybe-field-timeline
-  [motion from-value axis-key end-event?]
+  [motion from-value axis-key end-event]
   (if (and (map? motion)
            (number? (:start-ms motion))
            (number? (:end-ms motion))
            (> (:end-ms motion) (:start-ms motion)))
     (record-create 'Timeline
-                   [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                   [[[(number-or (:start-ms motion) 0)
                       from-value]
-                     [(let [v (:end-ms motion)] (if (number? v) v 0))
+                     [(number-or (:end-ms motion) 0)
                       (get motion axis-key)]]
                     false
-                    end-event?])
+                    (if (keyword? end-event) true end-event)
+                    (if (keyword? end-event) end-event nil)])
     from-value))
 
 (defn attached-ball-motion
   [state]
   (let [phase (get state :phase)
         motion (get state :paddle-motion)
-        paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
-        ball-x (let [v (get state :ball-x)] (if (number? v) v 0))]
+        paddle-x (number-or (get state :paddle-x) 0)
+        ball-x (number-or (get state :ball-x) 0)]
     (if (and (map? motion)
              (or (= phase :title) (= phase :serve)))
       (record-create 'Timeline
-                     [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                     [[[(number-or (:start-ms motion) 0)
                         ball-x]
-                       [(let [v (:end-ms motion)] (if (number? v) v 0))
+                       [(number-or (:end-ms motion) 0)
                         (+ ball-x (- (get motion :to-x) paddle-x))]]
                       false
                       false])
@@ -182,28 +188,26 @@
            (<= 0 level-index)
            (< level-index (count levels))
            (not= phase :title))
-      (let [level (nth levels level-index)
-            bricks (get level :bricks)]
-        (levels/level-bricks level))
+      (levels/level-bricks (nth levels level-index))
       :else {})))
 
 (defn build-scene
   "Builds one deterministic frame-scene shaped map from breakout state map.
   State must already carry expanded collision rules (via with-expanded-collision-rules)."
   [state]
-  (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
-        ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
-        ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
+  (let [paddle-x (number-or (get state :paddle-x) 0)
+        ball-x (number-or (get state :ball-x) 0)
+        ball-y (number-or (get state :ball-y) 0)
         paddle-motion (get state :paddle-motion)
         ball-segment (get state :ball-segment)
         paddle-x-field (maybe-field-timeline paddle-motion paddle-x :to-x false)
         attached-ball-x-field (attached-ball-motion state)
         ball-x-field (if (nil? attached-ball-x-field)
-                       (maybe-field-timeline ball-segment ball-x :to-x true)
+                       (maybe-field-timeline ball-segment ball-x :to-x segment-end-event-id)
                        attached-ball-x-field)
-        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y true)
-        score (let [v (get state :score)] (if (number? v) v 0))
-        lives (let [v (get state :lives)] (if (number? v) v 0))
+        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y false)
+        score (number-or (get state :score) 0)
+        lives (number-or (get state :lives) 0)
         phase (or (get state :phase) :title)
         bricks (visible-bricks state)]
     (let [paddle-shape (paddle-prototype)

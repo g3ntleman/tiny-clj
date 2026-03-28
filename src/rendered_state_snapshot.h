@@ -49,6 +49,7 @@ typedef struct {
     bool loop;
     bool end_event;
     bool at_end;
+    uintptr_t event_id_bits;
 } VgRenderedTimelineSample;
 
 typedef struct {

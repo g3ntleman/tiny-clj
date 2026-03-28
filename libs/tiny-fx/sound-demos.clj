@@ -20,10 +20,12 @@
   reference to the byte-array is not retained after this call returns (the
   sound engine keeps its own retain until playback ends)."
   []
-  (when-let [b (bytes-asset-under-prefix "tiny-fx/sound-demos" "the-entertainer.trk1")]
-    (try
-      (sound/sound-play-music! :startup/the-entertainer b 1)
-      (catch Exception _ nil)))
+  (let [b (bytes-asset-under-prefix "tiny-fx/sound-demos" "the-entertainer.trk1")]
+    (if b
+      (try
+        (sound/sound-play-music! :startup/the-entertainer b 1)
+        (catch Exception _ nil))
+      nil))
   nil)
 
 (defn load-song

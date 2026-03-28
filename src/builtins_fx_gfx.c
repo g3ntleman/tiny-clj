@@ -157,6 +157,10 @@ static ID g_kw_phase_ms = NULL;
 static ID g_kw_period_ms = NULL;
 static ID g_kw_loop = NULL;
 static ID g_kw_end_event = NULL;
+static ID g_kw_event_id = NULL;
+static ID g_kw_slot_id = NULL;
+static ID g_kw_entity_id = NULL;
+static ID g_kw_field = NULL;
 static ID g_kw_at_end = NULL;
 static ID g_kw_permille = NULL;
 
@@ -231,6 +235,10 @@ static IdSymbolCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_period_ms, ":period-ms"},
     {&g_kw_loop, ":loop"},
     {&g_kw_end_event, ":end-event"},
+    {&g_kw_event_id, ":event-id"},
+    {&g_kw_slot_id, ":slot-id"},
+    {&g_kw_entity_id, ":entity-id"},
+    {&g_kw_field, ":field"},
     {&g_kw_at_end, ":at-end"},
     {&g_kw_permille, ":permille"},
 };
@@ -905,13 +913,17 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
     }
 
     return AUTORELEASE(make_map_from_kv(
-        10,
+        14,
         g_kw_step, fixnum((int32_t)state.sample.step_index),
         g_kw_count, fixnum((int32_t)state.sample.keyframe_count),
         g_kw_phase_ms, fixnum((int32_t)phase),
         g_kw_period_ms, fixnum((int32_t)period),
         g_kw_loop, state.sample.loop ? clj_true : clj_false,
         g_kw_end_event, state.sample.end_event ? clj_true : clj_false,
+        g_kw_event_id, state.sample.event_id_bits ? (ID)state.sample.event_id_bits : NULL,
+        g_kw_slot_id, args[0],
+        g_kw_entity_id, args[1],
+        g_kw_field, args[2],
         g_kw_at_end, state.sample.at_end ? clj_true : clj_false,
         g_kw_permille, fixnum((int32_t)permille),
         g_kw_snapshot_gen, fixnum((int32_t)state.snapshot_generation),

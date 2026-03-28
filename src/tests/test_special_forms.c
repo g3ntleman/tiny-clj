@@ -33,6 +33,36 @@ TEST(test_special_do_dispatch) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
+TEST(test_special_try_success_path_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(try 42 (catch e 7))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
+TEST(test_special_binding_success_path_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(binding [*ns* *ns*] 11)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(11, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
+TEST(test_special_plain_eval_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(do 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
 TEST(test_special_when_dispatch) {
     ID result = eval_string("(when true 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);

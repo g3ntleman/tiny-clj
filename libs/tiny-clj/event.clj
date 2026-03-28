@@ -72,6 +72,26 @@ Options are forwarded to the underlying source-specific runtime."
     (tiny-fx.gfx-timeline/kick-watchers!))
   nil)
 
+(defn dispatch-timeline-watch!
+  "Pushes one timeline progress sample into a specific watcher.
+
+Returns true when the watcher exists and was dispatched, else false."
+  [watch-id progress & args]
+  (let [opts (if (seq args) (nth args 0) {})]
+    (if (and watch-id @gfx-timeline-loaded?)
+      (tiny-fx.gfx-timeline/dispatch-watch! watch-id progress opts)
+      false)))
+
+(defn dispatch-timeline-progress!
+  "Pushes one timeline progress sample that contains :event-id.
+
+Returns true when a watcher for :event-id exists and was dispatched, else false."
+  [progress & args]
+  (let [opts (if (seq args) (nth args 0) {})]
+    (if @gfx-timeline-loaded?
+      (tiny-fx.gfx-timeline/dispatch-progress! progress opts)
+      false)))
+
 (defn rearm-timeline-watch-edge!
   [watch-id]
   (when (and watch-id @gfx-timeline-loaded?)

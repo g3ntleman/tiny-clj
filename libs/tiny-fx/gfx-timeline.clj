@@ -4,116 +4,147 @@
 
 (def timeline-watchers* (atom {}))
 
-(def ^:private poll-timer-id :tiny-fx/timeline-watch-poll)
-(def ^:private poll-period-ms 1)
-;; When next-poll-delay-ms is nil (e.g. renderer still shows stale :at-end after a fired
-;; callback, or no snapshot yet), poll at ~60fps instead of 1ms to avoid starving the loop.
-(def ^:private coarse-poll-ms 16)
-
 (defn- validate-watch
   [id f opts]
   (when (nil? id)
     (throw "timeline/watch requires id"))
   (when (not (or (nil? f) (fn? f)))
     (throw "timeline/watch expects fn or nil"))
-  (when (and f (not (keyword? (:slot opts))))
-    (throw "timeline/watch requires keyword :slot"))
-  (when (and f (nil? (:entity-id opts)))
-    (throw "timeline/watch requires :entity-id"))
-  (when (and f (not (keyword? (:field opts))))
-    (throw "timeline/watch requires keyword :field")))
+  ;; Optional legacy render-bound watch mode for compatibility/polling:
+  ;; if one of :slot/:entity-id/:field is provided, require all three.
+  (let [has-slot (contains? opts :slot)
+        has-entity (contains? opts :entity-id)
+        has-field (contains? opts :field)
+        legacy? (or has-slot has-entity has-field)]
+    (when (and f legacy?
+               (or (not has-slot) (not has-entity) (not has-field)))
+      (throw "timeline/watch legacy mode requires :slot, :entity-id and :field"))
+    (when (and f legacy? (not (keyword? (:slot opts))))
+      (throw "timeline/watch requires keyword :slot"))
+    (when (and f legacy? (nil? (:entity-id opts)))
+      (throw "timeline/watch requires :entity-id"))
+    (when (and f legacy? (not (keyword? (:field opts))))
+      (throw "timeline/watch requires keyword :field"))))
 
-(defn- next-poll-delay-ms
-  []
-  (let [watcher-entries (vec @timeline-watchers*)]
-    (loop [i 0
-           best-delay nil]
-      (if (< i (count watcher-entries))
-        (let [[_ watcher] (nth watcher-entries i)
-              progress (runtime/renderer-timeline-progress (:slot watcher)
-                                                          (:entity-id watcher)
-                                                          (:field watcher))
-              flagged (= true (:end-event progress))
-              at-end (and flagged (= true (:at-end progress)))
-              was-at-end (= true (:last-at-end watcher))
-              phase-ms (let [v (:phase-ms progress)] (if (number? v) v 0))
-              period-ms (let [v (:period-ms progress)] (if (number? v) v 0))
-              remaining-ms (if (> period-ms phase-ms)
-                             (- period-ms phase-ms)
-                             poll-period-ms)
-              next-delay (cond
-                           (nil? progress) nil
-                           (and at-end (not was-at-end)) poll-period-ms
-                           (and flagged (not at-end)) (max poll-period-ms remaining-ms)
-                           :else nil)
-              next-best (cond
-                          (nil? next-delay) best-delay
-                          (nil? best-delay) next-delay
-                          (< next-delay best-delay) next-delay
-                          :else best-delay)]
-          (recur (inc i) next-best))
-        (when (number? best-delay)
-          (if (> best-delay 0) best-delay poll-period-ms))))))
+(defn- context-value
+  [progress watcher progress-key watcher-key]
+  (if (and (map? progress) (contains? progress progress-key))
+    (get progress progress-key)
+    (get watcher watcher-key)))
+
+(defn- dispatch-callback!
+  [watcher progress]
+  (let [cb (:callback watcher)]
+    (when cb
+      ;; Defer callback to avoid recursive publish-state! stack growth.
+      (let [slot-id (context-value progress watcher :slot-id :slot)
+            entity-id (context-value progress watcher :entity-id :entity-id)
+            field (context-value progress watcher :field :field)
+            payload {:source :timeline
+                     :id (:id watcher)
+                     :slot slot-id
+                     :slot-id slot-id
+                     :entity-id entity-id
+                     :field field
+                     :progress progress}]
+        (schedule 0 (fn timeline-watch-deferred-cb [] (cb payload)))
+        true))))
+
+(defn- watcher-source-key
+  [watcher progress]
+  (let [slot-id (context-value progress watcher :slot-id :slot)
+        entity-id (context-value progress watcher :entity-id :entity-id)
+        field (context-value progress watcher :field :field)]
+    (if (and (nil? slot-id) (nil? entity-id) (nil? field))
+      nil
+      [slot-id entity-id field])))
+
+(defn- watcher-with-updated-edge
+  [watcher source-key at-end]
+  (if source-key
+    (assoc watcher
+           :last-at-end at-end
+           :last-at-end-by-source (assoc (if (map? (:last-at-end-by-source watcher))
+                                           (:last-at-end-by-source watcher)
+                                           {})
+                                         source-key
+                                         at-end))
+    (assoc watcher :last-at-end at-end)))
+
+(defn- rearm-source-edges
+  [source-edges]
+  (if (map? source-edges)
+    (loop [entries (seq source-edges)
+           result {}]
+      (if entries
+        (let [[source-key _] (first entries)]
+          (recur (next entries) (assoc result source-key true)))
+        result))
+    {}))
+
+(defn dispatch-watch!
+  "Pushes one timeline progress sample into a watcher.
+
+  Emits the callback on a false->true :at-end edge, or unconditionally when
+  opts contains :force true. Returns true when a watcher with watch-id exists."
+  [watch-id progress & args]
+  (let [opts (if (seq args) (nth args 0) {})
+        watcher (get @timeline-watchers* watch-id)]
+    (if (nil? watcher)
+      false
+      (let [flagged (= true (:end-event progress))
+            at-end (and flagged (= true (:at-end progress)))
+            source-key (watcher-source-key watcher progress)
+            was-at-end (if source-key
+                         (= true (get (:last-at-end-by-source watcher) source-key))
+                         (= true (:last-at-end watcher)))
+            force? (= true (:force opts))]
+        (when (not= was-at-end at-end)
+          (swap! timeline-watchers*
+                 (fn [current]
+                   (if (contains? current watch-id)
+                     (assoc current
+                            watch-id
+                            (watcher-with-updated-edge (get current watch-id) source-key at-end))
+                     current))))
+        (when (and at-end (or force? (not was-at-end)))
+          (dispatch-callback! watcher progress))
+        true))))
 
 (defn poll-watchers!
-  "Runtime helper: checks watched timelines and emits one callback on each false->true :at-end edge."
+  "Compatibility helper: reads renderer progress once and pushes it to each watcher.
+Automatic periodic polling is intentionally disabled; callers invoke this explicitly."
   []
-  (let [watchers @timeline-watchers*]
-    (let [callback-fired?
-          (loop [remaining (seq watchers)
-                 fired? false]
-            (if (seq remaining)
-              (let [[watch-id watcher] (first remaining)
-                    progress (runtime/renderer-timeline-progress (:slot watcher)
-                                                                (:entity-id watcher)
-                                                                (:field watcher))
-                    flagged (= true (:end-event progress))
-                    at-end (and flagged (= true (:at-end progress)))
-                    was-at-end (= true (:last-at-end watcher))]
-                (when (not= was-at-end at-end)
-                  (swap! timeline-watchers*
-                         (fn [current]
-                           (if (contains? current watch-id)
-                             (assoc current
-                                    watch-id
-                                    (assoc (get current watch-id) :last-at-end at-end))
-                             current))))
-                (recur (next remaining)
-                       (or fired?
-                            (when (and at-end (not was-at-end))
-                              ;; Defer callback to a fresh event-loop task (schedule 0). A synchronous
-                              ;; call can recurse: callback -> publish-state! -> kick-timeline-watchers!
-                              ;; -> poll path and blow the C eval stack (see breakout runloop test).
-                              (let [cb (:callback watcher)
-                                    payload {:source :timeline
-                                             :id (:id watcher)
-                                             :slot (:slot watcher)
-                                             :entity-id (:entity-id watcher)
-                                             :field (:field watcher)
-                                             :progress progress}]
-                                (schedule 0 (fn timeline-watch-deferred-cb [] (cb payload)))
-                                true)))))
-              fired?))]
-      ;; A fired callback runs publish-state! -> kick-timeline-watchers! -> schedule.
-      ;; Do not cancel-timer or kick-watchers! here — that used to erase the new timer.
-      (when (not callback-fired?)
-        (tiny-fx.gfx-timeline/kick-watchers!))))
+  (let [watcher-entries (vec @timeline-watchers*)]
+    (loop [i 0]
+      (when (< i (count watcher-entries))
+        (let [[watch-id watcher] (nth watcher-entries i)
+              slot (:slot watcher)
+              entity-id (:entity-id watcher)
+              field (:field watcher)
+              progress (if (and (keyword? slot) entity-id (keyword? field))
+                         (runtime/renderer-timeline-progress slot entity-id field)
+                         nil)]
+          (when (map? progress)
+            (tiny-fx.gfx-timeline/dispatch-watch! watch-id progress))
+          (recur (inc i))))))
   nil)
 
+(defn dispatch-progress!
+  "Dispatches one renderer timeline progress sample by its embedded :event-id.
+
+Returns true when a watcher for :event-id exists, else false."
+  [progress & args]
+  (let [opts (if (seq args) (nth args 0) {})
+        event-id (if (map? progress) (:event-id progress) nil)]
+    (if event-id
+      (tiny-fx.gfx-timeline/dispatch-watch! event-id progress opts)
+      false)))
+
 (defn kick-watchers!
-  "Ensures timeline watchers have at most one pending wakeup.
-The next poll is scheduled for the nearest known end edge, or soon when the
-renderer has not published a fresh snapshot yet."
+  "Legacy entry point retained for compatibility.
+Timeline events are now push-driven; no periodic poll timer is scheduled here."
   []
-  (let [watcher-entries (vec @tiny-fx.gfx-timeline/timeline-watchers*)
-        delay-ms (if (zero? (count watcher-entries))
-                   nil
-                   (let [computed (next-poll-delay-ms)]
-                     (if (number? computed) computed coarse-poll-ms)))]
-    (if (number? delay-ms)
-      (schedule delay-ms {:id poll-timer-id
-                          :fn tiny-fx.gfx-timeline/poll-watchers!})
-      (cancel-timer poll-timer-id)))
   nil)
 
 (defn reset-watch-edge!
@@ -126,7 +157,12 @@ segment and then emits the next real false->true end edge."
     (swap! timeline-watchers*
            (fn [watchers]
              (if (contains? watchers watch-id)
-               (assoc watchers watch-id (assoc (get watchers watch-id) :last-at-end true))
+               (let [watcher (get watchers watch-id)]
+                 (assoc watchers
+                        watch-id
+                        (assoc watcher
+                               :last-at-end true
+                               :last-at-end-by-source (rearm-source-edges (:last-at-end-by-source watcher)))))
                watchers))))
   nil)
 
@@ -155,8 +191,8 @@ segment and then emits the next real false->true end edge."
                           :entity-id (:entity-id opts)
                           :field (:field opts)
                           :callback f
-                          :last-at-end false})))
-        (tiny-fx.gfx-timeline/kick-watchers!)
+                          :last-at-end false
+                          :last-at-end-by-source {}})))
         nil))))
 
 ;; Mark timeline as loaded so event/on :timeline works without explicit preload.

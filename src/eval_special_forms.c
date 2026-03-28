@@ -734,7 +734,6 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
       result = eval_body(expr, base_env, st, ctx);
     }
     eval_finally_clause(finally_clause, base_env, st, ctx);
-    return result;
   }
   CATCH(ex) {
     // Exception value is a first-class CLJ_EXCEPTION object.
@@ -846,8 +845,7 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
                       exc->file, exc->line, exc->col);
       return NULL;
     }
-
-    return handler_result;
+    result = handler_result;
   }
   END_TRY
 
@@ -971,9 +969,6 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
       }
       result = eval_body(expr, base_env, st, ctx);
     }
-    evalstate_pop_dynamic_bindings_to(st, base_depth);
-    st->current_ns = saved_ns;
-    return result;
   }
   CATCH(ex) {
     evalstate_pop_dynamic_bindings_to(st, base_depth);
@@ -985,7 +980,9 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
   }
   END_TRY
 
-  return NULL;
+  evalstate_pop_dynamic_bindings_to(st, base_depth);
+  st->current_ns = saved_ns;
+  return result;
 }
 
 static inline ID eval_recur_arg_owned(ID arg, const EvalContext *ctx) {
