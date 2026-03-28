@@ -995,32 +995,8 @@ static inline ID eval_recur_arg_owned(ID arg, const EvalContext *ctx) {
     return arg;
 
   if (TAG(arg) == CLJ_SLOT_REF) {
-    const CljSlotRef *ref = (const CljSlotRef *)arg;
     CLJ_ASSERT(ctx && "CLJ_SLOT_REF requires eval context");
-    ID v = NOT_FOUND;
-    CallFrame *cur = ctx->frame;
-    uint8_t remaining_depth = ref->depth;
-    while (cur && remaining_depth > 0) {
-      cur = cur->parent;
-      remaining_depth--;
-    }
-    if (cur) {
-      if ((unsigned int)ref->slot < (unsigned int)cur->param_count) {
-        v = frame_decode_value(cur->values[ref->slot]);
-      }
-    } else if (ctx->captured_frames) {
-      unsigned int captured_depth = (unsigned int)remaining_depth;
-      unsigned int captured_count = vector_count(ctx->captured_frames);
-      if (captured_depth < captured_count) {
-        ID frame_obj = vector_nth(ctx->captured_frames, captured_depth);
-        if (frame_obj && TAG(frame_obj) == CLJ_VECTOR_PERSISTENT) {
-          CljPersistentVector *frame_values = as_vector(frame_obj);
-          if ((unsigned int)ref->slot < vector_count(frame_values)) {
-            v = vector_nth(frame_values, ref->slot);
-          }
-        }
-      }
-    }
+    ID v = eval_resolve_slot_ref(ctx, arg);
     if (v == NOT_FOUND || !v)
       return NULL;
     return RETAIN(v);

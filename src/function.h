@@ -34,9 +34,11 @@ typedef struct {
     ID params[];              // Inline parameter array (flexible array member)
 } CljFunction;
 
+CljFunction* make_function_ex(ID *params, int param_count, ID body, CljPersistentVector *env_stack,
+                              CljPersistentVector *captured_frames, struct CljSymbol *name_sym,
+                              struct CljNamespace *ns);
 CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack,
-                           CljPersistentVector *captured_frames, struct CljSymbol *name_sym,
-                           struct CljNamespace *ns);
+                           struct CljSymbol *name_sym, struct CljNamespace *ns);
 
 // Native function constructor (CljCFunc)
 ID make_named_func_with_flags(BuiltinFn fn, struct CljSymbol *name_sym, uint8_t flags);

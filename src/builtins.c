@@ -1612,7 +1612,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     return NULL;
   }
   ID rest_param = SYM_THUNK_STATE;
-  CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL, NULL);
+  CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
   RELEASE(thunk_body);
   CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
   if (rest_lazy && vector_count(rest_env_stack) > 0)
@@ -1765,7 +1765,7 @@ ID native_map(ID *args, unsigned int argc) {
     return empty_list();
   }
   ID thunk_param = SYM_THUNK_STATE;
-  CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL, NULL);
+  CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
   RELEASE(thunk_body);
   CljLazySeq *lazy = make_lazy_seq(thunk);
   if (lazy && vector_count(env_stack) > 0)
@@ -6516,7 +6516,7 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     return NULL;
   }
   ID rest_param = SYM_THUNK_STATE;
-  CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL, NULL);
+  CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
   RELEASE(thunk_body);
   CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
   if (rest_lazy && vector_count(rest_env_stack) > 0)
@@ -6550,7 +6550,7 @@ ID native_range(ID *args, unsigned int argc) {
       return NULL;
     }
     ID thunk_param = SYM_THUNK_STATE;
-    CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL, NULL);
+    CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
     RELEASE(thunk_body);
     CljLazySeq *lazy = make_lazy_seq(thunk);
     if (lazy && vector_count(env_stack) > 0)

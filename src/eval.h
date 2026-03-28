@@ -62,6 +62,7 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
 ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st);
 ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_resolve_slot_ref(const EvalContext *ctx, ID slot_ref_expr);
 
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);
