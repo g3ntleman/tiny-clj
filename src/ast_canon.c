@@ -45,7 +45,9 @@ static INLINE void move_meta(ID src, ID dst) {
 #if defined(META_ENABLED) && META_ENABLED
   ID meta = meta_get(src);
   if (meta) {
-    meta_set(dst, meta);
+    if (dst && !IS_IMMEDIATE(dst)) {
+      meta_set(dst, meta);
+    }
     meta_clear(src);
   }
 #else

@@ -2275,7 +2275,7 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
         meta_set(value, meta_map);
         RELEASE(meta_map);
       }
-    } else if (form_meta) {
+    } else if (form_meta && !IS_IMMEDIATE(value)) {
       meta_set(value, form_meta);
     }
   }
