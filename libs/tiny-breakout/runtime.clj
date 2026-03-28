@@ -13,6 +13,9 @@
 (def ^:private overlay-animation* (atom idle-overlay-animation))
 (def idle-held-buttons {:left false :right false :last nil})
 (def held-buttons* (atom idle-held-buttons))
+;; One-time audio warmup: run as early as possible in prepare/bootstrap path,
+;; but keep start-runtime! safe when called directly (without prepare callback).
+(def ^:private audio-prewarmed* (atom false))
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
 (def ^:private segment-progress-source {:slot :game
@@ -21,6 +24,13 @@
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
 (def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
+
+(defn- ensure-audio-prewarmed!
+  []
+  (when-not @audio-prewarmed*
+    (audio/prewarm-engine!)
+    (reset! audio-prewarmed* true))
+  nil)
 
 (defn- button-down-event?
   [event]
@@ -318,8 +328,7 @@
 
 (defn- dispatch-segment-progress-sample!
   []
-  (when (and @segment-watch-active*
-             @event/gfx-timeline-loaded?)
+  (when @segment-watch-active*
     (let [progress (runtime/renderer-timeline-progress
                     (:slot segment-progress-source)
                     (:entity-id segment-progress-source)
@@ -341,8 +350,7 @@
         end-ms (if (map? segment) (:end-ms segment) nil)]
     (sync-overlay-animation! previous-state state-without-events)
     (when (and (map? (:ball-segment state-without-events))
-               (not @segment-watch-active*)
-               @event/gfx-timeline-loaded?)
+               (not @segment-watch-active*))
       (event/on {:source :timeline :id segment-watch-id}
                 on-segment-timeline-event!)
       (reset! segment-watch-active* true))
@@ -439,18 +447,17 @@
   nil)
 
 (defn bootstrap-runtime!
-  "Lightweight config-time init (title state). Actual skip-to-play happens in
-  start-runtime! (startup callback) so the heavy work runs after config load
-  and autorelease pool drain — avoids OOM during viewer_load_game_demo_config."
+  "Config-time init (title state + early audio warmup). Remaining startup work
+  runs in start-runtime! after config load/autorelease-pool drain."
   []
+  (ensure-audio-prewarmed!)
   (reset-to-initial-state! false)
   nil)
 
 (defn start-runtime!
   [& _args]
-  (audio/prewarm-engine!)
+  (ensure-audio-prewarmed!)
   (sound-demos/play-startup-entertainer!)
-  (event/preload-timeline-runtime!)
   (configure-input-watchers!)
   (restart-overlay-animation!)
   nil)

@@ -1,6 +1,5 @@
 (ns tiny-fx.gfx-timeline
-  (:require [tiny-clj.runtime :as runtime]
-            [tiny-clj.event :as event]))
+  (:require [tiny-clj.runtime :as runtime]))
 
 (def timeline-watchers* (atom {}))
 
@@ -194,6 +193,3 @@ segment and then emits the next real false->true end edge."
                           :last-at-end false
                           :last-at-end-by-source {}})))
         nil))))
-
-;; Mark timeline as loaded so event/on :timeline works without explicit preload.
-(reset! event/gfx-timeline-loaded? true)

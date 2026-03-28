@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "platform.h"
+#include "builtins.h"
 #include "tinyclj_idf_display.h"
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
@@ -220,6 +221,37 @@ void app_main(void) {
 #endif
 
     tinyclj_idf_start();
+}
+
+static uint32_t tinyclj_esp32_elapsed_ms(uint32_t start_ms, uint32_t end_ms) {
+    if (end_ms >= start_ms) {
+        return end_ms - start_ms;
+    }
+    return (86400000u - start_ms) + end_ms;
+}
+
+/**
+ * @brief ESP32 override for (yield ms): drain one tiny-clj runloop step, then
+ * sleep only for the remaining budget.
+ *
+ * This keeps yield semantics aligned with host behavior (drive runtime work
+ * opportunistically during waits) instead of pure sleep-only waiting.
+ */
+void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
+    uint32_t start_ms = tinyclj_esp32_current_time_ms();
+
+    // Best-effort: run one pending task/timer/native ingress callback.
+    (void)native_run_next_task(NULL, 0);
+
+    if (timeout_ms == 0u) {
+        return;
+    }
+
+    uint32_t elapsed_ms = tinyclj_esp32_elapsed_ms(start_ms, tinyclj_esp32_current_time_ms());
+    if (elapsed_ms >= timeout_ms) {
+        return;
+    }
+    tinyclj_esp32_sleep_ms(timeout_ms - elapsed_ms);
 }
 
 static size_t g_uart_bytes_read = 0;
