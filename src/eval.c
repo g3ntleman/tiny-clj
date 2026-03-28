@@ -2261,10 +2261,9 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
         CljPersistentMap *meta_map = (CljPersistentMap *)RETAIN(form_meta);
         // Add :name and :ns directly (map_assoc overwrites if present, :name/:ns are rare)
         if (SYM_KW_NAME && sym && sym->cname && sym->cname[0] != '\0') {
-          CljString *name_str = make_string(sym->cname);
-          if (name_str) {
-            ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
-            RELEASE(name_str);
+          CljSymbol *name_sym = intern_symbol_global(sym->cname);
+          if (name_sym) {
+            ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_sym));
           }
         }
         if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
@@ -2566,8 +2565,36 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
       throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
     }
 
-    // Create and return native function object
     uint8_t native_flags = builtin_native_fn_needs_eval_state(native_func) ? CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE : 0u;
+
+    // Reuse an existing native binding in the current namespace when it already
+    // points to the same C function. This keeps repeated `(require 'ns)` calls
+    // heap-neutral for :native stubs.
+    if (st && st->current_ns && st->current_ns->mappings) {
+      CljSymbol *mapping_key = fn_name;
+      if (st->current_ns->name == SYM_CLOJURE_CORE) {
+        CljSymbol *core_key = intern_symbol_global(fn_name->cname);
+        if (core_key) {
+          mapping_key = core_key;
+        }
+      } else if (!fn_name->ns_name && st->current_ns->name) {
+        CljSymbol *qualified_key = intern_symbol(st->current_ns->name, fn_name->cname);
+        if (qualified_key) {
+          mapping_key = qualified_key;
+        }
+      }
+
+      ID existing = map_get_sentinel(st->current_ns->mappings, mapping_key, NOT_FOUND);
+      if (existing != NOT_FOUND && existing && TAG(existing) == CLJ_FUNC) {
+        CljCFunc *existing_native = (CljCFunc *)existing;
+        uint8_t existing_flags = ((CljObject *)existing)->flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE;
+        if (existing_native->fn == native_func && existing_flags == native_flags) {
+          return AUTORELEASE(RETAIN(existing));
+        }
+      }
+    }
+
+    // Create and return native function object
     return AUTORELEASE(make_named_func_with_flags(native_func, fn_name, native_flags));
   }
 
