@@ -4,7 +4,6 @@
 (defn breakout-host-config
   "Builds host-viewer config for the breakout demo with semantic button input."
   []
-  (breakout-runtime/bootstrap-runtime!)
   (let [scene-atom breakout-runtime/scene*]
     {:slots [{:id :game :atom scene-atom}]
      :prepare-callback breakout-runtime/bootstrap-runtime!

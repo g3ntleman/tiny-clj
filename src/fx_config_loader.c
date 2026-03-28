@@ -20,8 +20,6 @@
 
 static ID g_fx_kw_id = NULL;
 static ID g_fx_kw_atom = NULL;
-static ID g_fx_kw_game = NULL;
-static ID g_fx_kw_tiny_breakout = NULL;
 static ID g_fx_kw_slots = NULL;
 static ID g_fx_kw_entry = NULL;
 static ID g_fx_kw_prepare_callback = NULL;
@@ -32,11 +30,6 @@ static ID g_fx_kw_primary_scene_atom = NULL;
 static const IdSymbolCacheEntry g_fx_slot_extract_symbol_cache[] = {
     {&g_fx_kw_id, ":id"},
     {&g_fx_kw_atom, ":atom"},
-};
-
-static const IdSymbolCacheEntry g_fx_default_config_symbol_cache[] = {
-    {&g_fx_kw_game, ":game"},
-    {&g_fx_kw_tiny_breakout, ":tiny-breakout"},
 };
 
 static const IdSymbolCacheEntry g_fx_host_config_symbol_cache[] = {
@@ -204,127 +197,6 @@ static bool fx_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) {
     return true;
 }
 
-static bool fx_load_deployment_config_fast(EvalState *st,
-                                               ViewerSceneBundle *out_bundle,
-                                               ViewerSpatialRuleSet *out_rule_set) {
-    if (!st || !out_bundle || !out_rule_set) {
-        return false;
-    }
-
-    bool require_ok = false;
-    ID scene_atom = NULL;
-    ID prepare_callback = NULL;
-    ID startup_callback = NULL;
-    ID spatial_callback = NULL;
-    FrameScene *scene = NULL;
-    ViewerConfiguredSlot *slot_items = NULL;
-    bool slot_items_assigned = false;
-    bool ok = false;
-
-    WITH_AUTORELEASE_POOL({
-        require_ok = require_namespace_by_name(st, "tiny-breakout.runtime");
-    });
-    if (!require_ok) {
-        return false;
-    }
-
-    WITH_AUTORELEASE_POOL({
-        ID resolved = eval_string("[tiny-breakout.runtime/scene* "
-                                  " tiny-breakout.runtime/bootstrap-runtime! "
-                                  " tiny-breakout.runtime/start-runtime! "
-                                  " tiny-breakout.runtime/on-spatial-event!]",
-                                  st);
-        if (resolved && is_vector(resolved)) {
-            CljPersistentVector *resolved_vec = as_vector(resolved);
-            if (resolved_vec && vector_count(resolved_vec) == 4u) {
-                scene_atom = RETAIN(vector_nth(resolved_vec, 0u));
-                prepare_callback = RETAIN(vector_nth(resolved_vec, 1u));
-                startup_callback = RETAIN(vector_nth(resolved_vec, 2u));
-                spatial_callback = RETAIN(vector_nth(resolved_vec, 3u));
-            }
-        }
-    });
-
-    if (!scene_atom || TAG(scene_atom) != CLJ_ATOM) {
-        fx_fail_config_load(NULL, "deployment config scene atom is invalid");
-        goto cleanup;
-    }
-    if (!prepare_callback ||
-        (TAG(prepare_callback) != CLJ_FUNC && TAG(prepare_callback) != CLJ_CLOSURE)) {
-        fx_fail_config_load(NULL, "deployment prepare callback must be callable");
-        goto cleanup;
-    }
-    if (!startup_callback ||
-        (TAG(startup_callback) != CLJ_FUNC && TAG(startup_callback) != CLJ_CLOSURE)) {
-        fx_fail_config_load(NULL, "deployment startup callback must be callable");
-        goto cleanup;
-    }
-    if (!spatial_callback ||
-        (TAG(spatial_callback) != CLJ_FUNC && TAG(spatial_callback) != CLJ_CLOSURE)) {
-        fx_fail_config_load(NULL, "deployment spatial callback must be callable");
-        goto cleanup;
-    }
-
-    WITH_AUTORELEASE_POOL({
-        (void)eval_function_call(prepare_callback, NULL, 0, NULL, st);
-    });
-
-    scene = fx_frame_scene_from_atom((CljAtom *)scene_atom);
-    if (!scene) {
-        fx_fail_config_load(NULL, "deployment scene atom must deref to a frame-scene");
-        goto cleanup;
-    }
-
-    slot_items = (ViewerConfiguredSlot *)CLJ_HOST_CALLOC(1u, sizeof(ViewerConfiguredSlot));
-    if (!slot_items) {
-        goto cleanup;
-    }
-
-    if (!id_symbol_cache_init_global(
-            g_fx_default_config_symbol_cache,
-            sizeof(g_fx_default_config_symbol_cache) / sizeof(g_fx_default_config_symbol_cache[0]))) {
-        goto cleanup;
-    }
-    slot_items[0].id = g_fx_kw_game;
-    slot_items[0].scene_atom = (CljAtom *)scene_atom;
-    slot_items[0].scene = scene;
-    RETAIN(scene);
-
-    out_bundle->slots = slot_items;
-    slot_items_assigned = true;
-    out_bundle->slot_count = 1u;
-    out_bundle->primary_slot_index = 0u;
-    out_bundle->has_primary_slot = true;
-    out_bundle->entry = g_fx_kw_tiny_breakout;
-    out_bundle->startup_callback = startup_callback;
-    startup_callback = NULL;
-    out_bundle->spatial_callback = spatial_callback;
-    spatial_callback = NULL;
-    out_bundle->primary_scene_atom = (CljAtom *)scene_atom;
-    out_bundle->primary_scene = scene;
-    scene_atom = NULL;
-
-    if (!fx_collision_load_rules_from_scene(out_bundle->primary_scene, out_rule_set)) {
-        fx_fail_config_load(out_bundle, "deployment scene contains invalid spatial rules");
-        goto cleanup;
-    }
-
-    ok = true;
-
-cleanup:
-    if (!ok && out_bundle) {
-        destroy_scene_bundle(out_bundle);
-    }
-    if (!slot_items_assigned) {
-        CLJ_HOST_FREE(slot_items);
-    }
-    RELEASE(scene_atom);
-    RELEASE(prepare_callback);
-    RELEASE(startup_callback);
-    RELEASE(spatial_callback);
-    return ok;
-}
-
 bool fx_load_deployment_config(EvalState *st,
                                    ViewerConfigSource config_source,
                                    ViewerSceneBundle *out_bundle,
@@ -341,9 +213,6 @@ bool fx_load_deployment_config(EvalState *st,
     memset(out_rule_set, 0, sizeof(*out_rule_set));
     if (!config_source.namespace_name || !config_source.config_expr) {
         return fx_fail_config_load(NULL, "viewer config source is incomplete");
-    }
-    if (strcmp(config_source.namespace_name, "tiny-clj.deployment") == 0) {
-        return fx_load_deployment_config_fast(st, out_bundle, out_rule_set);
     }
     bool require_ok = false;
     WITH_AUTORELEASE_POOL({

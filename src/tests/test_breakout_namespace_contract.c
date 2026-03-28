@@ -34,6 +34,18 @@ TEST(test_breakout_namespace_contract_forbids_non_tiny_dependencies) {
     }
 }
 
+TEST(test_breakout_namespace_contract_forbids_native_bindings_in_game_namespaces) {
+    const char *files[] = {"core.clj", "scene.clj", "audio.clj", "levels.clj", "runtime.clj"};
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(files) / sizeof(files[0])); i++) {
+        size_t len = 0;
+        char *src = read_breakout_source(files[i], &len);
+        TEST_ASSERT_TRUE(len > 0);
+        TEST_ASSERT_NULL_MESSAGE(strstr(src, ":native"),
+                                 "tiny-breakout namespaces must not declare :native bindings");
+        CLJ_FREE(src);
+    }
+}
+
 TEST(test_breakout_namespace_contract_deployment_routes_through_tiny_breakout) {
     size_t len = 0;
     char *src = read_deployment_source(&len);
