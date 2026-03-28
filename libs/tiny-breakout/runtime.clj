@@ -13,9 +13,8 @@
 (def ^:private overlay-animation* (atom idle-overlay-animation))
 (def idle-held-buttons {:left false :right false :last nil})
 (def held-buttons* (atom idle-held-buttons))
-;; One-time audio warmup: run as early as possible in prepare/bootstrap path,
-;; but keep start-runtime! safe when called directly (without prepare callback).
-(def ^:private audio-prewarmed* (atom false))
+;; Audio warmup status is kept in runtime state (:audio-prewarmed?) so reset/start
+;; flows can stay explicit and data-driven.
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
 (def ^:private segment-progress-source {:slot :game
@@ -25,11 +24,16 @@
 (def ^:private segment-watch-segment-id* (atom nil))
 (def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
 
+(defn- state-audio-prewarmed?
+  [state]
+  (= true (:audio-prewarmed? state)))
+
 (defn- ensure-audio-prewarmed!
   []
-  (when-not @audio-prewarmed*
+  (when-not (state-audio-prewarmed? @state*)
     (audio/prewarm-engine!)
-    (reset! audio-prewarmed* true))
+    (when (map? @state*)
+      (swap! state* assoc :audio-prewarmed? true)))
   nil)
 
 (defn- button-down-event?
@@ -49,44 +53,55 @@
              (number? (get event :pressed-ms))
              (nil? (get event :held-ms))))))
 
-(defn- scene-record
-  [state]
-  (let [overlay (scene/overlay-text (:phase state))
-        animation @overlay-animation*
-        scene-state (if (and (not= overlay "")
-                             (= overlay (:text animation)))
-                      (assoc state :overlay-start-ms (:start-ms animation))
-                      (dissoc state :overlay-start-ms))]
-    (record-from-map 'FrameScene (dissoc (scene/build-scene scene-state) :type))))
-
 (defn- overlay-animation-for-state
-  [state]
+  [state now-ms]
   (let [overlay (scene/overlay-text (:phase state))]
     (if (= overlay "")
       idle-overlay-animation
       {:text overlay
-       :start-ms (current-time-ms)})))
+       :start-ms now-ms})))
 
-(defn- sync-overlay-animation!
-  [previous-state next-state]
+(defn- next-overlay-animation
+  [current-animation previous-state next-state now-ms]
   (let [previous-overlay (scene/overlay-text (:phase previous-state))
         next-overlay (scene/overlay-text (:phase next-state))]
     (cond
       (= next-overlay "")
-      (reset! overlay-animation* idle-overlay-animation)
+      idle-overlay-animation
 
       (not= previous-overlay next-overlay)
-      (reset! overlay-animation* {:text next-overlay
-                                  :start-ms (current-time-ms)})
+      {:text next-overlay
+       :start-ms now-ms}
 
-      :else nil)))
+      :else
+      current-animation)))
+
+(defn- scene-state-with-overlay-animation
+  [state animation]
+  (let [overlay (scene/overlay-text (:phase state))]
+    (if (and (not= overlay "")
+             (= overlay (:text animation)))
+      (assoc state :overlay-start-ms (:start-ms animation))
+      (dissoc state :overlay-start-ms))))
+
+(defn- scene-record-for-animation
+  [state animation]
+  (record-from-map 'FrameScene
+                   (dissoc (scene/build-scene (scene-state-with-overlay-animation state animation))
+                           :type)))
+
+(defn- scene-record
+  [state]
+  (scene-record-for-animation state @overlay-animation*))
 
 (defn- restart-overlay-animation!
   []
-  (let [state @state*]
-    (reset! overlay-animation* (overlay-animation-for-state state))
+  (let [state @state*
+        now-ms (current-time-ms)
+        animation (overlay-animation-for-state state now-ms)]
+    (reset! overlay-animation* animation)
     (when (map? state)
-      (reset! scene* (scene-record state))))
+      (reset! scene* (scene-record-for-animation state animation))))
   nil)
 
 (defn- on-segment-timeline-event!
@@ -228,32 +243,40 @@
       right? 1
       :else nil)))
 
-(defn- apply-held-paddle-direction!
-  []
-  (let [now-ms (current-time-ms)
-        current (sync-paddle-state @state* now-ms)
-        desired-dir (desired-paddle-direction @held-buttons*)
+(defn- next-held-buttons
+  [held button-id pressed?]
+  (assoc held
+         button-id pressed?
+         :last (if pressed? button-id (get held :last))))
+
+(defn- next-state-for-held-paddle-direction
+  [state held now-ms]
+  (let [current (sync-paddle-state state now-ms)
+        desired-dir (desired-paddle-direction held)
         current-dir (paddle-motion-direction current)]
     (cond
       (nil? desired-dir)
-      (publish-state! (stop-paddle-motion current))
+      (stop-paddle-motion current)
 
       (= desired-dir current-dir)
       nil
 
       :else
-      (publish-state! (plan-paddle-motion (stop-paddle-motion current)
-                                          desired-dir
-                                          now-ms)))))
+      (plan-paddle-motion (stop-paddle-motion current)
+                          desired-dir
+                          now-ms))))
+
+(defn- apply-held-paddle-direction!
+  [held]
+  (let [now-ms (current-time-ms)
+        next-state (next-state-for-held-paddle-direction @state* held now-ms)]
+    (when (map? next-state)
+      (publish-state! next-state))))
 
 (defn- update-held-button!
   [button-id pressed?]
-  (swap! held-buttons*
-         (fn [held]
-           (assoc held
-                  button-id pressed?
-                  :last (if pressed? button-id (get held :last)))))
-  (apply-held-paddle-direction!))
+  (let [held (swap! held-buttons* next-held-buttons button-id pressed?)]
+    (apply-held-paddle-direction! held)))
 
 (defn- state-after-input
   [input-map]
@@ -337,42 +360,76 @@
         (event/dispatch-timeline-progress! progress))))
   nil)
 
-(defn- publish-state-core!
-  "Updates state atom, plays audio, manages segment watchers. Returns
-  state-without-events for optional immediate scene rebuild by callers."
-  [state]
-  (let [previous-state @state*
-        state (scene/with-expanded-collision-rules state)
+(defn- publish-state-plan
+  [previous-state next-state current-overlay-animation segment-watch-active? segment-watch-segment-id now-ms]
+  (let [state (scene/with-expanded-collision-rules next-state)
         events (:events state)
         state-without-events (assoc state :events [])
         segment (:ball-segment state-without-events)
         segment-id (if (map? segment) (:id segment) nil)
-        end-ms (if (map? segment) (:end-ms segment) nil)]
-    (sync-overlay-animation! previous-state state-without-events)
-    (when (and (map? (:ball-segment state-without-events))
-               (not @segment-watch-active*))
+        end-ms (if (map? segment) (:end-ms segment) nil)
+        install-segment-watch? (and (map? segment)
+                                    (not segment-watch-active?))
+        active-after-install? (or segment-watch-active?
+                                  install-segment-watch?)
+        next-segment-watch-id (if (and active-after-install?
+                                       (number? segment-id))
+                                segment-id
+                                nil)
+        rearm-segment-watch? (and active-after-install?
+                                  (number? segment-id)
+                                  (not= segment-id segment-watch-segment-id))
+        fallback-delay-ms (if (and (number? segment-id)
+                                   (number? end-ms))
+                            (max 1 (- end-ms now-ms))
+                            nil)]
+    {:state state-without-events
+     :events events
+     :overlay-animation (next-overlay-animation current-overlay-animation
+                                                previous-state
+                                                state-without-events
+                                                now-ms)
+     :install-segment-watch? install-segment-watch?
+     :next-segment-watch-id next-segment-watch-id
+     :rearm-segment-watch? rearm-segment-watch?
+     :fallback-delay-ms fallback-delay-ms
+     :dispatch-progress? (map? segment)}))
+
+(defn- apply-publish-state-plan!
+  [plan]
+  (let [state-without-events (:state plan)]
+    (reset! overlay-animation* (:overlay-animation plan))
+    (when (:install-segment-watch? plan)
       (event/on {:source :timeline :id segment-watch-id}
                 on-segment-timeline-event!)
       (reset! segment-watch-active* true))
-    (if (and @segment-watch-active*
-             (number? segment-id))
-      (do
-        (when (not= segment-id @segment-watch-segment-id*)
-          (event/rearm-timeline-watch-edge! segment-watch-id))
-        (reset! segment-watch-segment-id* segment-id))
-      (reset! segment-watch-segment-id* nil))
-    (if (and (number? segment-id)
-             (number? end-ms))
-      (let [delay-ms (max 1 (- end-ms (current-time-ms)))]
-        (schedule delay-ms {:id segment-fallback-timer-id
-                            :fn on-segment-fallback-timer!}))
+    (if (:rearm-segment-watch? plan)
+      (event/rearm-timeline-watch-edge! segment-watch-id)
+      nil)
+    (reset! segment-watch-segment-id* (:next-segment-watch-id plan))
+    (if (number? (:fallback-delay-ms plan))
+      (schedule (:fallback-delay-ms plan)
+                {:id segment-fallback-timer-id
+                 :fn on-segment-fallback-timer!})
       (cancel-timer segment-fallback-timer-id))
     (reset! state* state-without-events)
-    (when (map? (:ball-segment state-without-events))
+    (when (:dispatch-progress? plan)
       (dispatch-segment-progress-sample!))
-    (when (seq events)
-      (audio/play-events! events))
+    (when (seq (:events plan))
+      (audio/play-events! (:events plan)))
     state-without-events))
+
+(defn- publish-state-core!
+  "Updates state atom, plays audio, manages segment watchers. Returns
+  state-without-events for optional immediate scene rebuild by callers."
+  [state]
+  (let [plan (publish-state-plan @state*
+                                 state
+                                 @overlay-animation*
+                                 @segment-watch-active*
+                                 @segment-watch-segment-id*
+                                 (current-time-ms))]
+    (apply-publish-state-plan! plan)))
 
 (defn publish-state!
   "Full state publish with immediate scene rebuild."
@@ -424,22 +481,27 @@
 
 (defn- install-initial-state!
   [state play-events?]
-  (let [events (:events state)
-        state-without-events (assoc state :events [])]
-    (reset! overlay-animation* (overlay-animation-for-state state-without-events))
+  (let [now-ms (current-time-ms)
+        events (:events state)
+        state-without-events (assoc state :events [])
+        animation (overlay-animation-for-state state-without-events now-ms)]
+    (reset! overlay-animation* animation)
     (reset! state* state-without-events)
-    (reset! scene* (scene-record state-without-events))
+    (reset! scene* (scene-record-for-animation state-without-events animation))
     (when (and play-events? (seq events))
       (audio/play-events! events)))
   nil)
 
 (defn- reset-to-initial-state!
   [play-events?]
-  (reset! held-buttons* idle-held-buttons)
-  (reset! overlay-animation* idle-overlay-animation)
-  (deactivate-segment-watch!)
-  (install-initial-state! (scene/with-expanded-collision-rules (core/init-state))
-                          play-events?))
+  (let [prewarmed? (state-audio-prewarmed? @state*)
+        initial-state (-> (core/init-state)
+                          (scene/with-expanded-collision-rules)
+                          (assoc :audio-prewarmed? prewarmed?))]
+    (reset! held-buttons* idle-held-buttons)
+    (reset! overlay-animation* idle-overlay-animation)
+    (deactivate-segment-watch!)
+    (install-initial-state! initial-state play-events?)))
 
 (defn reset-runtime!
   []
@@ -450,8 +512,8 @@
   "Config-time init (title state + early audio warmup). Remaining startup work
   runs in start-runtime! after config load/autorelease-pool drain."
   []
-  (ensure-audio-prewarmed!)
   (reset-to-initial-state! false)
+  (ensure-audio-prewarmed!)
   nil)
 
 (defn start-runtime!
