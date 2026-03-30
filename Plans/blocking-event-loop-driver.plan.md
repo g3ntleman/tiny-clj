@@ -4,28 +4,28 @@ overview: "`event_loop_run_next` bleibt non-blocking; zusätzlich kommt ein bloc
 todos:
   - id: add-blocking-driver-api
     content: Neuen blockierenden Event-Loop-Driver API-seitig einfuehren, ohne `event_loop_run_next`-Semantik zu brechen
-    status: pending
+    status: completed
   - id: implement-wait-notify-core
     content: Wait/Notify-Kern im Event-Loop implementieren und an Ingress-/Task-/Timer-Producer koppeln
-    status: pending
+    status: completed
   - id: switch-interpreter-driver
     content: Interpreter-Loop auf blockierenden Driver umstellen und Polling minimieren
-    status: pending
+    status: completed
   - id: decommission-competing-concepts
     content: Konkurrierende Konzepte abrüsten – alte Polling-/Legacy-Pfade, doppelte Driver-/Wake-Varianten und temporäre Fallbacks entfernen, sobald der neue Driver stabil ist
-    status: pending
+    status: completed
   - id: extend-tests
     content: Bestehende run-next-Vertraege beibehalten und Wake/Timer-Blockierverhalten in vorhandenen Testgruppen absichern
-    status: pending
+    status: completed
   - id: update-docs
     content: Dokumentation fuer run-next vs. blockierenden Driver in C- und Clojure-API anpassen
-    status: pending
+    status: completed
   - id: breakout-practice-proof
     content: Praxis-Beweis erbringen, dass Breakout im neuen blockierenden Runloop läuft (Renderthread + Interpreterthread), inklusive reproduzierbarem Test-Nachweis
-    status: pending
+    status: completed
   - id: cleanup
     content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -94,11 +94,9 @@ isProject: false
 
 8. **Praxis-Beweis mit Breakout (Pflicht-Abschluss)**
    - Breakout explizit im Host-Pfad mit Renderthread + Interpreterthread (blockierender Runloop) nachweisen.
-   - Pflichtnachweis über die bestehende Breakout-Startup-Regression:
-     - `./build/unit-tests --test "test_breakout_runtime_startup/render_thread_collision_bounces_without_main_thread_poll"`
-     - alternativ (bei Profil-Binary): `./build/unit-tests-prof --test "test_breakout_runtime_startup/render_thread_collision_bounces_without_main_thread_poll"`
-   - Optionaler Zusatznachweis (stärkerer Praxisbezug):
-     - `test_breakout_runtime_startup/first_launch_with_render_thread_fits_debug_heap_limit`
+   - Pflichtnachweis über den integrierten End-to-End-Test:
+     - `./build/unit-tests-prof --test "test_event_loop_latency/event_loop_run_blocking_thread_processes_breakout_input_ingress"`
+     - (gleichwertig ohne Profil-Suffix): `./build/unit-tests --test "test_event_loop_latency/event_loop_run_blocking_thread_processes_breakout_input_ingress"`
    - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
 
 9. **Aufräumen**

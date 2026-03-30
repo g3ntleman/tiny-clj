@@ -4,6 +4,7 @@
 
 #include "tests_common.h"
 #include "../event_loop.h"
+#include "../fx_host_runloop.h"
 #include "../function.h"
 #include <pthread.h>
 #include <time.h>
@@ -962,4 +963,42 @@ TEST(test_event_loop_run_wake_interrupts_idle_wait_without_work) {
     TEST_ASSERT_FALSE_MESSAGE(ran, "event_loop_run should return false when only externally woken");
     TEST_ASSERT_TRUE_MESSAGE(elapsed_ms >= 8u, "event_loop_run should block before wake");
     TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "wake-only path should not enqueue work");
+}
+
+TEST(test_event_loop_run_blocking_thread_processes_breakout_input_ingress) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID setup = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    CljObject *input_fn = eval_string("tiny-breakout.runtime/apply-input!", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(input_fn);
+    TEST_ASSERT_TRUE(TAG(input_fn) == CLJ_FUNC || TAG(input_fn) == CLJ_CLOSURE);
+
+    ID input_arg = eval_string("{:right true}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(input_arg);
+
+    TEST_ASSERT_TRUE_MESSAGE(start_runloop_thread(g_test_eval_state),
+                             "runloop thread should start");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(input_fn, input_arg),
+                             "breakout input should enqueue through ingress");
+
+    for (int i = 0; i < 40 && event_loop_has_pending_tasks(); i++) {
+        usleep(5000);
+    }
+
+    stop_runloop_thread();
+
+    ID paddle_x = eval_string("(:paddle-x @tiny-breakout.runtime/state*)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(paddle_x);
+    TEST_ASSERT_TRUE(is_fixnum(paddle_x));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4,
+                                  as_fixnum(paddle_x),
+                                  "breakout input should be processed by the blocking runloop thread");
 }
