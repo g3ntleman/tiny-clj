@@ -1,5 +1,4 @@
-(ns tiny-fx.gfx-timeline
-  (:require [tiny-clj.runtime :as runtime]))
+(ns tiny-fx.gfx-timeline)
 
 (def timeline-watchers* (atom {}))
 
@@ -9,21 +8,20 @@
     (throw "timeline/watch requires id"))
   (when (not (or (nil? f) (fn? f)))
     (throw "timeline/watch expects fn or nil"))
-  ;; Optional legacy render-bound watch mode for compatibility/polling:
-  ;; if one of :slot/:entity-id/:field is provided, require all three.
   (let [has-slot (contains? opts :slot)
         has-entity (contains? opts :entity-id)
         has-field (contains? opts :field)
-        legacy? (or has-slot has-entity has-field)]
-    (when (and f legacy?
-               (or (not has-slot) (not has-entity) (not has-field)))
+        has-source? (or has-slot has-entity has-field)]
+    (when (and f has-source?
+               (not (and has-slot has-entity has-field)))
       (throw "timeline/watch legacy mode requires :slot, :entity-id and :field"))
-    (when (and f legacy? (not (keyword? (:slot opts))))
-      (throw "timeline/watch requires keyword :slot"))
-    (when (and f legacy? (nil? (:entity-id opts)))
-      (throw "timeline/watch requires :entity-id"))
-    (when (and f legacy? (not (keyword? (:field opts))))
-      (throw "timeline/watch requires keyword :field"))))
+    (when (and f has-source?)
+      (when (not (keyword? (:slot opts)))
+        (throw "timeline/watch requires keyword :slot"))
+      (when (nil? (:entity-id opts))
+        (throw "timeline/watch requires :entity-id"))
+      (when (not (keyword? (:field opts)))
+        (throw "timeline/watch requires keyword :field")))))
 
 (defn- context-value
   [progress watcher progress-key watcher-key]
@@ -110,31 +108,6 @@
           (dispatch-callback! watcher progress))
         true))))
 
-(defn poll-watchers!
-  "Compatibility helper: reads renderer progress once and pushes it to each watcher.
-Automatic periodic polling is intentionally disabled; callers invoke this explicitly."
-  []
-  (let [watcher-entries (vec @timeline-watchers*)]
-    (loop [i 0]
-      (when (< i (count watcher-entries))
-        (let [[watch-id watcher] (nth watcher-entries i)
-              slot (:slot watcher)
-              entity-id (:entity-id watcher)
-              field (:field watcher)
-              progress (if (and (keyword? slot) entity-id (keyword? field))
-                         (runtime/renderer-timeline-progress slot entity-id field)
-                         nil)]
-          (cond
-            (map? progress)
-            (tiny-fx.gfx-timeline/dispatch-watch! watch-id progress)
-
-            (= true (:allow-missing-progress watcher))
-            (dispatch-callback! watcher nil)
-
-            :else nil)
-          (recur (inc i))))))
-  nil)
-
 (defn dispatch-progress!
   "Dispatches one renderer timeline progress sample by its embedded :event-id.
 
@@ -143,15 +116,8 @@ Returns true when a watcher for :event-id exists, else false."
   (let [opts (if (seq args) (nth args 0) {})
         event-id (if (map? progress) (:event-id progress) nil)]
     (if event-id
-      (tiny-fx.gfx-timeline/dispatch-watch! event-id progress opts)
+      (dispatch-watch! event-id progress opts)
       false)))
-
-(defn kick-watchers!
-  "Compatibility entry point.
-Polls timeline watchers once."
-  []
-  (poll-watchers!)
-  nil)
 
 (defn reset-watch-edge!
   "Re-arms one watcher edge by priming :last-at-end to true.
@@ -186,18 +152,18 @@ segment and then emits the next real false->true end edge."
       (let [id (nth args 0)
             f (nth args 1)
             opts (if (= argc 3) (nth args 2) {})]
-        (tiny-fx.gfx-timeline/validate-watch id f opts)
-        (reset! tiny-fx.gfx-timeline/timeline-watchers*
-                (if (nil? f)
-                  (dissoc @tiny-fx.gfx-timeline/timeline-watchers* id)
-                  (assoc @tiny-fx.gfx-timeline/timeline-watchers*
-                         id
-                         {:id id
-                          :slot (:slot opts)
-                          :entity-id (:entity-id opts)
-                          :field (:field opts)
-                          :allow-missing-progress (:allow-missing-progress opts)
-                          :callback f
-                          :last-at-end false
-                          :last-at-end-by-source {}})))
+        (validate-watch id f opts)
+        (swap! timeline-watchers*
+               (fn [watchers]
+                 (if (nil? f)
+                   (dissoc watchers id)
+                   (assoc watchers
+                          id
+                          {:id id
+                           :slot (:slot opts)
+                           :entity-id (:entity-id opts)
+                           :field (:field opts)
+                           :callback f
+                           :last-at-end false
+                           :last-at-end-by-source {}}))))
         nil))))

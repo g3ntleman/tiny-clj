@@ -22,6 +22,7 @@
                                         :field :x})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
+(def ^:private segment-end-timer-id* (atom nil))
 
 (defn- state-audio-prewarmed?
   [state]
@@ -129,6 +130,34 @@
                    (= segment-id (:id latest-segment)))
           (publish-state!
            (core/apply-segment-end-at-ms latest segment-id resume-ms))))))
+  nil)
+
+(defn- cancel-segment-end-timer!
+  []
+  (let [timer-id @segment-end-timer-id*]
+    (when (number? timer-id)
+      (cancel timer-id)))
+  (reset! segment-end-timer-id* nil)
+  nil)
+
+(defn- schedule-segment-end-timer!
+  [segment-id end-ms]
+  (cancel-segment-end-timer!)
+  (when (and (number? segment-id)
+             (number? end-ms))
+    (let [delay-ms (max 0 (- end-ms (current-time-ms)))
+          timer-id
+          (schedule delay-ms
+                    (fn []
+                      (let [latest @state*
+                            latest-segment (:ball-segment latest)
+                            now-ms (current-time-ms)]
+                        (when (and (map? latest-segment)
+                                   (= segment-id (:id latest-segment)))
+                          (publish-state!
+                           (core/apply-segment-end-at-ms latest segment-id now-ms))))
+                      nil))]
+      (reset! segment-end-timer-id* timer-id)))
   nil)
 
 (defn- rendered-entity-state
@@ -330,17 +359,6 @@
     (apply-input! {:launch true}))
   nil)
 
-(defn- dispatch-segment-progress-sample!
-  []
-  (when @segment-watch-active*
-    (let [progress (runtime/renderer-timeline-progress
-                    (:slot segment-progress-source)
-                    (:entity-id segment-progress-source)
-                    (:field segment-progress-source))]
-      (when (map? progress)
-        (event/dispatch-timeline-progress! progress))))
-  nil)
-
 (defn- publish-state-plan
   [previous-state next-state current-overlay-animation segment-watch-active? segment-watch-segment-id now-ms]
   (let [state (scene/with-expanded-collision-rules next-state)
@@ -367,8 +385,7 @@
                                                 now-ms)
      :install-segment-watch? install-segment-watch?
      :next-segment-watch-id next-segment-watch-id
-     :rearm-segment-watch? rearm-segment-watch?
-     :dispatch-progress? (map? segment)}))
+     :rearm-segment-watch? rearm-segment-watch?}))
 
 (defn- apply-publish-state-plan!
   [plan]
@@ -377,15 +394,29 @@
     (when (:install-segment-watch? plan)
       (event/on {:source :timeline :id segment-watch-id}
                 on-segment-timeline-event!
-                (assoc segment-progress-source :allow-missing-progress true))
+                segment-progress-source)
       (reset! segment-watch-active* true))
     (if (:rearm-segment-watch? plan)
       (event/rearm-timeline-watch-edge! segment-watch-id)
       nil)
     (reset! segment-watch-segment-id* (:next-segment-watch-id plan))
+    (let [segment (:ball-segment state-without-events)
+          segment-id (:next-segment-watch-id plan)
+          segment-end-ms (if (map? segment) (:end-ms segment) nil)
+          timer-id @segment-end-timer-id*]
+      (cond
+        (and (number? segment-id)
+             (number? segment-end-ms)
+             (or (:rearm-segment-watch? plan)
+                 (not (number? timer-id))))
+        (schedule-segment-end-timer! segment-id segment-end-ms)
+
+        (not (and (number? segment-id)
+                  (number? segment-end-ms)))
+        (cancel-segment-end-timer!)
+
+        :else nil))
     (reset! state* state-without-events)
-    (when (:dispatch-progress? plan)
-      (dispatch-segment-progress-sample!))
     (when (seq (:events plan))
       (audio/play-events! (:events plan)))
     state-without-events))
@@ -443,6 +474,7 @@
 
 (defn- deactivate-segment-watch!
   []
+  (cancel-segment-end-timer!)
   (reset! segment-watch-segment-id* nil)
   (when @segment-watch-active*
     (event/on {:source :timeline :id segment-watch-id} nil)

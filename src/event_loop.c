@@ -26,6 +26,10 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
+#if defined(ESP_PLATFORM)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
 
 // Task Map keys (go-block tasks only)
 static ID KW_FN;
@@ -115,6 +119,9 @@ static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
 static pthread_mutex_t g_event_loop_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_event_loop_wait_cond = PTHREAD_COND_INITIALIZER;
 static atomic_uint_fast64_t g_event_loop_wait_epoch = 1u;
+#if defined(ESP_PLATFORM)
+static atomic_uintptr_t g_event_loop_wait_task_handle = 0u;
+#endif
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
@@ -155,6 +162,23 @@ static struct timespec event_loop_deadline_from_now_ms(int timeout_ms) {
 
 static inline void event_loop_notify_waiters(void) {
     (void)atomic_fetch_add_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+#if defined(ESP_PLATFORM)
+    uintptr_t handle_bits = atomic_load_explicit(&g_event_loop_wait_task_handle, memory_order_acquire);
+    if (handle_bits == 0u) {
+        return;
+    }
+    TaskHandle_t waiter = (TaskHandle_t)handle_bits;
+    if (xPortInIsrContext()) {
+        BaseType_t higher_priority_task_woken = pdFALSE;
+        vTaskNotifyGiveFromISR(waiter, &higher_priority_task_woken);
+        if (higher_priority_task_woken == pdTRUE) {
+            portYIELD_FROM_ISR();
+        }
+    } else {
+        xTaskNotifyGive(waiter);
+    }
+    return;
+#endif
     if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
         return;
     }
@@ -166,6 +190,29 @@ static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t obser
     if (timeout_ms == 0) {
         return;
     }
+#if defined(ESP_PLATFORM)
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    if (!self) {
+        return;
+    }
+    (void)ulTaskNotifyTake(pdTRUE, 0);
+    atomic_store_explicit(&g_event_loop_wait_task_handle, (uintptr_t)self, memory_order_release);
+    while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+        if (timeout_ms < 0) {
+            (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            continue;
+        }
+        TickType_t wait_ticks = pdMS_TO_TICKS((uint32_t)timeout_ms);
+        if (wait_ticks == 0) {
+            wait_ticks = 1;
+        }
+        if (ulTaskNotifyTake(pdTRUE, wait_ticks) == 0u) {
+            break;
+        }
+    }
+    atomic_store_explicit(&g_event_loop_wait_task_handle, 0u, memory_order_release);
+    return;
+#endif
     if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
         return;
     }
@@ -188,6 +235,13 @@ static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t obser
         }
     }
     (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+}
+
+static inline void event_loop_wait_state_reset(void) {
+    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+#if defined(ESP_PLATFORM)
+    atomic_store_explicit(&g_event_loop_wait_task_handle, 0u, memory_order_release);
+#endif
 }
 
 static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
@@ -871,7 +925,7 @@ void event_loop_init(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
-    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+    event_loop_wait_state_reset();
     g_runloop_last_warn_ns = 0u;
     task_queue_get();
 }
@@ -905,7 +959,7 @@ void event_loop_clear(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
-    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+    event_loop_wait_state_reset();
     g_runloop_last_warn_ns = 0u;
     event_loop_notify_waiters();
 }

@@ -51,11 +51,6 @@ Options are forwarded to the underlying source-specific runtime."
       :else
       (throw "event/on expects 2, 3, or 4 arguments"))))
 
-(defn kick-timeline-watchers!
-  []
-  (timeline/kick-watchers!)
-  nil)
-
 (defn dispatch-timeline-watch!
   "Pushes one timeline progress sample into a specific watcher.
 

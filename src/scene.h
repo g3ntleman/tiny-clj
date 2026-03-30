@@ -34,6 +34,19 @@ typedef struct {
     uint32_t dirty_pixels;
 } VgRenderFrameSlotResult;
 
+typedef struct {
+    ID event_id;
+    uint16_t step_index;
+    uint16_t keyframe_count;
+    uint32_t phase_ms;
+    uint32_t period_ms;
+    bool end_event;
+    bool at_end;
+} VgTimelineProgressSample;
+
+typedef void (*VgTimelineProgressObserverFn)(ID entity_id,
+                                             const VgTimelineProgressSample *sample);
+
 bool vg_slot_change_tracker_init(VgSlotChangeTracker *tracker, uint8_t slot_count);
 void vg_slot_change_tracker_destroy(VgSlotChangeTracker *tracker);
 bool vg_slot_change_tracker_publish(VgSlotChangeTracker *tracker, uint8_t slot_index, uint32_t *out_generation);
@@ -72,5 +85,6 @@ bool vg_render_frame_slot_record_if_changed_at_ms(ID frame_scene_record,
                                                    uint32_t snapshot_id,
                                                    uint32_t now_ms,
                                                    uint32_t *out_dirty_pixels);
+void vg_set_timeline_progress_observer(VgTimelineProgressObserverFn observer);
 
 #endif

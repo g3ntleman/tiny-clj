@@ -3824,61 +3824,6 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_
     vg_rendered_state_reset_all();
 }
 
-TEST(test_vector_scene_graph_timeline_watch_polls_marked_end_edges_once) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    event_loop_clear();
-    vg_rendered_state_reset_all();
-
-    VgRenderedTimelineSample sample = {
-        .step_index = 1u,
-        .keyframe_count = 2u,
-        .phase_ms = 100u,
-        .period_ms = 100u,
-        .loop = false,
-        .end_event = true,
-        .at_end = true,
-    };
-
-    vg_rendered_state_capture_begin(2u, 44u, 150u);
-    vg_rendered_state_capture_record_timeline((uintptr_t)fixnum(3001), VG_RENDERED_FIELD_T, sample);
-    vg_rendered_state_capture_commit();
-
-    ID result = eval_string(
-        "(do (require 'tiny-clj.runtime) "
-        "    (require 'tiny-fx.gfx) "
-        "    (require 'tiny-fx.gfx-timeline) "
-        "    (require 'tiny-fx.game-demo) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
-        "    (let [seen (atom [])] "
-        "      (tiny-fx.gfx-timeline/watch :demo/end "
-        "        (fn [event] "
-        "          (swap! seen conj [(:id event) (:at-end (:progress event))]) "
-        "          nil) "
-        "        {:slot :game :entity-id 3001 :field :t}) "
-        "      (tiny-fx.gfx-timeline/poll-watchers!) "
-        "      (run-next-task) "
-        "      (tiny-fx.gfx-timeline/poll-watchers!) "
-        "      (tiny-fx.gfx-timeline/watch :demo/end nil) "
-        "      @seen))",
-        g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
-    CljPersistentVector *vec = as_vector(result);
-    TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(1, vector_count(vec));
-
-    ID entry = vector_nth(vec, 0);
-    TEST_ASSERT_NOT_NULL(entry);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entry));
-    CljPersistentVector *event_vec = as_vector(entry);
-    TEST_ASSERT_NOT_NULL(event_vec);
-    TEST_ASSERT_EQUAL_INT(2, vector_count(event_vec));
-    TEST_ASSERT_NOT_NULL(vector_nth(event_vec, 0));
-    TEST_ASSERT_TRUE(vector_nth(event_vec, 1) == clj_true);
-
-    vg_rendered_state_reset_all();
-}
-
 TEST(test_vector_scene_graph_timeline_watch_dispatches_marked_end_edges_once_until_rearmed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     event_loop_clear();

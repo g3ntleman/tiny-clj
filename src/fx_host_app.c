@@ -30,6 +30,7 @@
 #include "fx_host_runloop.h"
 #include "fx_config_loader.h"
 #include "fx_spatial_bridge.h"
+#include "fx_timeline_ingress.h"
 #include "platform.h"
 #include "gpio.h"
 #include "memory.h"
@@ -686,6 +687,7 @@ typedef struct {
     bool collision_in_render_thread;
 } ViewerRenderThread;
 static ViewerRenderThread g_render_thread = {0};
+
 static uint32_t fx_compute_animated_slots_mask(const VgRenderSlotState *slot_states) {
     if (!slot_states || g_fx_slot_count == 0u) {
         return 0u;
@@ -986,6 +988,7 @@ static void *fx_render_thread_main(void *arg) {
             size_t refined_dirty_count = 0u;
             bool use_refined_dirty_rects = false;
             vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
+            fx_timeline_ingress_set_current_slot(i);
             bool rendered = vg_render_frame_slot_record_result_at_ms(snapshot,
                                                                      &g_render_thread.slot_states[i],
                                                                      fb,
@@ -993,6 +996,7 @@ static void *fx_render_thread_main(void *arg) {
                                                                      frame_now_ms,
                                                                      slot_animated_tick,
                                                                      &slot_result);
+            fx_timeline_ingress_clear_current_slot();
             bool slot_props_unchanged = had_prior_frame &&
                                         vg_clip_rect_equal(prev_clip_rect,
                                                            g_render_thread.slot_states[i].last_clip_rect) &&
@@ -1165,11 +1169,14 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     atomic_store_explicit(&g_render_thread.last_transfer_rects, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.last_transfer_ns, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.animated_slots_mask, 0u, memory_order_release);
+    fx_timeline_ingress_init();
     if (pthread_mutex_init(&g_render_thread.mutex, NULL) != 0) {
+        fx_timeline_ingress_shutdown();
         return false;
     }
     if (pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL) != 0) {
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
+        fx_timeline_ingress_shutdown();
         return false;
     }
     g_render_thread.last_transfer_clip_rect_count = 0u;
@@ -1180,6 +1187,7 @@ static bool start_render_thread(VgFrameBuffer *fb) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
         (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
+        fx_timeline_ingress_shutdown();
         return false;
     }
     g_render_thread.started = true;
@@ -1195,6 +1203,7 @@ static void stop_render_thread(void) {
     /* Wake blocked render wait to allow clean shutdown. */
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
     (void)pthread_join(g_render_thread.thread, NULL);
+    fx_timeline_ingress_shutdown();
     (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
     (void)pthread_mutex_destroy(&g_render_thread.mutex);
     fx_configure_render_thread_collision(NULL, NULL, false);

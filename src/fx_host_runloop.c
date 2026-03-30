@@ -33,6 +33,7 @@ static uint64_t fx_runloop_monotonic_now_ns(void) {
  * @return void
  */
 void fx_runloop_liveness_reset(void) {
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, 0u, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.iteration_count, 0u, memory_order_relaxed);
 }
@@ -61,7 +62,10 @@ ViewerRunloopLivenessSnapshot fx_runloop_liveness_snapshot(uint64_t now_ns) {
     snapshot.age_ns = (snapshot.last_tick_ns > 0u && now_ns > snapshot.last_tick_ns)
                           ? (now_ns - snapshot.last_tick_ns)
                           : 0u;
-    snapshot.state = (snapshot.last_tick_ns > 0u && snapshot.age_ns >= FX_RUNLOOP_STALL_THRESHOLD_NS)
+    bool blocked_wait = atomic_load_explicit(&g_runloop_thread.blocked_in_event_loop_wait, memory_order_relaxed);
+    snapshot.state = (snapshot.last_tick_ns > 0u &&
+                      snapshot.age_ns >= FX_RUNLOOP_STALL_THRESHOLD_NS &&
+                      !blocked_wait)
                          ? FX_RUNLOOP_LIVENESS_STALLED
                          : FX_RUNLOOP_LIVENESS_HEALTHY;
     return snapshot;
@@ -72,9 +76,12 @@ bool fx_drain_one_runloop_task(EvalState *st) {
         return false;
     }
     bool ran = false;
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, true, memory_order_relaxed);
     TRY {
         ran = event_loop_run(NULL, st);
+        atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     } CATCH(ex) {
+        atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
         if (ex) {
             fprintf(stderr, "[viewer-runloop] uncaught exception while draining runloop task\n");
             print_exception(ex);
@@ -119,6 +126,7 @@ bool start_runloop_thread(EvalState *st) {
         return true;
     }
     fx_runloop_liveness_reset();
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, fx_runloop_monotonic_now_ns(), memory_order_relaxed);
     g_runloop_thread.eval_state = st;
     atomic_store_explicit(&g_runloop_thread.running, true, memory_order_release);

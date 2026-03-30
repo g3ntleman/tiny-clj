@@ -262,6 +262,7 @@ list(APPEND SOURCES
     src/fx_collision.c
     src/fx_spatial_scene_bridge.c
     src/fx_spatial_dispatch.c
+    src/fx_timeline_ingress.c
     src/fx_host_runloop.c
     src/fx_config_loader.c
     

@@ -29,6 +29,7 @@ static CljSymbol *g_ns_tiny_fx_scene = NULL;
 static CljSymbol *g_kw_root = NULL;
 static CljSymbol *g_kw_timeline_ease = NULL;
 static CljSymbol *g_kw_timeline_easing = NULL;
+static VgTimelineProgressObserverFn g_timeline_progress_observer = NULL;
 static const SymbolCacheEntry g_scene_symbol_cache[] = {
     {&g_kw_timeline_ease, ":ease", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&g_kw_timeline_easing, ":easing", SYMBOL_CACHE_SCOPE_GLOBAL},
@@ -42,6 +43,10 @@ static inline void scene_ensure_symbol_cache(void) {
     }
     g_ns_tiny_fx_scene = intern_symbol_global("tiny-fx.scene");
     g_kw_root = g_ns_tiny_fx_scene ? intern_symbol(g_ns_tiny_fx_scene, ":root") : NULL;
+}
+
+void vg_set_timeline_progress_observer(VgTimelineProgressObserverFn observer) {
+    g_timeline_progress_observer = observer;
 }
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
@@ -1121,6 +1126,18 @@ static void capture_timeline_for_entity_field(ID entity_id, VgRenderedField fiel
     sample.at_end = info->at_end;
     sample.event_id_bits = timeline_event_id_bits(info->event_id);
     vg_rendered_state_capture_record_timeline((uintptr_t)entity_id, field, sample);
+    if (g_timeline_progress_observer) {
+        VgTimelineProgressSample progress = {
+            .event_id = info->event_id,
+            .step_index = info->step_index,
+            .keyframe_count = info->keyframe_count,
+            .phase_ms = info->phase_ms,
+            .period_ms = info->period_ms,
+            .end_event = info->end_event,
+            .at_end = info->at_end,
+        };
+        g_timeline_progress_observer(entity_id, &progress);
+    }
 }
 
 static ID resolve_entity_field_value(ID entity_id,

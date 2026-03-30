@@ -1,9 +1,26 @@
 #include "tests_common.h"
 #include "../builtins.h"
 #include "../event_loop.h"
+#include "../fx_host_runloop.h"
 #include "../rendered_state_snapshot.h"
 #include "../source_resolver.h"
 #include "../vector_scene_graph.h"
+
+TEST(test_breakout_contract_runloop_liveness_treats_blocking_wait_as_healthy) {
+    fx_runloop_liveness_reset();
+    fx_runloop_liveness_note_progress_for_tests(1ull * 1000ull * 1000ull * 1000ull);
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, true, memory_order_relaxed);
+
+    ViewerRunloopLivenessSnapshot waiting_snapshot =
+        fx_runloop_liveness_snapshot(7ull * 1000ull * 1000ull * 1000ull);
+    TEST_ASSERT_EQUAL_UINT64(6ull * 1000ull * 1000ull * 1000ull, waiting_snapshot.age_ns);
+    TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_HEALTHY, waiting_snapshot.state);
+
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
+    ViewerRunloopLivenessSnapshot stalled_snapshot =
+        fx_runloop_liveness_snapshot(7ull * 1000ull * 1000ull * 1000ull);
+    TEST_ASSERT_EQUAL_INT(FX_RUNLOOP_LIVENESS_STALLED, stalled_snapshot.state);
+}
 
 TEST(test_breakout_contract_audio_namespace_loads_tiny_fx_sound_runtime) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -1446,6 +1463,65 @@ TEST(test_breakout_contract_segment_timeline_new_segment_rearms_watcher_edge_sta
         "         (= true (:last-at-end watcher2)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_timeline_ingress_replans_breakout_segment_without_polling_wake_tick) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+    vg_rendered_state_reset_all();
+
+    ID setup = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.runtime) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    ((:prepare-callback cfg)) "
+        "    (tiny-clj.runtime/start-renderer! (:slots cfg)) "
+        "    (tiny-breakout.runtime/start-runtime! nil) "
+        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "    (contains? @tiny-fx.gfx-timeline/timeline-watchers* :tiny-breakout/segment-end)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    ID segment_before = eval_string("(:segment-id-seq @tiny-breakout.runtime/state*)", g_test_eval_state);
+    TEST_ASSERT_TRUE(is_fixnum(segment_before));
+    int before_seq = as_fixnum(segment_before);
+    TEST_ASSERT_TRUE_MESSAGE(before_seq >= 1, "launch should create first ball segment");
+
+    ID dispatched = eval_string(
+        "(do "
+        "  (require 'tiny-clj.event) "
+        "  (tiny-clj.event/dispatch-timeline-progress! "
+        "    {:event-id :tiny-breakout/segment-end "
+        "     :end-event true "
+        "     :at-end true "
+        "     :entity-id :ball "
+        "     :phase-ms 100 "
+        "     :period-ms 100 "
+        "     :step-index 1 "
+        "     :keyframe-count 2}))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, dispatched);
+
+    int drained = 0;
+    while (event_loop_has_pending_tasks() && drained < 16) {
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+        drained++;
+    }
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(),
+                              "timeline ingress should fully drain without polling wake tick");
+
+    ID segment_after = eval_string("(:segment-id-seq @tiny-breakout.runtime/state*)", g_test_eval_state);
+    TEST_ASSERT_TRUE(is_fixnum(segment_after));
+    int after_seq = as_fixnum(segment_after);
+    char seq_msg[128];
+    mini_snprintf(seq_msg, sizeof(seq_msg),
+                  "timeline ingress should advance segment-id-seq (before=%d after=%d)",
+                  before_seq,
+                  after_seq);
+    TEST_ASSERT_TRUE_MESSAGE(after_seq > before_seq, seq_msg);
 }
 
 TEST(test_breakout_contract_host_spatial_callback_dispatches_generic_spatial_watchers) {
