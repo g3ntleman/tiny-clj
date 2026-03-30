@@ -38,6 +38,15 @@ isProject: false
 - ein Timer fällig ist oder
 - ein Producer (z. B. Background-/Render-Thread) neue Arbeit in die Queue legt.
 
+## Fortschritt im Workspace
+
+- Status: Umsetzung abgeschlossen; alle TODOs stehen auf `completed`.
+- Implementierungs-Commit (Runloop + Wake): `0d83f2e8`
+- Praxis-Beweis-Commit (Breakout auf blockierendem Runloop): `cf505cc8`
+- Plan-/Gate-Commit (Planaufbau und Test-Gates): `ba022493`
+- Vollständiger Testnachweis nach Umsetzung: `./build/unit-tests-prof` mit `1974 Tests, 0 Failures, 7 Ignored`.
+- Praxis-Beweis-Testnachweis: `./build/unit-tests-prof --test "test_event_loop_latency/event_loop_run_blocking_thread_processes_breakout_input_ingress"` mit `1 Tests, 0 Failures`.
+
 ## Qualitäts-Gate pro Schritt (verpflichtend)
 
 - Nach jedem Umsetzungsschritt wird der komplette Unit-Test-Lauf `./build/unit-tests` sofort ausgeführt.
