@@ -530,6 +530,7 @@ DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
 DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
+DEFINE_EXTERN_SYMBOL(sym_slurp_bytes_data, "slurp-bytes");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 
 // Audio symbols

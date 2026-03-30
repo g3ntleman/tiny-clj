@@ -122,6 +122,18 @@ TEST(test_parse_collections) {
   evalstate_free(eval_state);
 }
 
+TEST(test_parse_map_capacity_is_tight) {
+  EvalState *eval_state = evalstate_new(false);
+
+  CljPersistentMap *map_result = (CljPersistentMap *)parse("{:a 1 :b 2 :c 3}", eval_state);
+  TEST_ASSERT_NOT_NULL(map_result);
+  TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
+  TEST_ASSERT_EQUAL_INT(3, map_result->count);
+  TEST_ASSERT_EQUAL_INT(3, map_result->capacity);
+
+  evalstate_free(eval_state);
+}
+
 TEST(test_parse_large_vector_drains_child_autoreleases) {
   EvalState *eval_state = evalstate_new(false);
   char input[4096];

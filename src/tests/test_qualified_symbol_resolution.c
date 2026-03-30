@@ -141,6 +141,62 @@ TEST(test_eval_clojure_core_if_expression) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
 }
 
+// symbol_is_ns_star() must not rely on pointer equality with SYM_NS_STAR alone: the reader and
+// intern_symbol(SYM_CLOJURE_CORE, "*ns*") produce a distinct qualified CljObject. The fallback
+// (symbol_get_cached_unqualified(sym) == SYM_NS_STAR) is required for correct *ns* semantics.
+TEST(test_qualified_clojure_core_ns_star_requires_symbol_is_ns_star_fallback) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(SYM_NS_STAR);
+    TEST_ASSERT_NOT_NULL(SYM_CLOJURE_CORE);
+
+    CljSymbol *qualified = intern_symbol(SYM_CLOJURE_CORE, "*ns*");
+    TEST_ASSERT_NOT_NULL(qualified);
+    TEST_ASSERT_NOT_NULL(qualified->ns_name);
+    TEST_ASSERT_EQUAL_STRING("clojure.core", qualified->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("*ns*", qualified->cname);
+    TEST_ASSERT_FALSE_MESSAGE(qualified == SYM_NS_STAR,
+                              "qualified *ns* must be a different interned object than SYM_NS_STAR");
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        symbol_is_ns_star(qualified),
+        "symbol_is_ns_star must recognize clojure.core/*ns* (needs unqualified fallback)");
+
+    CljObject *quoted = eval_string("'clojure.core/*ns*", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(quoted);
+    TEST_ASSERT_TRUE(TAG(quoted) == CLJ_SYMBOL);
+    CljSymbol *read_sym = as_symbol(quoted);
+    TEST_ASSERT_NOT_NULL(read_sym);
+    TEST_ASSERT_FALSE_MESSAGE(read_sym == SYM_NS_STAR, "reader must produce qualified symbol object");
+    TEST_ASSERT_TRUE_MESSAGE(symbol_is_ns_star(read_sym),
+                             "reader-qualified clojure.core/*ns* must still be *ns* for predicate");
+
+    load_clojure_core(g_test_eval_state);
+    ID ev = eval_string("clojure.core/*ns*", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(ev);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(ev) == CLJ_NAMESPACE,
+                             "eval of clojure.core/*ns* must yield current namespace (special *ns*)");
+}
+
+// Parser passes the local name as a pointer into a stack buffer; make_symbol() copies it inline
+// (cname not in .rodata), so qualified symbols never share cname address with static SYM_* rodata.
+// Core dispatch therefore cannot rely on (sym->cname == SYM_IF->cname) for reader-produced symbols.
+TEST(test_parser_qualified_core_cname_not_shared_with_sym_if_rodata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(SYM_IF);
+
+    CljObject *parsed = eval_string("'clojure.core/if", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    CljSymbol *q = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(q);
+    TEST_ASSERT_NOT_NULL(q->ns_name);
+    TEST_ASSERT_EQUAL_STRING("if", q->cname);
+    TEST_ASSERT_EQUAL_STRING("if", SYM_IF->cname);
+    TEST_ASSERT_FALSE_MESSAGE(
+        (void *)q->cname == (void *)SYM_IF->cname,
+        "qualified symbol from reader must not reuse SYM_IF cname pointer; inline copy vs rodata");
+}
+
 // Regression: clojure.core/doseq must resolve in call position for Clojure compatibility.
 TEST(test_eval_clojure_core_doseq_expression) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

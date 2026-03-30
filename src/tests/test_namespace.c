@@ -966,17 +966,39 @@ TEST(test_require_with_refer) {
     CljObject *req_result = eval_string("(require '[test.refer :refer [func]])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify func was copied to current namespace (must use qualified symbol for map_get)
+    // Verify func was copied to current namespace using unqualified binding.
+    // This avoids allocating one target-qualified symbol per referred var.
     CljSymbol *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
-    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
-        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
-    CljSymbol *func_sym_qualified = intern_symbol(ns_name_sym, "func");
-    TEST_ASSERT_NOT_NULL(func_sym_qualified);
-    CljObject *func_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, func_sym_qualified, NULL);
+    CljObject *func_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, func_sym, NULL);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
+
+    // Keep resolution semantics: unqualified lookup in current ns still works.
+    ID resolved = ns_resolve(g_test_eval_state, func_sym);
+    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
+    TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)resolved));
+
+    // Heap optimization contract: refer should not create target-qualified map keys.
+    CljSymbol *current_ns_name = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->name : NULL;
+    bool has_qualified_func_key = false;
+    MAP_FOR_EACH(g_test_eval_state->current_ns->mappings, key, value) {
+        (void)value;
+        if (!key || TAG(key) != CLJ_SYMBOL) {
+            continue;
+        }
+        CljSymbol *k = as_symbol(key);
+        if (!k || !k->cname) {
+            continue;
+        }
+        if (strcmp(k->cname, "func") == 0 && k->ns_name == current_ns_name) {
+            has_qualified_func_key = true;
+            break;
+        }
+    }
+    TEST_ASSERT_FALSE(has_qualified_func_key);
 
 }
 
@@ -987,26 +1009,42 @@ TEST(test_require_with_refer_all) {
     CljObject *req_result = eval_string("(require '[test.referall :refer :all])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify both vars were copied to current namespace (must use qualified symbols for map_get)
+    // Verify both vars were copied to current namespace using unqualified bindings.
     CljSymbol *var1_sym = intern_symbol_global("var1");
     CljSymbol *var2_sym = intern_symbol_global("var2");
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
-    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
-        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
-    CljSymbol *var1_sym_qualified = intern_symbol(ns_name_sym, "var1");
-    CljSymbol *var2_sym_qualified = intern_symbol(ns_name_sym, "var2");
-    TEST_ASSERT_NOT_NULL(var1_sym_qualified);
-    TEST_ASSERT_NOT_NULL(var2_sym_qualified);
 
-    CljObject *var1_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var1_sym_qualified, NULL);
-    CljObject *var2_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var2_sym_qualified, NULL);
+    CljObject *var1_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var1_sym, NULL);
+    CljObject *var2_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var2_sym, NULL);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var2_val));
     TEST_ASSERT_EQUAL(300, as_fixnum((CljValue)var1_val));
     TEST_ASSERT_EQUAL(400, as_fixnum((CljValue)var2_val));
+
+    // Heap optimization contract: :refer :all should not create target-qualified keys.
+    CljSymbol *current_ns_name = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->name : NULL;
+    bool has_qualified_var1_key = false;
+    bool has_qualified_var2_key = false;
+    MAP_FOR_EACH(g_test_eval_state->current_ns->mappings, key, value) {
+        (void)value;
+        if (!key || TAG(key) != CLJ_SYMBOL) {
+            continue;
+        }
+        CljSymbol *k = as_symbol(key);
+        if (!k || !k->cname || k->ns_name != current_ns_name) {
+            continue;
+        }
+        if (strcmp(k->cname, "var1") == 0) {
+            has_qualified_var1_key = true;
+        } else if (strcmp(k->cname, "var2") == 0) {
+            has_qualified_var2_key = true;
+        }
+    }
+    TEST_ASSERT_FALSE(has_qualified_var1_key);
+    TEST_ASSERT_FALSE(has_qualified_var2_key);
 
 }
 

@@ -1,3 +1,4 @@
+
 extern struct CljSymbol *SYM_KW_META;
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
@@ -488,6 +489,7 @@ extern StaticSymbolData sym_deref_data;
 extern StaticSymbolData sym_reset_bang_data;
 extern StaticSymbolData sym_swap_bang_data;
 extern StaticSymbolData sym_slurp_data;
+extern StaticSymbolData sym_slurp_bytes_data;
 extern StaticSymbolData sym_spit_data;
 
 // Audio symbols

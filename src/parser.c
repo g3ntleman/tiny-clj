@@ -1089,8 +1089,8 @@ static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector
   unsigned int end_index = vector_count(backing);
   unsigned int pair_count = (end_index - base_index) / 2;
 
-  // Erstelle die Map mit exakter Kapazität - use 0 for empty singleton
-  CljPersistentMap *map = make_map(pair_count > 0 ? pair_count * 2 : 0, STRONG);
+  // Keep parsed map literals tight: no extra headroom in retained map objects.
+  CljPersistentMap *map = make_map(pair_count > 0 ? (int)pair_count : 0, STRONG);
 
   // Kopiere die Key-Value-Paare
   for (unsigned int i = 0; i < pair_count; i++) {

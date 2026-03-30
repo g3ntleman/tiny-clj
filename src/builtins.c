@@ -4515,6 +4515,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_macroexpand_1, "macroexpand-1"),
     NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
+    NATIVE_ENTRY_BOOT_CNAME(native_run_next_task, "run-next-task-native"),
 
     // tiny-clj.datetime functions
     NATIVE_ENTRY(&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days),
@@ -4712,6 +4713,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_reset_bang_data.sym, native_reset_bang),
     NATIVE_ENTRY(&sym_swap_bang_data.sym, native_swap_bang),
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
+    NATIVE_ENTRY(&sym_slurp_bytes_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
     NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
@@ -5278,31 +5280,14 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
  * @param symbols Vector of symbols to copy
  */
 static inline CljSymbol *refer_mapping_key_for_target_ns(CljNamespace *target_ns, CljSymbol *symbol) {
-  if (!target_ns || !symbol || !symbol->cname) {
+  (void)target_ns;
+  if (!symbol || !symbol->cname) {
     return NULL;
   }
 
-  // clojure.core stores symbols unqualified to match JVM behavior.
-  if (target_ns->name == SYM_CLOJURE_CORE) {
-    return intern_symbol_global(symbol->cname);
-  }
-
-  // Already qualified to this namespace.
-  if (symbol->ns_name && target_ns->name && symbol->ns_name == target_ns->name) {
-    return symbol;
-  }
-
-  // Keep explicitly qualified symbol as-is.
-  if (symbol->ns_name && symbol->ns_name->cname) {
-    return symbol;
-  }
-
-  // Qualify unqualified symbol for target namespace.
-  if (target_ns->name && target_ns->name->cname) {
-    return intern_symbol(target_ns->name, symbol->cname);
-  }
-
-  return symbol;
+  // Keep refer-bindings unqualified in the target namespace.
+  // This avoids creating one target-qualified symbol per referred var.
+  return intern_symbol_global(symbol->cname);
 }
 
 static inline bool refer_assoc_into_namespace(CljNamespace *target_ns, CljSymbol *symbol, ID value) {
@@ -8315,6 +8300,15 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     symbol = intern_symbol(target_ns->name, symbol_name);
   } else {
     symbol = intern_symbol_global(symbol_name);
+  }
+  if (symbol && target_ns->mappings) {
+    // Keep existing namespace bindings untouched.
+    // This makes repeated register_builtins() idempotent and avoids clobbering
+    // Clojure-level defs (and their metadata) with raw native registrations.
+    ID existing = map_get_sentinel((CljValue)target_ns->mappings, symbol, NULL);
+    if (existing) {
+      return;
+    }
   }
   ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), native_cfunc_flags(func));
   if (symbol && func_obj) {

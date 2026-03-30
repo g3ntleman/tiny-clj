@@ -56,6 +56,11 @@
 #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
 #include <execinfo.h>
 #endif
+#if defined(__APPLE__) && defined(__MACH__)
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <malloc/malloc.h>
+#endif
 
 // AUTORELEASE POOL: CljPersistentVector with CLJ_FLAG_WEAK_ELEMENTS. _restore=vector_count at block start;
 // drain_to_depth(mark) RELEASEs [mark,count) and truncates.
@@ -1073,6 +1078,29 @@ static bool pointer_in_half_open_range(const void *ptr, const void *start, const
 }
 #endif
 
+#if defined(__APPLE__) && defined(__MACH__)
+/** True if ptr lies in a Mach VM region that is readable and contains ptr (see mach_vm_region(3)). */
+static bool apple_vm_region_is_readable_mapped(const void *ptr) {
+  mach_vm_address_t region_addr = (mach_vm_address_t)(uintptr_t)ptr;
+  mach_vm_size_t region_size = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object_name = MACH_PORT_NULL;
+  kern_return_t kr = mach_vm_region(mach_task_self(), &region_addr, &region_size, VM_REGION_BASIC_INFO_64,
+                                    (vm_region_info_t)&info, &count, &object_name);
+  if (kr != KERN_SUCCESS) {
+    return false;
+  }
+  uintptr_t p = (uintptr_t)ptr;
+  uintptr_t lo = (uintptr_t)region_addr;
+  uintptr_t hi = lo + (uintptr_t)region_size;
+  if (p < lo || p >= hi) {
+    return false;
+  }
+  return (info.protection & VM_PROT_READ) != 0;
+}
+#endif
+
 bool is_pointer_in_data_segment(const void *ptr) {
   if (!ptr) {
     return false;
@@ -1103,6 +1131,15 @@ bool is_pointer_in_data_segment(const void *ptr) {
   }
 
   return false;
+#elif defined(__APPLE__) && defined(__MACH__)
+  /* malloc_size(3): >0 iff ptr points into a malloc block for this process. */
+  if (malloc_size(ptr) > (size_t)0) {
+    return false;
+  }
+  if (is_pointer_on_stack(ptr)) {
+    return false;
+  }
+  return apple_vm_region_is_readable_mapped(ptr);
 #else
   uintptr_t a = (uintptr_t)ptr;
 #if UINTPTR_MAX == UINT64_MAX

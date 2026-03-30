@@ -102,6 +102,36 @@ TEST(test_require_sound_demos_does_not_autoload_sound_namespace) {
                                  "play-demo! should load tiny-fx.sound on demand");
 }
 
+TEST(test_play_startup_entertainer_does_not_autoload_tiny_clj_fs_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    (void)eval_string("(require 'tiny-fx.sound-demos)", g_test_eval_state);
+    CljNamespace *fs_ns_after_require = ns_find("tiny-clj.fs");
+    TEST_ASSERT_NULL_MESSAGE(fs_ns_after_require,
+                             "require tiny-fx.sound-demos must not autoload tiny-clj.fs");
+
+    ID played = eval_string("(do (tiny-fx.sound-demos/play-startup-entertainer!) true)", g_test_eval_state);
+    TEST_ASSERT_TRUE(played && played != clj_false);
+
+    CljNamespace *fs_ns_after_play = ns_find("tiny-clj.fs");
+    TEST_ASSERT_NULL_MESSAGE(fs_ns_after_play,
+                             "play-startup-entertainer! should not load tiny-clj.fs");
+}
+
+TEST(test_sound_demos_bytes_asset_under_prefix_returns_bytes) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID loaded = eval_string(
+        "(do (require 'tiny-fx.sound-demos) "
+        "    (let [b (tiny-fx.sound-demos/bytes-asset-under-prefix "
+        "             \"tiny-fx/sound-demos\" \"the-entertainer.trk1\")] "
+        "      (and b (> (alength b) 0))))",
+        g_test_eval_state);
+
+    TEST_ASSERT_TRUE_MESSAGE(loaded && loaded != clj_false,
+                             "bytes-asset-under-prefix should return non-empty byte-array");
+}
+
 TEST(test_assets_edn_sound_demos_loader_contract) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     

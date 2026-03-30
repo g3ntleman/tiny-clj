@@ -124,8 +124,14 @@ Automatic periodic polling is intentionally disabled; callers invoke this explic
               progress (if (and (keyword? slot) entity-id (keyword? field))
                          (runtime/renderer-timeline-progress slot entity-id field)
                          nil)]
-          (when (map? progress)
-            (tiny-fx.gfx-timeline/dispatch-watch! watch-id progress))
+          (cond
+            (map? progress)
+            (tiny-fx.gfx-timeline/dispatch-watch! watch-id progress)
+
+            (= true (:allow-missing-progress watcher))
+            (dispatch-callback! watcher nil)
+
+            :else nil)
           (recur (inc i))))))
   nil)
 
@@ -141,9 +147,10 @@ Returns true when a watcher for :event-id exists, else false."
       false)))
 
 (defn kick-watchers!
-  "Legacy entry point retained for compatibility.
-Timeline events are now push-driven; no periodic poll timer is scheduled here."
+  "Compatibility entry point.
+Polls timeline watchers once."
   []
+  (poll-watchers!)
   nil)
 
 (defn reset-watch-edge!
@@ -189,6 +196,7 @@ segment and then emits the next real false->true end edge."
                           :slot (:slot opts)
                           :entity-id (:entity-id opts)
                           :field (:field opts)
+                          :allow-missing-progress (:allow-missing-progress opts)
                           :callback f
                           :last-at-end false
                           :last-at-end-by-source {}})))

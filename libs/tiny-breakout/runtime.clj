@@ -22,7 +22,6 @@
                                         :field :x})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
-(def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
 
 (defn- state-audio-prewarmed?
   [state]
@@ -331,24 +330,6 @@
     (apply-input! {:launch true}))
   nil)
 
-(defn- on-segment-fallback-timer!
-  []
-  (let [now-ms (current-time-ms)
-        current @state*
-        segment (:ball-segment current)
-        segment-id (if (map? segment) (:id segment) nil)
-        end-ms (if (map? segment) (:end-ms segment) nil)]
-    (if (and (map? segment)
-             (number? segment-id)
-             (number? end-ms))
-      (if (<= end-ms now-ms)
-        (publish-state! (core/apply-segment-end-at-ms current segment-id end-ms))
-        (schedule (max 1 (- end-ms now-ms))
-                  {:id segment-fallback-timer-id
-                   :fn on-segment-fallback-timer!}))
-      (cancel-timer segment-fallback-timer-id)))
-  nil)
-
 (defn- dispatch-segment-progress-sample!
   []
   (when @segment-watch-active*
@@ -367,7 +348,6 @@
         state-without-events (assoc state :events [])
         segment (:ball-segment state-without-events)
         segment-id (if (map? segment) (:id segment) nil)
-        end-ms (if (map? segment) (:end-ms segment) nil)
         install-segment-watch? (and (map? segment)
                                     (not segment-watch-active?))
         active-after-install? (or segment-watch-active?
@@ -378,11 +358,7 @@
                                 nil)
         rearm-segment-watch? (and active-after-install?
                                   (number? segment-id)
-                                  (not= segment-id segment-watch-segment-id))
-        fallback-delay-ms (if (and (number? segment-id)
-                                   (number? end-ms))
-                            (max 1 (- end-ms now-ms))
-                            nil)]
+                                  (not= segment-id segment-watch-segment-id))]
     {:state state-without-events
      :events events
      :overlay-animation (next-overlay-animation current-overlay-animation
@@ -392,7 +368,6 @@
      :install-segment-watch? install-segment-watch?
      :next-segment-watch-id next-segment-watch-id
      :rearm-segment-watch? rearm-segment-watch?
-     :fallback-delay-ms fallback-delay-ms
      :dispatch-progress? (map? segment)}))
 
 (defn- apply-publish-state-plan!
@@ -401,17 +376,13 @@
     (reset! overlay-animation* (:overlay-animation plan))
     (when (:install-segment-watch? plan)
       (event/on {:source :timeline :id segment-watch-id}
-                on-segment-timeline-event!)
+                on-segment-timeline-event!
+                (assoc segment-progress-source :allow-missing-progress true))
       (reset! segment-watch-active* true))
     (if (:rearm-segment-watch? plan)
       (event/rearm-timeline-watch-edge! segment-watch-id)
       nil)
     (reset! segment-watch-segment-id* (:next-segment-watch-id plan))
-    (if (number? (:fallback-delay-ms plan))
-      (schedule (:fallback-delay-ms plan)
-                {:id segment-fallback-timer-id
-                 :fn on-segment-fallback-timer!})
-      (cancel-timer segment-fallback-timer-id))
     (reset! state* state-without-events)
     (when (:dispatch-progress? plan)
       (dispatch-segment-progress-sample!))
@@ -472,7 +443,6 @@
 
 (defn- deactivate-segment-watch!
   []
-  (cancel-timer segment-fallback-timer-id)
   (reset! segment-watch-segment-id* nil)
   (when @segment-watch-active*
     (event/on {:source :timeline :id segment-watch-id} nil)

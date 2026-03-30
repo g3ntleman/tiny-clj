@@ -626,8 +626,14 @@
 ; ============================================================================
 ; Event Loop Functions (Native)
 ; ============================================================================
-^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise."}
-(defn run-next-task [] :native)
+^#^{:doc "Low-level native event-loop step used by clojure.core/run-next-task."}
+(defn run-next-task-native [] :native)
+^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise. Also kicks timeline watcher polling when tiny-clj.event is loaded."}
+(defn run-next-task []
+  (let [ran? (run-next-task-native)]
+    (when (find-ns 'tiny-clj.event)
+      (tiny-clj.event/kick-timeline-watchers!))
+    ran?))
 ^#^{:doc "Calls f inside a nested autorelease pool. Temporaries created by f are freed on return; the return value is transferred to the outer pool."}
 (defn with-pool [f] :native)
 ^#^{:doc "Schedules work after ms milliseconds. Second arg can be a function f, or options map {:fn f :id k :period-ms p}. With :id, scheduling upserts by equal key. If :period-ms > 0, the timer is periodic."}
@@ -655,6 +661,8 @@
 ; Note: slurp resolves embedded sources on ESP32. spit writes via the KV-backed FS layer.
 ^#^{:doc "Reads the entire contents of filename and returns it as a string."}
 (defn slurp [filename] :native)
+^#^{:doc "Reads the entire contents of filename and returns it as a byte-array."}
+(defn slurp-bytes [filename] :native)
 ^#^{:doc "Writes content (and optional more strings) to filename, overwriting existing data."}
 (defn spit [filename content & more] :native)
 

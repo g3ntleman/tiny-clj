@@ -410,3 +410,21 @@ TEST(test_zombie_detection) {
     TEST_IGNORE();
 }
 #endif
+
+// -----------------------------------------------------------------------------
+// is_pointer_in_data_segment: heap vs static literal (Apple: malloc_size for heap,
+// readable VM mapping for positives; ESP: linker/DROM/.data; other hosts: heuristic).
+// -----------------------------------------------------------------------------
+
+TEST(test_is_pointer_in_data_segment_heap_false) {
+    char *heap_ptr = (char *)malloc(16);
+    TEST_ASSERT_NOT_NULL(heap_ptr);
+    TEST_ASSERT_FALSE(is_pointer_in_data_segment(heap_ptr));
+    free(heap_ptr);
+}
+
+TEST(test_is_pointer_in_data_segment_static_literal_true) {
+    static const char *literal = "tiny-clj-static-literal";
+    TEST_ASSERT_TRUE(is_pointer_in_data_segment(literal));
+}
+
