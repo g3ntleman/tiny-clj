@@ -378,16 +378,26 @@ if(APPLE)
     endforeach()
 endif()
 
+# Platform-specific source selection
+if(APPLE)
+    set(TINYCLJ_PLATFORM_SOURCE src/platform_macos.c)
+else()
+    set(TINYCLJ_PLATFORM_SOURCE src/platform_linux.c)
+endif()
+
 # Host REPL product
 add_executable(tiny-clj EXCLUDE_FROM_ALL
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
     ${SOURCES}
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
 tinyclj_link_apple_base(tiny-clj)
+if(NOT APPLE)
+    target_link_libraries(tiny-clj PRIVATE m)
+endif()
 tinyclj_target_configure_tiny_fx(tiny-clj HOST OFF)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
@@ -417,7 +427,7 @@ if(APPLE)
 else()
     add_executable(tiny-fx EXCLUDE_FROM_ALL
         src/repl.c
-        src/platform_macos.c
+        ${TINYCLJ_PLATFORM_SOURCE}
         src/line_editor.c
         ${SOURCES}
     )
@@ -425,6 +435,9 @@ endif()
 target_link_libraries(tiny-fx PRIVATE subjective-c)
 target_link_libraries(tiny-fx PRIVATE tiny-db)
 tinyclj_link_apple_base(tiny-fx)
+if(NOT APPLE)
+    target_link_libraries(tiny-fx PRIVATE m)
+endif()
 tinyclj_target_configure_tiny_fx(tiny-fx HOST ON)
 if(APPLE AND TINYCLJ_WITH_TINY_FX)
     target_link_libraries(tiny-fx PRIVATE minifb "-framework AppKit" "-framework ApplicationServices" "-framework CoreGraphics")
@@ -455,13 +468,16 @@ endif()
 # Profiling Build - Optimized but with visible functions for profiling
 add_executable(tiny-clj-profile
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
 tinyclj_link_apple_base(tiny-clj-profile)
+if(NOT APPLE)
+    target_link_libraries(tiny-clj-profile PRIVATE m)
+endif()
 tinyclj_target_configure_tiny_fx(tiny-clj-profile HOST OFF)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
@@ -591,10 +607,10 @@ add_executable(unit-tests
     ${TINYCLJ_FX_TEST_SOURCES}
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
-    # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
+    # Note: src/repl.c, platform source, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
 )
 target_compile_definitions(unit-tests PRIVATE
@@ -611,6 +627,9 @@ tinyclj_target_configure_tiny_fx(unit-tests HOST ON)
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
 tinyclj_link_apple_base(unit-tests)
+if(NOT APPLE)
+    target_link_libraries(unit-tests PRIVATE m)
+endif()
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests

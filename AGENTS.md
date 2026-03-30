@@ -57,3 +57,29 @@ Do not add this trailer to commits:
 - Document C APIs in the corresponding `.c` files.
 - Use Doxygen-style C comments (`/** ... */`) with `@brief`, `@param`, and `@return` for API/function docs.
 - Keep headers focused on declarations/contracts, with only minimal inline commentary when needed.
+
+## Cursor Cloud specific instructions
+
+### Linux build (Cloud Agent environment)
+
+The project is macOS/ESP32-primary. Cloud Agent VMs run Linux. Key differences:
+
+- **Platform source**: `src/platform_linux.c` is the Linux platform layer (equivalent to `src/platform_macos.c`). CMakeLists.txt selects the correct file via `TINYCLJ_PLATFORM_SOURCE`.
+- **Compiler**: Use GCC (`CC=gcc cmake ...`) because the embedded Clojure sources use C++ raw string literals (`R"DELIM(...)DELIM"`), which GCC accepts as a GNU extension in C99/C11 mode. Clang in C mode does not support raw string literals.
+- **Math library**: Linux targets link `-lm` explicitly (handled in CMakeLists.txt via `if(NOT APPLE)` guards).
+- **libstdc++ symlink**: The `libstdc++.so` linker symlink at `/usr/lib/x86_64-linux-gnu/libstdc++.so` may be missing. If CMake configuration fails with `cannot find -lstdc++`, create it: `sudo ln -sf /usr/lib/gcc/x86_64-linux-gnu/13/libstdc++.so /usr/lib/x86_64-linux-gnu/libstdc++.so`.
+
+### Build commands
+
+```bash
+git submodule update --init --recursive external/unity
+CC=gcc cmake -DCMAKE_BUILD_TYPE=Debug -B build
+cmake --build build --target unit-tests -j$(nproc)
+cmake --build build --target tiny-clj -j$(nproc)
+```
+
+### Running
+
+- **Tests**: `./build/unit-tests` (445+ tests). Use `--test "group/*"` to run specific groups.
+- **REPL**: `./build/tiny-clj` for interactive mode, `./build/tiny-clj -e '(+ 1 2)'` for eval.
+- **Known issue**: `test_file_io/tiny_clj_kv_supports_large_values` crashes with `malloc_consolidate` on Linux (pre-existing, not caused by the platform layer).
