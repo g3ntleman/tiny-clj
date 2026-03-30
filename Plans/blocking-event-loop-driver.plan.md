@@ -20,6 +20,9 @@ todos:
   - id: update-docs
     content: Dokumentation fuer run-next vs. blockierenden Driver in C- und Clojure-API anpassen
     status: pending
+  - id: breakout-practice-proof
+    content: Praxis-Beweis erbringen, dass Breakout im neuen blockierenden Runloop läuft (Renderthread + Interpreterthread), inklusive reproduzierbarem Test-Nachweis
+    status: pending
   - id: cleanup
     content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
     status: pending
@@ -89,7 +92,16 @@ isProject: false
    - Kurze API-Doku in [`/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.h`](/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.h) und Clojure-seitige Klarstellung in [`/Users/theisen/Projects/Work/tiny-clj-feature/libs/clojure/core.clj`](/Users/theisen/Projects/Work/tiny-clj-feature/libs/clojure/core.clj): `run-next-task` bleibt Schrittfunktion; blockierendes Verhalten liegt im Driver.
    - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
 
-8. **Aufräumen**
+8. **Praxis-Beweis mit Breakout (Pflicht-Abschluss)**
+   - Breakout explizit im Host-Pfad mit Renderthread + Interpreterthread (blockierender Runloop) nachweisen.
+   - Pflichtnachweis über die bestehende Breakout-Startup-Regression:
+     - `./build/unit-tests --test "test_breakout_runtime_startup/render_thread_collision_bounces_without_main_thread_poll"`
+     - alternativ (bei Profil-Binary): `./build/unit-tests-prof --test "test_breakout_runtime_startup/render_thread_collision_bounces_without_main_thread_poll"`
+   - Optionaler Zusatznachweis (stärkerer Praxisbezug):
+     - `test_breakout_runtime_startup/first_launch_with_render_thread_fits_debug_heap_limit`
+   - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
+
+9. **Aufräumen**
    - Debug-Reste, temporäre Workarounds und tote Codepfade entfernen.
    - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` ist grün.
 
@@ -98,4 +110,8 @@ isProject: false
 - Keine Breaking-Change fuer `run-next-task`-Call-Sites.
 - Kein Lost-Wakeup zwischen Queue-Update und Wait.
 - Timer-Deadline-Berechnung bleibt korrekt bei parallelen Producer-Aktionen.
+
+## Abschlusskriterium
+
+- Der Plan gilt erst als erfüllt, wenn der Praxis-Beweis zeigt, dass Breakout mit aktivem Renderthread unter dem neuen blockierenden Runloop korrekt läuft und der vollständige Unit-Test-Lauf grün ist.
 

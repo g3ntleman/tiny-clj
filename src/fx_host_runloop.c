@@ -7,7 +7,6 @@
 
 #include "eval.h"
 #include "event_loop.h"
-#include "platform.h"
 #include "exception.h"
 #include "memory.h"
 
@@ -74,7 +73,7 @@ bool fx_drain_one_runloop_task(EvalState *st) {
     }
     bool ran = false;
     TRY {
-        ran = event_loop_run_next(NULL, st);
+        ran = event_loop_run(NULL, st);
     } CATCH(ex) {
         if (ex) {
             fprintf(stderr, "[viewer-runloop] uncaught exception while draining runloop task\n");
@@ -104,14 +103,7 @@ static void *fx_runloop_thread_main(void *arg) {
         uint64_t now_ns = fx_runloop_monotonic_now_ns();
         atomic_store_explicit(&g_runloop_thread.last_tick_ns, now_ns, memory_order_relaxed);
         (void)atomic_fetch_add_explicit(&g_runloop_thread.iteration_count, 1u, memory_order_relaxed);
-        if (fx_drain_one_runloop_task(st)) {
-            continue;
-        }
-        int timeout_ms = event_loop_time_until_next_timer_ms();
-        if (timeout_ms < 0 || timeout_ms > 1) {
-            timeout_ms = 1;
-        }
-        platform_runloop_run_once((unsigned int)timeout_ms);
+        (void)fx_drain_one_runloop_task(st);
     }
     /* Runloop thread owns its own autorelease pool state; drain/free before exit. */
     autorelease_pool_free();
@@ -151,6 +143,7 @@ void stop_runloop_thread(void) {
         return;
     }
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
+    event_loop_wake();
     (void)pthread_join(g_runloop_thread.thread, NULL);
     subjective_c_clear_interpreter_thread();
     g_runloop_thread.started = false;

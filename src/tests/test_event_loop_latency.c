@@ -6,12 +6,51 @@
 #include "../event_loop.h"
 #include "../function.h"
 #include <pthread.h>
+#include <time.h>
 #include <unistd.h>
 
 static ID event_loop_test_slow_native_task(ID *args, unsigned int argc) {
     (void)args;
     (void)argc;
     usleep(25000);
+    return NULL;
+}
+
+static uint64_t event_loop_test_monotonic_ms(void) {
+    struct timespec ts = {0};
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0u;
+    }
+    return ((uint64_t)ts.tv_sec * 1000ull) + ((uint64_t)ts.tv_nsec / 1000000ull);
+}
+
+typedef struct {
+    ID fn;
+    useconds_t delay_us;
+    bool enqueue_ok;
+} EventLoopRunIngressWakeArgs;
+
+static void *event_loop_run_ingress_wake_thread(void *arg) {
+    EventLoopRunIngressWakeArgs *args = (EventLoopRunIngressWakeArgs *)arg;
+    if (!args || !args->fn) {
+        return NULL;
+    }
+    usleep(args->delay_us);
+    args->enqueue_ok = event_loop_enqueue_ingress((CljObject *)args->fn);
+    return NULL;
+}
+
+typedef struct {
+    useconds_t delay_us;
+} EventLoopRunWakeArgs;
+
+static void *event_loop_run_wake_thread(void *arg) {
+    EventLoopRunWakeArgs *args = (EventLoopRunWakeArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    usleep(args->delay_us);
+    event_loop_wake();
     return NULL;
 }
 
@@ -834,4 +873,93 @@ TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_in
     ingress_marker = eval_string("@event-loop-ingress-order-marker", g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), ingress_marker);
     TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "queue should be empty after both tasks run");
+}
+
+TEST(test_event_loop_run_blocks_until_ingress_enqueue_and_executes_task) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-run-ingress-marker (atom 0)) "
+        "  (fn event-loop-run-ingress-task [] "
+        "    (reset! event-loop-run-ingress-marker 1) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    EventLoopRunIngressWakeArgs args = {
+        .fn = RETAIN(fn),
+        .delay_us = 20000,
+        .enqueue_ok = false,
+    };
+    pthread_t producer;
+    int rc = pthread_create(&producer, NULL, event_loop_run_ingress_wake_thread, &args);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+
+    uint64_t start_ms = event_loop_test_monotonic_ms();
+    bool ran = event_loop_run(NULL, g_test_eval_state);
+    uint64_t elapsed_ms = event_loop_test_monotonic_ms() - start_ms;
+
+    rc = pthread_join(producer, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+
+    RELEASE(args.fn);
+
+    TEST_ASSERT_TRUE_MESSAGE(args.enqueue_ok, "producer should enqueue ingress task");
+    TEST_ASSERT_TRUE_MESSAGE(ran, "event_loop_run should execute queued ingress task");
+    TEST_ASSERT_TRUE_MESSAGE(elapsed_ms >= 8u, "event_loop_run should block until producer enqueue");
+
+    ID marker = eval_string("@event-loop-run-ingress-marker", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+}
+
+TEST(test_event_loop_run_blocks_until_timer_due_and_executes_task) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-run-timer-marker (atom 0)) "
+        "  (schedule 20 (fn [] (reset! event-loop-run-timer-marker 1))))",
+        g_test_eval_state);
+    TEST_ASSERT_NULL(setup);
+
+    uint64_t start_ms = event_loop_test_monotonic_ms();
+    bool ran = event_loop_run(NULL, g_test_eval_state);
+    uint64_t elapsed_ms = event_loop_test_monotonic_ms() - start_ms;
+
+    TEST_ASSERT_TRUE_MESSAGE(ran, "event_loop_run should execute timer callback after deadline");
+    TEST_ASSERT_TRUE_MESSAGE(elapsed_ms >= 8u, "event_loop_run should block until timer is due");
+
+    ID marker = eval_string("@event-loop-run-timer-marker", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+}
+
+TEST(test_event_loop_run_wake_interrupts_idle_wait_without_work) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    EventLoopRunWakeArgs args = {
+        .delay_us = 20000,
+    };
+    pthread_t waker;
+    int rc = pthread_create(&waker, NULL, event_loop_run_wake_thread, &args);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+
+    uint64_t start_ms = event_loop_test_monotonic_ms();
+    bool ran = event_loop_run(NULL, g_test_eval_state);
+    uint64_t elapsed_ms = event_loop_test_monotonic_ms() - start_ms;
+
+    rc = pthread_join(waker, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+
+    TEST_ASSERT_FALSE_MESSAGE(ran, "event_loop_run should return false when only externally woken");
+    TEST_ASSERT_TRUE_MESSAGE(elapsed_ms >= 8u, "event_loop_run should block before wake");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "wake-only path should not enqueue work");
 }

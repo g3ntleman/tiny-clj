@@ -22,6 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
+#include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
 
@@ -110,6 +112,9 @@ static uint32_t g_event_loop_ingress_rejected_count = 0u;
 static uint32_t g_event_loop_ingress_drained_count = 0u;
 static uint32_t g_event_loop_ingress_high_watermark = 0u;
 static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
+static pthread_mutex_t g_event_loop_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_event_loop_wait_cond = PTHREAD_COND_INITIALIZER;
+static atomic_uint_fast64_t g_event_loop_wait_epoch = 1u;
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
@@ -133,6 +138,56 @@ static uint64_t event_loop_monotonic_now_ns(void) {
         return 0u;
     }
     return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+static struct timespec event_loop_deadline_from_now_ms(int timeout_ms) {
+    struct timespec deadline = {0};
+    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0 || timeout_ms <= 0) {
+        return deadline;
+    }
+    int64_t add_sec = (int64_t)(timeout_ms / 1000);
+    int64_t add_nsec = (int64_t)(timeout_ms % 1000) * 1000000ll;
+    int64_t nsec_total = (int64_t)deadline.tv_nsec + add_nsec;
+    deadline.tv_sec += (time_t)(add_sec + (nsec_total / 1000000000ll));
+    deadline.tv_nsec = (long)(nsec_total % 1000000000ll);
+    return deadline;
+}
+
+static inline void event_loop_notify_waiters(void) {
+    (void)atomic_fetch_add_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+        return;
+    }
+    (void)pthread_cond_broadcast(&g_event_loop_wait_cond);
+    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+}
+
+static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t observed_epoch) {
+    if (timeout_ms == 0) {
+        return;
+    }
+    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+        return;
+    }
+    if (timeout_ms < 0) {
+        while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+            if (pthread_cond_wait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex) != 0) {
+                break;
+            }
+        }
+    } else {
+        struct timespec deadline = event_loop_deadline_from_now_ms(timeout_ms);
+        while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+            int rc = pthread_cond_timedwait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex, &deadline);
+            if (rc == ETIMEDOUT) {
+                break;
+            }
+            if (rc != 0) {
+                break;
+            }
+        }
+    }
+    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
 }
 
 static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
@@ -488,6 +543,7 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(EventL
         g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
     }
     event_loop_ingress_lock_release();
+    event_loop_notify_waiters();
     return EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
 }
 
@@ -772,7 +828,11 @@ static bool timer_schedule_with_id(CljObject *fn_zero_arity,
         .period_ms     = (int)period_ms,
         .timer_id      = timer_id
     };
-    return timer_insert_sorted(entry);
+    bool inserted = timer_insert_sorted(entry);
+    if (inserted) {
+        event_loop_notify_waiters();
+    }
+    return inserted;
 }
 
 // Helper function to ensure task queue is initialized
@@ -811,6 +871,7 @@ void event_loop_init(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
+    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
     g_runloop_last_warn_ns = 0u;
     task_queue_get();
 }
@@ -844,7 +905,9 @@ void event_loop_clear(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
+    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
     g_runloop_last_warn_ns = 0u;
+    event_loop_notify_waiters();
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -855,6 +918,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     
     if (!result_channel) {
         vector_push(task_vec, fn_zero_arity);
+        event_loop_notify_waiters();
         return;
     }
     
@@ -865,6 +929,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     
     vector_push(task_vec, task_map);
     RELEASE(task_map);
+    event_loop_notify_waiters();
 }
 
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
@@ -960,6 +1025,7 @@ void event_loop_ingress_close(void) {
     event_loop_ingress_lock_acquire();
     g_event_loop_ingress_closed = true;
     event_loop_ingress_lock_release();
+    event_loop_notify_waiters();
 }
 
 bool event_loop_ingress_is_closed(void) {
@@ -999,6 +1065,49 @@ int event_loop_time_until_next_timer_ms(void) {
     if (delta_ms <= 0) return 0;
     if (delta_ms > INT_MAX) return INT_MAX;
     return (int)delta_ms;
+}
+
+/**
+ * @brief Wakes threads blocked in event_loop_run().
+ *
+ * @param void
+ * @return void
+ */
+void event_loop_wake(void) {
+    event_loop_notify_waiters();
+}
+
+/**
+ * @brief Blocking driver for event-loop work.
+ *
+ * Waits until one runnable callback/task exists (or timer becomes due), executes
+ * work through event_loop_run_next(), and returns true. Returns false when the
+ * wait was interrupted but no runnable work became ready.
+ *
+ * @param env Optional eval environment, forwarded to event_loop_run_next().
+ * @param st Eval state for callback execution.
+ * @return true if one event-loop step executed, false if interrupted without work.
+ */
+bool event_loop_run(CljPersistentMap *env, EvalState *st) {
+    while (true) {
+        if (event_loop_run_next(env, st)) {
+            return true;
+        }
+
+        int timeout_ms = event_loop_time_until_next_timer_ms();
+        if (timeout_ms == 0 || event_loop_has_pending_tasks()) {
+            continue;
+        }
+
+        uint64_t observed_epoch = atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire);
+        event_loop_wait_for_signal_or_timeout(timeout_ms, observed_epoch);
+
+        if (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) != observed_epoch &&
+            !event_loop_has_pending_tasks() &&
+            event_loop_time_until_next_timer_ms() != 0) {
+            return false;
+        }
+    }
 }
 
 
@@ -1239,6 +1348,7 @@ bool timer_cancel(int timer_id) {
         if (g_timer_queue[i].timer_id == timer_id) {
             timer_remove_at(i);
             (void)timer_named_remove_by_id(timer_id);
+            event_loop_notify_waiters();
             return true;
         }
     }

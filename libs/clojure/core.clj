@@ -628,7 +628,9 @@
 ; ============================================================================
 ^#^{:doc "Low-level native event-loop step used by clojure.core/run-next-task."}
 (defn run-next-task-native [] :native)
-^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise. Also kicks timeline watcher polling when tiny-clj.event is loaded."}
+^#^{:doc "Runs at most one non-blocking event-loop step.
+Returns true when one callback/task was executed, false when no work is ready.
+Also kicks timeline watcher polling when tiny-clj.event is loaded."}
 (defn run-next-task []
   (let [ran? (run-next-task-native)]
     (when (find-ns 'tiny-clj.event)
