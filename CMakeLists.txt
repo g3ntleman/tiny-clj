@@ -277,11 +277,20 @@ set(TINYCLJ_ESP32_TINY_FX_SOURCES
 
 set(SOURCES ${TINYCLJ_CORE_SOURCES})
 
+# Platform layer: macOS vs Linux
+if(APPLE)
+    set(TINYCLJ_PLATFORM_SOURCE src/platform_macos.c)
+else()
+    set(TINYCLJ_PLATFORM_SOURCE src/platform_linux.c)
+endif()
+
 function(tinyclj_link_apple_base target_name)
     if(APPLE)
         target_link_libraries(${target_name} PRIVATE "-framework CoreFoundation")
         target_link_directories(${target_name} PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
         target_link_libraries(${target_name} PRIVATE system_dnssd)
+    else()
+        target_link_libraries(${target_name} PRIVATE m)
     endif()
 endfunction()
 
@@ -381,7 +390,7 @@ endif()
 # Host REPL product
 add_executable(tiny-clj EXCLUDE_FROM_ALL
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
     ${SOURCES}
 )
@@ -401,7 +410,7 @@ if(APPLE)
     endif()
     add_executable(tiny-fx EXCLUDE_FROM_ALL MACOSX_BUNDLE
         src/repl.c
-        src/platform_macos.c
+        ${TINYCLJ_PLATFORM_SOURCE}
         src/line_editor.c
         src/game_demo_minifb.c
         src/game_demo_macos_menu.m
@@ -417,7 +426,7 @@ if(APPLE)
 else()
     add_executable(tiny-fx EXCLUDE_FROM_ALL
         src/repl.c
-        src/platform_macos.c
+        ${TINYCLJ_PLATFORM_SOURCE}
         src/line_editor.c
         ${SOURCES}
     )
@@ -455,7 +464,7 @@ endif()
 # Profiling Build - Optimized but with visible functions for profiling
 add_executable(tiny-clj-profile
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
     ${SOURCES}
 )
@@ -591,10 +600,10 @@ add_executable(unit-tests
     ${TINYCLJ_FX_TEST_SOURCES}
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
-    # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
+    # Note: src/repl.c, platform, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)
     src/repl.c
-    src/platform_macos.c
+    ${TINYCLJ_PLATFORM_SOURCE}
     src/line_editor.c
 )
 target_compile_definitions(unit-tests PRIVATE

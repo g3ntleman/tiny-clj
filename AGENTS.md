@@ -57,3 +57,40 @@ Do not add this trailer to commits:
 - Document C APIs in the corresponding `.c` files.
 - Use Doxygen-style C comments (`/** ... */`) with `@brief`, `@param`, and `@return` for API/function docs.
 - Keep headers focused on declarations/contracts, with only minimal inline commentary when needed.
+
+## Cursor Cloud specific instructions
+
+### Platform: Linux host build
+
+This project is primarily developed on macOS. For Linux (Cloud Agent VMs), `src/platform_linux.c` provides POSIX stubs for the `platform.h` API. Networking functions (UDP/TCP/mDNS) return errors; the core interpreter and all unit tests work.
+
+### Build commands
+
+- Configure: `CC=gcc cmake -DCMAKE_BUILD_TYPE=Debug -B build`
+- Build tests: `cmake --build build --target unit-tests -j$(nproc)`
+- Build REPL: `cmake --build build --target tiny-clj -j$(nproc)`
+- Run tests: `./build/unit-tests` (or `--test "group/*"` for specific groups)
+- Run REPL: `./build/tiny-clj -e '(+ 1 2)'`
+
+GCC is required on Linux because the embedded Clojure `.inc` files use C++ raw string literals (`R"..."`), which GCC accepts as an extension in `-std=gnu99` mode but Clang rejects.
+
+### Known issues on Linux
+
+- `test_file_io/tiny_clj_kv_supports_large_values` crashes with heap corruption (`malloc_consolidate(): invalid chunk size`) after all 445 tests pass. This is a pre-existing issue, not caused by the Linux platform layer.
+- The `libstdc++.so` linker symlink may be missing; the update script creates it.
+
+### Services
+
+| Service | How to run | Notes |
+|---------|-----------|-------|
+| Unit tests | `./build/unit-tests` | 445+ tests, ~0.6s |
+| REPL | `./build/tiny-clj` | Clojure interpreter |
+| Python script tests | `python3 scripts/test_generate_embedded_clojure_source.py` | Embedded source generation |
+
+### Test patterns
+
+See `docs/TESTING_GUIDE.md` for full test documentation. Quick reference:
+- All tests: `./build/unit-tests`
+- Test group: `./build/unit-tests --test "test_basics/*"`
+- Single test: `./build/unit-tests --test "test_basics/list_count"`
+- List tests: `./build/unit-tests --list`
