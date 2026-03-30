@@ -352,8 +352,8 @@ int map_contains(ID map, ID key) {
 }
 
 /** Remove key with COW:
- * - rc==1: mutate in-place (shift-delete)
- * - rc>1: return a new map
+ * - rc==1: mutate in-place (swap last pair into removed slot, O(1) moves)
+ * - rc>1: return a new map with the same packing order as the in-place path
  * Returns the original map if key is not found.
  * Returns owned object (rc=1) for newly allocated results.
  */
@@ -376,12 +376,11 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
     RELEASE(KV_KEY(map_data->data, index));
     RELEASE(KV_VALUE(map_data->data, index));
 
-    for (int i = index; i < map_data->count - 1; i++) {
-      KV_KEY(map_data->data, i) = KV_KEY(map_data->data, i + 1);
-      KV_VALUE(map_data->data, i) = KV_VALUE(map_data->data, i + 1);
-    }
-
     int last = map_data->count - 1;
+    if (index != last) {
+      KV_KEY(map_data->data, index) = KV_KEY(map_data->data, last);
+      KV_VALUE(map_data->data, index) = KV_VALUE(map_data->data, last);
+    }
     KV_KEY(map_data->data, last) = NULL;
     KV_VALUE(map_data->data, last) = NULL;
     map_data->count--;
@@ -406,13 +405,19 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   }
 #endif
 
-  // Copy all entries except the one at index
-  MAP_FOR_EACH(map_data, k, v) {
-    if (_i != index) {
-      // Copy entry to new map
-      KV_KEY(new_map->data, new_map->count) = RETAIN(k);
-      KV_VALUE(new_map->data, new_map->count) = RETAIN(v);
-      new_map->count++;
+  /* Same slot order as in-place swap-with-last: [0..index-1], old[last], old[index+1..last-1] */
+  int last = map_data->count - 1;
+  new_map->count = last;
+  for (int i = 0; i < index; i++) {
+    KV_KEY(new_map->data, i) = RETAIN(KV_KEY(map_data->data, i));
+    KV_VALUE(new_map->data, i) = RETAIN(KV_VALUE(map_data->data, i));
+  }
+  if (index < last) {
+    KV_KEY(new_map->data, index) = RETAIN(KV_KEY(map_data->data, last));
+    KV_VALUE(new_map->data, index) = RETAIN(KV_VALUE(map_data->data, last));
+    for (int i = index + 1; i < last; i++) {
+      KV_KEY(new_map->data, i) = RETAIN(KV_KEY(map_data->data, i));
+      KV_VALUE(new_map->data, i) = RETAIN(KV_VALUE(map_data->data, i));
     }
   }
 
@@ -514,10 +519,9 @@ CljPersistentMap* make_map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
         return map_empty();
     }
-    // Create map with extra capacity to allow adding new keys
-    // Capacity should be at least pair_count + some headroom for growth
-    int capacity = MAX(4, pair_count * 2);
-    CljPersistentMap *map = make_map(capacity, STRONG);
+    // Keep literal maps tight: caller already knows exact entry count.
+    // Extra headroom here inflates retained heap for parsed Clojure literals.
+    CljPersistentMap *map = make_map(pair_count, STRONG);
     for (int i = 0; i < pair_count; i++) {
         CljObject *key = KV_KEY(pairs, i);
         CljObject *value = KV_VALUE(pairs, i);
@@ -578,8 +582,7 @@ static CljPersistentMap* map_copy(CljPersistentMap *src) {
 CljPersistentMap* map_copy_with_additions(CljPersistentMap *parent_map, CljObject **additions, int addition_count) {
     // Calculate total capacity needed
     int parent_count = parent_map ? parent_map->count : 0;
-    int total_capacity = parent_count + addition_count + 4;  // Extra headroom
-    if (total_capacity < 4) total_capacity = 4;
+    int total_capacity = parent_count + addition_count;
 
     CljPersistentMap *base = make_map(total_capacity, STRONG);
     if (!base) {
