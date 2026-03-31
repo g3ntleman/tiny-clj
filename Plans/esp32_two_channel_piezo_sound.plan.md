@@ -460,7 +460,7 @@ DoD:
 
 Diese Datei konkretisiert Milestone 3/4 aus dem Vector-Handheld-Plan im gleichen Repo:
 
-- `.cursor/plans/esp32_vector_handheld_geometri_dash.plan.md`
+- `Plans/esp32_vector_handheld_geometri_dash.plan.md`
 - Milestone 3 (Audio Core): Schritte 1 bis 4.
 - Milestone 4 (Host Contract): Schritte 1, 5.
 

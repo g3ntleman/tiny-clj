@@ -30,26 +30,26 @@ Current state derived from code and tests in this repository:
 
 1. Graphics core in C is far advanced and tested.
 - Evidence:
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/vector_scene_graph.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/scene.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/render_backend.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/builtins_tiny_fx_gfx.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/libs/tiny-fx/gfx.clj`
+  - `/Users/theisen/Projects/tiny-clj/src/vector_scene_graph.c`
+  - `/Users/theisen/Projects/tiny-clj/src/scene.c`
+  - `/Users/theisen/Projects/tiny-clj/src/render_backend.c`
+  - `/Users/theisen/Projects/tiny-clj/src/builtins_tiny_fx_gfx.c`
+  - `/Users/theisen/Projects/tiny-clj/libs/tiny-fx/gfx.clj`
 - Validation:
   - `./build/unit-tests --test 'test_vector_scene_graph/*'` -> `99 Tests, 0 Failures`.
 
 2. Sound core in C + tiny-clj API is far advanced and tested.
 - Evidence:
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/sound_engine.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/sound_backend_esp32.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/builtins_sound.c`
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/libs/tiny-fx/sound.clj`
+  - `/Users/theisen/Projects/tiny-clj/src/sound_engine.c`
+  - `/Users/theisen/Projects/tiny-clj/src/sound_backend_esp32.c`
+  - `/Users/theisen/Projects/tiny-clj/src/builtins_sound.c`
+  - `/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound.clj`
 - Validation:
   - `./build/unit-tests --test 'test_sound_engine/*'` -> `104 Tests, 0 Failures`.
 
 3. Board profile exists, but appears to be template/default and not final board wiring.
 - Evidence:
-  - `/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/vector_handheld_config.h`
+  - `/Users/theisen/Projects/tiny-clj/esp32-idf/main/vector_handheld_config.h`
 
 4. Missing for device bring-up:
 - No ESP32 ST7789 backend wiring into `tiny_renderer_lifecycle_set_callbacks`.
@@ -63,7 +63,7 @@ Current state derived from code and tests in this repository:
 ## Upstream Dependency: Vector Scene Graph Engine
 
 Primary dependency plan:
-- `/Users/theisen/Projects/tiny-clj/.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+- `/Users/theisen/Projects/tiny-clj/Plans/esp32_vector_scene_graph_engine.plan.md`
 
 Integration rule:
 - This Geometri Dash plan consumes the scene-graph renderer contract and patch path from the dependency plan, instead of defining a separate render primitive stack.
