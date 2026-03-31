@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 
 // Forward declaration for CljString
@@ -116,21 +117,32 @@ extern THREAD_LOCAL GlobalExceptionStack global_exception_stack;
 // ============================================================================
 
 #define CLJ_CALLSTACK_MAX 64
+#define CLJ_CALLSTACK_NAME_MAX 96
 
 /** @brief One frame in the Clojure-level call stack. */
 typedef struct {
-    const char *frames[CLJ_CALLSTACK_MAX];  // Borrowed pointers into interned symbol cnames
+    // Stable per-thread storage for frame labels.
+    // We copy names on push so stacktrace formatting never dereferences stale pointers
+    // after function/namespace objects are released during unwind.
+    char names[CLJ_CALLSTACK_MAX][CLJ_CALLSTACK_NAME_MAX];
+    const char *frames[CLJ_CALLSTACK_MAX];
     int depth;
 } CljCallStack;
 
 #ifdef DEBUG
-/** @brief Thread-local Clojure call stack for exception stacktraces. */
-extern THREAD_LOCAL CljCallStack g_clj_callstack;
+/** @brief Clojure call stack for exception stacktraces. */
+extern CljCallStack g_clj_callstack;
 
 /** @brief Push a Clojure function name onto the call stack. */
 static inline void clj_callstack_push(const char *name) {
-    if (g_clj_callstack.depth < CLJ_CALLSTACK_MAX)
-        g_clj_callstack.frames[g_clj_callstack.depth++] = name ? name : "<anonymous>";
+    if (g_clj_callstack.depth < CLJ_CALLSTACK_MAX) {
+        int idx = g_clj_callstack.depth;
+        const char *src = (name && name[0] != '\0') ? name : "<anonymous>";
+        strncpy(g_clj_callstack.names[idx], src, CLJ_CALLSTACK_NAME_MAX - 1);
+        g_clj_callstack.names[idx][CLJ_CALLSTACK_NAME_MAX - 1] = '\0';
+        g_clj_callstack.frames[idx] = g_clj_callstack.names[idx];
+        g_clj_callstack.depth++;
+    }
 }
 
 /** @brief Pop the top frame from the Clojure call stack. */
@@ -156,7 +168,12 @@ static inline void clj_callstack_pop(void) {}
  * @brief Read-only view of a registered process-global thread role.
  */
 typedef struct SubjectiveCThreadState {
+#if defined(ESP_PLATFORM)
+    /** FreeRTOS task handle (app main is not a pthread; pthread_self() is invalid there). */
+    void *task_handle;
+#else
     pthread_t value;
+#endif
     bool initialized;
 } SubjectiveCThreadState;
 

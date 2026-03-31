@@ -1,6 +1,6 @@
 ---
 name: Breakout Collision Migration
-overview: Breakout wird schrittweise von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt. Der bisherige Durchgang hat den Szenen- und Callback-Vertrag vorbereitet; der aktuelle Folgezug hat die Host-Collision-Bridge auf einen sicheren Zweiphasenpfad umgestellt: Detect-only auf dem UI-/Render-nahen Thread, Raw-Hit-Puffer mit Mutex, Dispatch erst auf dem Scheduler-/Runloop-Thread. Dazu kommen reset-sichere SpatialEvent-/Aabb-Lookups, ein expliziter Interpreter-Thread-Marker neben dem OS-Main-Thread und bessere Test-Isolation im Host-Startup-Pfad. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
+overview: Breakout wurde von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt. Der aktuelle Stand nutzt einen sicheren Zweiphasenpfad (Detect-only auf dem UI-/Render-nahen Thread, Raw-Hit-Puffer mit Mutex, Dispatch auf dem Scheduler-/Runloop-Thread), reset-sichere SpatialEvent-/Aabb-Lookups und einen expliziten Interpreter-Thread-Marker. Gameplay-Autoritaet und segmentbasierte Bewegung liegen bereits in Clojure; als Restpunkt bleibt nur Cleanup von Uebergangslogik.
 status: active
 todos:
   - id: scene-prototypes-rules
@@ -46,7 +46,7 @@ isProject: false
 
 ## Stand dieses Durchgangs
 
-- Status: Der Plan ist wieder aktiv. Die Collision-Bridge ist inzwischen weitergezogen als der letzte abgeschlossene Stand; der Host-Monolith ist jetzt in kleinere Runtime- und Rule-/Event-Module aufgeteilt.
+- Status: Plan weitgehend umgesetzt. Die Collision-Bridge ist in Runtime- und Rule-/Event-Module aufgeteilt; offen ist nur noch Cleanup.
 
 - Umgesetzt: `libs/tiny-breakout/scene.clj` liefert jetzt ein entity-map-basiertes `FrameScene.root` mit `'root`-Group, stabilen Ball-/Paddle-/Brick-Prototypen und konkret expandierten `SpatialRule`s fuer `:ball-vs-paddle` sowie jedes aktive `:ball-vs-brick`-Paar.
 - Umgesetzt: Tiny-FX trennt fuer Pilot-Szenen jetzt `:root` als Traversal-Einstieg von `:index` als Entity-Map. Breakout und das Game-Demo publizieren diese Form bereits, waehrend der Renderer alte root-map-Szenen vorerst noch lesen kann.
@@ -65,7 +65,7 @@ isProject: false
 - Umgesetzt: Der Hostpfad ist inzwischen duenn: `tiny-clj.deployment/breakout-host-config` publiziert nur Slots, Scene-Atom und Spatial-Callback, waehrend Spielzustand, Segmentplanung und Input-Reaktion in `tiny-breakout.runtime` bzw. `tiny-breakout.core` leben.
 - Umgesetzt: Ballbewegung laeuft bereits segmentbasiert aus Clojure heraus. `tiny-breakout.core` plant Wandsegmente, `tiny-breakout.scene` projiziert sie auf Timeline-Felder, und `tiny-breakout.runtime` replanted bei Segmentende oder Spatial-Event.
 - Umgesetzt: `Timeline` traegt jetzt optional `:end-event`, und der Renderer-Snapshot bzw. `tiny-clj.runtime/renderer-timeline-progress` liefern dazu generische Metadaten (`:end-event`, `:at-end`). Breakout markiert damit bereits Ballsegment-Timelines im Szenenvertrag.
-- Umgesetzt: `tiny-fx.gfx-timeline/watch` bildet jetzt einen generischen Timeline-End-Watcher auf dem Scheduler-Thread. Breakout nutzt diesen Pfad fuer Ballsegment-Enden; der alte benannte Segment-Timer ist entfernt.
+- Umgesetzt: `tiny-fx.gfx-timeline/watch` bildet jetzt einen generischen Timeline-End-Watcher auf dem Scheduler-Thread. Breakout nutzt diesen Pfad fuer Ballsegment-Enden ohne separaten Fallback-Timer.
 - Offen: Der direkte native Scene-Rebuild-Pfad allokiert weiterhin deutlich mehr als der in-place Hot-Path. Fuer die vollstaendige Migration ist das tolerierbar, sollte aber nicht als allgemeines Pattern in weitere Hostpfade uebernommen werden.
 
 ## Folgearbeit ausserhalb dieses Plans
@@ -92,17 +92,17 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
 
 ## Relevante Stellen
 
-- [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj): baut aktuell `->Group`-Root und setzt `:collision-rules nil`; das muss auf collision-faehige Entities mit Prototypen umgestellt werden.
-- [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj): `breakout-host-spatial-callback!` ist aktuell ein No-op; hier muss die echte Breakout-Collision-Dispatch-Schicht entstehen.
-- [src/game_demo_minifb.c](src/game_demo_minifb.c): ist aktuell weiterhin der native Hostpfad hinter `tiny-fx.app`, nutzt aber noch direkte `viewer_breakout_rect_overlap(...)`-Checks, haelt eine eigene Breakout-Runtime als Gameplay-Quelle, expandiert Rules selbst und stept den Ball frameweise; das passt nicht zum neuen Modell.
-- [src/fx_collision.c](src/fx_collision.c): bestaetigt, dass Prototyp-Selektoren per struktureller Gleichheit funktionieren; darauf kann der Brick-Prototyp aufbauen.
-- [src/tiny_fx_gfx.c](src/tiny_fx_gfx.c): registriert `SpatialEvent`; hier muss das Event-Schema fuer echte Kollisions-Snapshots der beteiligten Objekte erweitert werden.
-- [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c) und [src/builtins_tiny_fx_gfx.c](src/builtins_tiny_fx_gfx.c): enthalten bereits Timeline-Zustand und Runtime-Abfragen; hier bietet sich ein leichter Opt-in-Pfad fuer Timeline-End-Erkennung an.
+- [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj): liefert entity-map-Root, stabile Prototypen und inkrementell expandierte Collision-Rules.
+- [libs/tiny-breakout/runtime.clj](libs/tiny-breakout/runtime.clj): verwaltet Segment-Replanung, Timeline-End-Events, Watch-Rearm und Fallback-Timer.
+- [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj): stellt `breakout-host-config` mit `:spatial-callback` aus Clojure bereit.
+- [src/fx_spatial_scene_bridge.c](src/fx_spatial_scene_bridge.c) und [src/fx_spatial_dispatch.c](src/fx_spatial_dispatch.c): enthalten den aufgeteilten Bridge-Pfad fuer Rule-/Event-Encoding vs. Detect/Drain.
+- [src/fx_config_loader.c](src/fx_config_loader.c): laedt Breakout ueber `(tiny-clj.deployment/breakout-host-config)`.
+- [src/tests/test_breakout_contract.c](src/tests/test_breakout_contract.c), [src/tests/test_breakout_runtime_startup.c](src/tests/test_breakout_runtime_startup.c), [src/tests/test_gfx_collision_contract.c](src/tests/test_gfx_collision_contract.c): decken Contract, Startup-Pfad und Collision-/Event-Verhalten ab.
 
 ## Kritische Architekturpunkte
 
-1. Breakout muss dieselbe Root-Form benutzen, die der Collision-Loader erwartet.
-  Heute ist die Breakout-Szene ein `Group`-Baum, der Collision-Loader expandiert Regeln aber ueber eine Entity-Map in `FrameScene.root`. Deshalb muss die Breakout-Szene auf ein entity-map-basiertes Root umgestellt werden, sowohl im Clojure-Build als auch im nativen Breakout-Szenebuilder.
+1. Breakout nutzt dieselbe Root-Form, die der Collision-Loader erwartet.
+  Aktuell ist das Root entity-map-basiert (`:root` fuer Traversal, `:index` fuer Entity-Map) und bleibt die verbindliche Form.
 2. Die Policy-Expansion soll in Clojure stattfinden, nicht im Viewer.
   Wegen Ownership, Memory-Macros und globalem Autorelease-Pool ist es einfacher, deklarative Regeln in Clojure mit `CljTransientVector` in konkrete Policies zu expandieren und dem Viewer direkt die expandierte Menge zu geben.
 3. Die Expansion soll inkrementell und bewusst simpel bleiben.
@@ -113,8 +113,8 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
   Nicht jede Timeline darf automatisch End-Events allozieren oder in den Runloop schieben. Stattdessen traegt nur ein Timeline-Feld bei Bedarf ein boolesches End-Event-Flag; nur dafuer registriert der Host einen Watch und emittiert genau einen End-Event beim Finish-Edge.
 6. Heap-Groesse und persistente Datenstrukturen muessen bewusst begrenzt werden.
   Persistente Datenstrukturen sollen nur dann global gehalten werden, wenn sie wirklich wiederverwendet werden. Dauerhafte globale `def`-Werte fuer grosse oder abgeleitete Runtime-Daten sind zu vermeiden; solche Daten sollen nur bei echtem Bedarf gehalten und sonst lokal oder kurzlebig aufgebaut werden.
-7. Der native Breakout-Sonderpfad muss seine Gameplay-Autoritaet verlieren.
-  Der aktuelle Pfad kopiert den State einmal aus `game_state_atom`, leert das Atom danach und fuehrt Ball/Paddle/Brick-Logik in C weiter. Fuer Clojure als Source of Truth darf dieser Besitzwechsel nicht mehr stattfinden; der Host darf nur noch diskrete Inputs, Segmentende und Spatial-Events an Clojure liefern und die daraus publizierte Szene anzeigen.
+7. Der native Breakout-Sonderpfad bleibt ohne Gameplay-Autoritaet.
+  Clojure bleibt Source of Truth; der Host liefert diskrete Inputs/Segmentende/Spatial-Events und rendert die publizierte Szene.
 
 ```mermaid
 flowchart LR
@@ -140,29 +140,9 @@ flowchart LR
 
 ## Umsetzungsschritte
 
-1. Collision-faehige Breakout-Szene definieren.
-  In [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj) stabile Prototypen fuer `ball`, `paddle` und `brick` einfuehren, das Root auf eine Entity-Map umstellen und deklarative `SpatialRule`-Records fuer `:ball-vs-paddle` und `:ball-vs-brick` definieren.
-2. Inkrementelle Policy-Expansion in Clojure einfuehren.
-  In den betroffenen Breakout-/tiny-fx-Namespaces eine expandierte Runtime-Form aufbauen, die deklarative Regeln mit `CljTransientVector` in konkrete Policies ueberfuehrt. Dabei nur bei Rule-Aenderungen oder neuen Objekten anhaengen; bei Objektentfall bleiben alte Policies vorerst bestehen, werden entweder inert oder bei Bedarf per Record-Mutation direkt deaktiviert und erst spaeter optional kompaktierte.
-  Dabei Heap-Verbrauch mitdenken: persistente abgeleitete Daten nur dann ueber `def` oder aehnliche globale Bindungen halten, wenn sie wirklich wiederverwendet werden; sonst lokale oder kurzlebige Strukturen bevorzugen.
-3. Kollisions-Events zu Snapshot-Events ausbauen.
-  In [src/tiny_fx_gfx.c](src/tiny_fx_gfx.c), [src/game_demo_minifb.c](src/game_demo_minifb.c) und den zugehoerigen Tests `SpatialEvent` so erweitern, dass neben IDs und AABBs auch `:self-entity` und `:other-entity` im Zustand des Kollisionsframes transportiert werden.
-4. Segmentbasierte Ballbewegung definieren.
-  In den Breakout-Namespaces ein Modell einfuehren, bei dem Clojure jeweils das naechste Ballsegment bis zur naechsten Wand plant. Die Grafik-Engine fuehrt dieses Segment aus; bei Segmentende oder Kollisions-Event wird in Clojure neu geplant.
-5. Boolesches End-Event-Feld am Timeline-Feld einfuehren.
-  In den Timeline-/Runtime-Pfaden einen Opt-in-Mechanismus vorsehen, bei dem ein optionales boolesches Feld direkt am Timeline-Feld einen End-Event-Watch aktiviert. Nur markierte Animationen duerfen beim Finish-Edge genau einen diskreten End-Event an Clojure ausloesen.
-6. Breakout-Hostpfad auf atom-getriebenen Betrieb umbauen.
-  In [src/game_demo_minifb.c](src/game_demo_minifb.c) den nativen Breakout-Sonderpfad so reduzieren, dass er nicht mehr selbst Ball/Paddle/Brick-State besitzt, Rules expandiert oder den Ball frameweise stept. Stattdessen soll der Host diskrete Button-Ereignisse, Segmentenden und Spatial-Events an Clojure zustellen, die aktuelle Szene aus `game_scene_atom` rendern und konkrete Policies aus einer expandierten Datenstruktur konsumieren.
-7. Breakout-Collision-Callback in Clojure verdrahten.
-  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) den Breakout-`spatial-callback` von No-op auf den generischen Dispatcher umstellen und Breakout-spezifische Watcher/Handler registrieren, die aus Snapshot-`SpatialEvent`s deterministisch `ball bounce`, `brick removal`, `score`, `phase` und ggf. `level clear` ableiten.
-8. Maintenance-Event fuer Policy-Cleanup vorsehen.
-  In [src/game_demo_minifb.c](src/game_demo_minifb.c) und [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) einen schmalen Pfad vorsehen, ueber den C bei Bedarf ein diskretes Event an Clojure wirft, wenn expandierte Policies gefiltert, deaktivierte Eintraege bereinigt oder konkret neu aufgebaut werden sollen.
-9. Clojure-Step fuer Host-Ticks sauber definieren.
-  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) und den betroffenen Breakout-Namespaces einen klaren Input-/Collision-/Segmentende-/Maintenance-Updatepfad bauen, so dass `step-state`, Policy-Pflege, Segmentplanung und Szenenaufbau in Clojure bleiben und der Host nur noch diskrete Ereignisse liefert. Dabei muessen Paddle-/Brick-Kollisionen und frameweises Ball-Stepping aus dem nativen Sonderpfad entfernt werden.
-10. Regressionstests vor/nach der Umstellung absichern.
-  Tests fuer Root-Shape, Prototypen, deklarative Rules, inkrementelle Expansion bei neuen Objekten, lazy Objektentfall bzw. Rule-Deaktivierung per Record-Mutation, Snapshot-`SpatialEvent`s mit Objekten, segmentbasierte Ballbewegung bis zur naechsten Wand, boolesche Timeline-End-Events nur fuer markierte Felder, Cleanup per Event aus C, callback-getriebene Brick-Entfernung, Clojure als autoritative State-Quelle und das Fehlen der alten manuellen Kollision in [src/tests/test_breakout_contract.c](src/tests/test_breakout_contract.c), [src/tests/test_breakout_runtime_startup.c](src/tests/test_breakout_runtime_startup.c) und ggf. [src/tests/test_gfx_collision_contract.c](src/tests/test_gfx_collision_contract.c) ergaenzen.
-11. Verifikation.
-  Relevante Unit-Tests plus Breakout-Start im vereinheitlichten Hostprodukt `tiny-fx` beziehungsweise `tiny-fx.app` ausfuehren und gezielt pruefen, dass Ball/Paddle/Brick jetzt ueber Snapshot-`SpatialEvent`s und Clojure-State reagieren, der Ball zwischen diskreten Replanungen von der Grafik-Engine bis zur naechsten Wand animiert wird, nur markierte Timeline-Felder End-Events erzeugen, neue Bricks nur inkrementell Policies anhaengen, entfernte Bricks keine Kollisionen mehr feuern und keine native Zweitquelle mehr vorhanden ist.
+1. Abschlussstand (bereits umgesetzt): collision-faehige Breakout-Szene, inkrementelle Policy-Expansion, Snapshot-`SpatialEvent`s, segmentbasierte Bewegung, Timeline-End-Events, atom-getriebener Hostpfad, Clojure-Callback-Dispatch und Regressionstests.
+2. Offener Schritt: `cleanup` in Breakout-/FX-Pfaden (Uebergangslogik, nicht mehr benoetigte Helfer, veraltete Kommentare entfernen) ohne Verhaltensaenderung.
+3. Verifikation nach Cleanup: relevante Breakout-/Collision-Tests und Host-Smoke erneut gruen fahren.
 
 ## Besondere Risiken
 

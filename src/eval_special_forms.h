@@ -35,6 +35,7 @@ ID eval_special_go(CljPersistentVector *args, CljPersistentMap *env, EvalState *
 ID eval_special_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_special_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);

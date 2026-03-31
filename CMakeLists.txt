@@ -32,6 +32,7 @@ endif()
 
 # Include common paths configuration
 include(cmake_include_paths.cmake)
+include("${CMAKE_SOURCE_DIR}/cmake/embedded_clojure_sources.cmake")
 
 # Set C standard
 set(CMAKE_C_STANDARD 99)
@@ -99,6 +100,30 @@ endif()
 # accidentally picked up by includes.
 include_directories(${CMAKE_SOURCE_DIR} include src ${CMAKE_SOURCE_DIR}/subjective-c/src/subjective-c)
 include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
+
+# Generate embedded Clojure include fragments for host builds as well so
+# src/embedded_sources.c always uses up-to-date sources.
+tinyclj_setup_embedded_clojure_generation(
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}"
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
+    TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
+)
+include_directories(${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR})
+
+if(TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS)
+    add_custom_target(
+        tinyclj_embedded_clojure_sources
+        DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS}
+    )
+endif()
+
+function(tinyclj_add_embedded_clojure_dependency target_name)
+    if(TARGET tinyclj_embedded_clojure_sources AND TARGET ${target_name})
+        add_dependencies(${target_name} tinyclj_embedded_clojure_sources)
+    endif()
+endfunction()
 
 # Subjective-C subproject (static library + early tests)
 #
@@ -237,6 +262,7 @@ list(APPEND SOURCES
     src/fx_collision.c
     src/fx_spatial_scene_bridge.c
     src/fx_spatial_dispatch.c
+    src/fx_timeline_ingress.c
     src/fx_host_runloop.c
     src/fx_config_loader.c
     
@@ -281,6 +307,10 @@ function(tinyclj_ensure_minifb_target)
 
     if(NOT TARGET minifb)
         message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
+    endif()
+    # MiniFB marks legacy enum names as [[deprecated]]; third-party headers spam the build.
+    if(APPLE)
+        target_compile_options(minifb PUBLIC -Wno-deprecated-declarations)
     endif()
 endfunction()
 
@@ -509,6 +539,13 @@ if(APPLE)
     endif()
 endif()
 
+tinyclj_add_embedded_clojure_dependency(tiny-clj)
+tinyclj_add_embedded_clojure_dependency(tiny-clj-repl)
+tinyclj_add_embedded_clojure_dependency(tiny-clj-esp32-repl)
+if(TARGET tiny-fx)
+    tinyclj_add_embedded_clojure_dependency(tiny-fx)
+endif()
+
 # Profiling Build - Optimized but with visible functions for profiling
 add_executable(tiny-clj-profile
     src/repl.c
@@ -528,6 +565,7 @@ set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
+tinyclj_add_embedded_clojure_dependency(tiny-clj-profile)
 
 # ============================================================================
 # CATEGORIZED TEST EXECUTABLES
@@ -627,6 +665,7 @@ add_executable(unit-tests
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     src/tests/test_sweep_aabb.c
     src/tests/test_breakout_contract.c
+    src/tests/test_breakout_runtime_startup.c
     src/tests/test_assets_edn.c
     src/tests/test_breakout_namespace_contract.c
     src/tests/test_double_run.c
@@ -641,17 +680,19 @@ add_executable(unit-tests
     src/tests/test_macro_alias_regression.c
     src/tests/test_macro_ns_asset_regression.c
     src/tests/test_main_entry.c
-    # src/tests/test_panel_api.c  # Requires ESP-LCD symbols
-    # src/tests/test_panel_esp32_architecture_contract.c  # ESP32-specific
+    src/tests/test_panel_api.c
+    src/tests/test_panel_esp32_architecture_contract.c
     src/tests/test_records.c
     src/tests/test_runner_patterns.c
     src/tests/test_vector_scene_graph.c
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)
+    src/panel_esp_lcd.c
     src/repl.c
     src/platform_macos.c
     src/line_editor.c
+    src/tiny_fx_macos_app.m
 )
 target_compile_definitions(unit-tests PRIVATE
     DEBUG
@@ -665,6 +706,8 @@ target_compile_definitions(unit-tests PRIVATE
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
 if(APPLE)
+    tinyclj_ensure_minifb_target()
+    target_link_libraries(unit-tests PRIVATE minifb "-framework AppKit" "-framework ApplicationServices" "-framework CoreGraphics")
     target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
     target_link_libraries(unit-tests PRIVATE "-framework CoreAudio" "-framework AudioUnit")
     target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
@@ -678,6 +721,7 @@ target_include_directories(unit-tests
         ${TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR}
         ${CMAKE_SOURCE_DIR}
 )
+tinyclj_add_embedded_clojure_dependency(unit-tests)
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size,

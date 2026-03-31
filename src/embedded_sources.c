@@ -4,33 +4,10 @@
 #include <stddef.h>
 
 #if defined(__has_include)
-#  if __has_include("clojure.core.clj.inc")
-#    define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 1
-#  else
-#    define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 0
+#  if !__has_include("clojure.core.clj.inc")
+#    error "Missing generated embedded Clojure includes (clojure.core.clj.inc). Run CMake configure/build to generate build/generated/embedded_clojure/*.inc."
 #  endif
-#else
-#  define TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES 0
 #endif
-
-#if !TINYCLJ_HAVE_EMBEDDED_SOURCE_INCLUDES
-
-void embedded_source_map_init(void) {
-    // No-op when generated embedded source includes are unavailable.
-}
-
-bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out_len) {
-    (void)path;
-    if (out_data) {
-        *out_data = NULL;
-    }
-    if (out_len) {
-        *out_len = 0;
-    }
-    return false;
-}
-
-#else
 
 #define EMBEDDED_SOURCE_ENTRY(path_literal, source_array) \
   {                                                       \
@@ -212,6 +189,15 @@ typedef struct {
   int len;
 } EmbeddedSourceEntry;
 
+#define EMBEDDED_ASSET_BYTES(path_literal, arr) \
+  { (path_literal), (uint16_t)(sizeof(path_literal) - 1u), (const uint8_t *)(arr), (int)sizeof(arr) }
+
+#if TINYCLJ_WITH_TINY_FX
+static const uint8_t tiny_fx_the_entertainer_trk1[] = {
+#include "the_entertainer_trk1.inc"
+};
+#endif
+
 static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core/async.clj", clojure_core_async_code),
@@ -231,6 +217,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
+    EMBEDDED_ASSET_BYTES("/assets/tiny-fx/sound-demos/the-entertainer.trk1", tiny_fx_the_entertainer_trk1),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif
@@ -318,5 +305,4 @@ bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out
 }
 
 #undef EMBEDDED_SOURCE_ENTRY
-
-#endif
+#undef EMBEDDED_ASSET_BYTES

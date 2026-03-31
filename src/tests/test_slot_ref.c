@@ -187,25 +187,18 @@ TEST(test_slot_ref_nested_fn_rewrites_free_var_depth1) {
         arg_b = LIST_FIRST(args2);
     }
     TEST_ASSERT_NOT_NULL(arg_a);
-    if (TAG(arg_a) == CLJ_SLOT_REF) {
-        const CljSlotRef *ref_a = (const CljSlotRef*)arg_a;
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, ref_a->depth, "a should have depth=1 (outer scope)");
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_a->slot, "a should be slot 0 in outer scope");
-    } else {
-        // Some configurations may disable SlotRef(depth>0) rewriting and keep symbols.
-        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_SYMBOL, TAG(arg_a), "a should be a symbol when SlotRef rewrite is disabled");
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("a", as_symbol(arg_a)->cname, "Expected symbol 'a'");
-    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_SLOT_REF, TAG(arg_a),
+                                  "a should be rewritten to SlotRef depth=1 (outer scope)");
+    const CljSlotRef *ref_a = (const CljSlotRef*)arg_a;
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, ref_a->depth, "a should have depth=1 (outer scope)");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_a->slot, "a should be slot 0 in outer scope");
 
     TEST_ASSERT_NOT_NULL(arg_b);
-    if (TAG(arg_b) == CLJ_SLOT_REF) {
-        const CljSlotRef *ref_b = (const CljSlotRef*)arg_b;
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_b->depth, "b should have depth=0 (current scope)");
-        TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_b->slot, "b should be slot 0 in current scope");
-    } else {
-        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_SYMBOL, TAG(arg_b), "b should be a symbol when SlotRef rewrite is disabled");
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("b", as_symbol(arg_b)->cname, "Expected symbol 'b'");
-    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_SLOT_REF, TAG(arg_b),
+                                  "b should be rewritten to SlotRef depth=0 (current scope)");
+    const CljSlotRef *ref_b = (const CljSlotRef*)arg_b;
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_b->depth, "b should have depth=0 (current scope)");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, ref_b->slot, "b should be slot 0 in current scope");
 }
 
 // ============================================================================

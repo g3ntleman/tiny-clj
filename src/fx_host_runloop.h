@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
     pthread_t thread;
     atomic_bool running;
+    atomic_bool blocked_in_event_loop_wait;
     atomic_uint_fast64_t last_tick_ns;
     atomic_uint_fast64_t iteration_count;
     bool started;

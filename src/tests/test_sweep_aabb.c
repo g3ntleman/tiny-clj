@@ -9,6 +9,8 @@
 #include "../vector_scene_graph.h"
 #include "map.h"
 
+#define SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES 0u
+
 /* ============================================================
  * Helpers: build one obstacle map.
  *
@@ -213,14 +215,18 @@ TEST(test_sweep_p1_vertical_gap_edge_touch_is_no_hit) {
  * Phase 2 – eval-level fx/sweep-aabb and fx/interpolate-segment
  * ============================================================ */
 
+static void require_fx_namespace_for_eval_tests(void) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_TRUE(require_namespace_by_name(g_test_eval_state, "fx"));
+}
+
 /*
  * test_sweep_p2_no_hit_returns_nil
  *
  * Moving away from obstacle → (fx/sweep-aabb ...) → nil.
  */
-TEST_SHARED(test_sweep_p2_no_hit_returns_nil) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    eval_string("(require 'fx)", g_test_eval_state);
+TEST_SHARED(test_sweep_p2_no_hit_returns_nil, SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES) {
+    require_fx_namespace_for_eval_tests();
     ID result = eval_string(
         "(fx/sweep-aabb {:x 0 :y 46 :w 8 :h 8}"
         "               {:vx -3 :vy 0}"
@@ -238,9 +244,8 @@ TEST_SHARED(test_sweep_p2_no_hit_returns_nil) {
  *   time-ms = 22/3 = 7  (integer division)
  *   normal  = :left  (mover hits left face of obstacle when moving right)
  */
-TEST_SHARED(test_sweep_p2_hit_returns_record) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    eval_string("(require 'fx)", g_test_eval_state);
+TEST_SHARED(test_sweep_p2_hit_returns_record, SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES) {
+    require_fx_namespace_for_eval_tests();
 
     /* verify hit-id */
     ID hit_id = eval_string(
@@ -265,9 +270,8 @@ TEST_SHARED(test_sweep_p2_hit_returns_record) {
     TEST_ASSERT_EQUAL_STRING(":left", kw->cname);
 }
 
-TEST_SHARED(test_sweep_p2_vertical_gap_edge_touch_returns_nil) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    eval_string("(require 'fx)", g_test_eval_state);
+TEST_SHARED(test_sweep_p2_vertical_gap_edge_touch_returns_nil, SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES) {
+    require_fx_namespace_for_eval_tests();
     ID result = eval_string(
         "(fx/sweep-aabb {:x 66 :y 80 :w 4 :h 4}"
         "               {:vx 0 :vy -2}"
@@ -283,9 +287,8 @@ TEST_SHARED(test_sweep_p2_vertical_gap_edge_touch_returns_nil) {
  *
  * At t=start-ms the result should equal from-{x,y}.
  */
-TEST_SHARED(test_sweep_p2_interpolate_segment_start) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    eval_string("(require 'fx)", g_test_eval_state);
+TEST_SHARED(test_sweep_p2_interpolate_segment_start, SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES) {
+    require_fx_namespace_for_eval_tests();
     ID x = eval_string(
         "(:x (fx/interpolate-segment"
         "     {:start-ms 100 :end-ms 200 :from-x 10 :from-y 20 :to-x 50 :to-y 80}"
@@ -307,9 +310,8 @@ TEST_SHARED(test_sweep_p2_interpolate_segment_start) {
  *
  * At t=end-ms the result should equal to-{x,y}.
  */
-TEST_SHARED(test_sweep_p2_interpolate_segment_end) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    eval_string("(require 'fx)", g_test_eval_state);
+TEST_SHARED(test_sweep_p2_interpolate_segment_end, SWEEP_P2_HEAP_GROWTH_LIMIT_BYTES) {
+    require_fx_namespace_for_eval_tests();
     ID x = eval_string(
         "(:x (fx/interpolate-segment"
         "     {:start-ms 100 :end-ms 200 :from-x 10 :from-y 20 :to-x 50 :to-y 80}"

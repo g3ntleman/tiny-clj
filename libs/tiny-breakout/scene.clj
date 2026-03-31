@@ -5,18 +5,22 @@
             [tiny-fx.gfx-scene :refer [->Group ->Rect ->Style ->VText normalize-spatial-rule]]))
 
 (defn paddle-prototype
+  "Returns reusable paddle prototype rectangle entity."
   []
   (->Rect :breakout/paddle nil nil true 0 0 40 4 nil))
 
 (defn ball-prototype
+  "Returns reusable ball prototype rectangle entity."
   []
   (->Rect :breakout/ball nil nil true 0 0 4 4 nil))
 
 (defn brick-prototype
+  "Returns reusable brick prototype rectangle entity."
   []
   (->Rect :breakout/brick nil nil true 0 0 20 10 nil))
 
 (defn concrete-spatial-rule
+  "Builds one normalized SpatialRule record for concrete entity ids."
   [rule-id self-id other-id]
   (record-from-map 'SpatialRule
                    (normalize-spatial-rule {:id rule-id
@@ -26,12 +30,19 @@
                                             :other other-id})))
 
 (defn paddle-rule
+  "Returns the canonical paddle collision rule."
   []
   (concrete-spatial-rule :ball-vs-paddle :ball :paddle))
 
 (defn- visible-brick-ids
+  "Returns brick ids for a visible brick map."
   [bricks]
   (keys bricks))
+
+(defn- number-or
+  "Returns numeric value v or fallback when v is not numeric."
+  [v fallback]
+  (if (number? v) v fallback))
 
 ;; Cached paddle-only rule vector. Brick collisions are handled predictively
 ;; by fx/sweep-aabb; no per-brick SpatialRule is needed at runtime.
@@ -49,19 +60,20 @@
 (defn overlay-text
   "Returns the shared centered overlay label for one breakout phase."
   [phase]
-  (cond
-    (= phase :game-over) "GAME OVER"
-    (= phase :victory) "YOU WIN!"
-    (= phase :pause) "PAUSED"
-    (= phase :title) "BREAKOUT"
-    (= phase :level-clear) "LEVEL CLEAR"
-    :else ""))
+  (case phase
+    :game-over "GAME OVER"
+    :victory "YOU WIN!"
+    :pause "PAUSED"
+    :title "BREAKOUT"
+    :level-clear "LEVEL CLEAR"
+    ""))
 
 (def ^:private overlay-char-advance
   {\space 5
    \! 4})
 
 (defn- overlay-text-width
+  "Computes overlay label width in breakout font pixels."
   [overlay]
   (reduce (fn [width ch]
             (+ width (get overlay-char-advance ch 10)))
@@ -79,14 +91,17 @@
 (def ^:private ease-in-dark-gray 24)
 (def ^:private ease-in-light-gray 255)
 (def ^:private ease-in-stop-count 11)
+(def ^:private segment-end-event-id :tiny-breakout/segment-end)
 
 (defn- ease-in-stop-times
+  "Returns timeline stop offsets for overlay fade-in."
   []
   (mapv (fn [step]
           (quot (* ease-in-duration-ms step) ease-in-stop-count))
         (range 0 (+ ease-in-stop-count 1))))
 
 (defn- ease-in-gray-rgb565
+  "Converts one fade offset to grayscale RGB565 color."
   [offset-ms]
   (let [gray (+ ease-in-dark-gray
                 (quot (* (- ease-in-light-gray ease-in-dark-gray) offset-ms)
@@ -112,6 +127,7 @@
               (rest stops)))))
 
 (defn overlay-style
+  "Builds overlay text style and optional fade timeline."
   [state overlay]
   (if (= overlay "")
     nil
@@ -125,6 +141,7 @@
       (->Style stroke-color nil true false nil false nil))))
 
 (defn brick->entity
+  "Converts one brick map entry into a renderable rectangle entity."
   [brick prototype]
   (->Rect (:id brick)
           nil
@@ -137,73 +154,75 @@
           prototype))
 
 (defn maybe-field-timeline
-  [motion from-value axis-key end-event?]
+  "Wraps a field in a timeline when motion metadata is present."
+  [motion from-value axis-key end-event]
   (if (and (map? motion)
            (number? (:start-ms motion))
            (number? (:end-ms motion))
            (> (:end-ms motion) (:start-ms motion)))
     (record-create 'Timeline
-                   [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                   [[[(number-or (:start-ms motion) 0)
                       from-value]
-                     [(let [v (:end-ms motion)] (if (number? v) v 0))
+                     [(number-or (:end-ms motion) 0)
                       (get motion axis-key)]]
                     false
-                    end-event?])
+                    (if (keyword? end-event) true end-event)
+                    (if (keyword? end-event) end-event nil)])
     from-value))
 
 (defn attached-ball-motion
+  "Builds attached-ball timeline while paddle moves in serve/title."
   [state]
   (let [phase (get state :phase)
         motion (get state :paddle-motion)
-        paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
-        ball-x (let [v (get state :ball-x)] (if (number? v) v 0))]
+        paddle-x (number-or (get state :paddle-x) 0)
+        ball-x (number-or (get state :ball-x) 0)]
     (if (and (map? motion)
              (or (= phase :title) (= phase :serve)))
       (record-create 'Timeline
-                     [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                     [[[(number-or (:start-ms motion) 0)
                         ball-x]
-                       [(let [v (:end-ms motion)] (if (number? v) v 0))
+                       [(number-or (:end-ms motion) 0)
                         (+ ball-x (- (get motion :to-x) paddle-x))]]
                       false
                       false])
       nil)))
 
 (defn visible-bricks
+  "Returns the brick map currently visible for rendering."
   [state]
   (let [active-bricks (levels/normalize-bricks (get state :bricks))
         levels (get state :levels)
-        level-index (get state :level-index)
+        level-no (get state :level-no)
         phase (get state :phase)]
     (cond
       (not (empty? active-bricks))
       active-bricks
       (and (vector? levels)
-           (number? level-index)
-           (<= 0 level-index)
-           (< level-index (count levels))
+           (number? level-no)
+           (<= 0 level-no)
+           (< level-no (count levels))
            (not= phase :title))
-      (let [level (nth levels level-index)
-            bricks (get level :bricks)]
-        (levels/level-bricks level))
+      (levels/level-bricks (nth levels level-no))
       :else {})))
 
 (defn build-scene
   "Builds one deterministic frame-scene shaped map from breakout state map.
   State must already carry expanded collision rules (via with-expanded-collision-rules)."
   [state]
-  (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
-        ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
-        ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
+  (let [paddle-x (number-or (get state :paddle-x) 0)
+        ball-x (number-or (get state :ball-x) 0)
+        ball-y (number-or (get state :ball-y) 0)
         paddle-motion (get state :paddle-motion)
         ball-segment (get state :ball-segment)
         paddle-x-field (maybe-field-timeline paddle-motion paddle-x :to-x false)
         attached-ball-x-field (attached-ball-motion state)
         ball-x-field (if (nil? attached-ball-x-field)
-                       (maybe-field-timeline ball-segment ball-x :to-x true)
+                       (maybe-field-timeline ball-segment ball-x :to-x segment-end-event-id)
                        attached-ball-x-field)
-        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y true)
-        score (let [v (get state :score)] (if (number? v) v 0))
-        lives (let [v (get state :lives)] (if (number? v) v 0))
+        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y false)
+        score (number-or (get state :score) 0)
+        lives (number-or (get state :lives) 0)
         phase (or (get state :phase) :title)
         bricks (visible-bricks state)]
     (let [paddle-shape (paddle-prototype)

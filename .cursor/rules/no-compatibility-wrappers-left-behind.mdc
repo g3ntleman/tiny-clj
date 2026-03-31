@@ -1,0 +1,11 @@
+---
+description: Remove compatibility wrappers after migrations
+alwaysApply: true
+---
+
+# No Compatibility Wrappers Left Behind
+
+- Do not leave compatibility wrappers, aliases, or temporary bridge APIs in the codebase.
+- Use wrappers only as short-lived migration aids when strictly necessary.
+- Before considering a task complete, remove migration wrappers and update all in-repo callsites to the final API.
+- Prefer one clear code path over dual-path compatibility logic.

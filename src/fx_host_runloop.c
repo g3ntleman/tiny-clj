@@ -7,7 +7,6 @@
 
 #include "eval.h"
 #include "event_loop.h"
-#include "platform.h"
 #include "exception.h"
 #include "memory.h"
 
@@ -34,6 +33,7 @@ static uint64_t fx_runloop_monotonic_now_ns(void) {
  * @return void
  */
 void fx_runloop_liveness_reset(void) {
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, 0u, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.iteration_count, 0u, memory_order_relaxed);
 }
@@ -62,7 +62,10 @@ ViewerRunloopLivenessSnapshot fx_runloop_liveness_snapshot(uint64_t now_ns) {
     snapshot.age_ns = (snapshot.last_tick_ns > 0u && now_ns > snapshot.last_tick_ns)
                           ? (now_ns - snapshot.last_tick_ns)
                           : 0u;
-    snapshot.state = (snapshot.last_tick_ns > 0u && snapshot.age_ns >= FX_RUNLOOP_STALL_THRESHOLD_NS)
+    bool blocked_wait = atomic_load_explicit(&g_runloop_thread.blocked_in_event_loop_wait, memory_order_relaxed);
+    snapshot.state = (snapshot.last_tick_ns > 0u &&
+                      snapshot.age_ns >= FX_RUNLOOP_STALL_THRESHOLD_NS &&
+                      !blocked_wait)
                          ? FX_RUNLOOP_LIVENESS_STALLED
                          : FX_RUNLOOP_LIVENESS_HEALTHY;
     return snapshot;
@@ -73,9 +76,12 @@ bool fx_drain_one_runloop_task(EvalState *st) {
         return false;
     }
     bool ran = false;
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, true, memory_order_relaxed);
     TRY {
-        ran = event_loop_run_next(NULL, st);
+        ran = event_loop_run(NULL, st);
+        atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     } CATCH(ex) {
+        atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
         if (ex) {
             fprintf(stderr, "[viewer-runloop] uncaught exception while draining runloop task\n");
             print_exception(ex);
@@ -104,14 +110,7 @@ static void *fx_runloop_thread_main(void *arg) {
         uint64_t now_ns = fx_runloop_monotonic_now_ns();
         atomic_store_explicit(&g_runloop_thread.last_tick_ns, now_ns, memory_order_relaxed);
         (void)atomic_fetch_add_explicit(&g_runloop_thread.iteration_count, 1u, memory_order_relaxed);
-        if (fx_drain_one_runloop_task(st)) {
-            continue;
-        }
-        int timeout_ms = event_loop_time_until_next_timer_ms();
-        if (timeout_ms < 0 || timeout_ms > 1) {
-            timeout_ms = 1;
-        }
-        platform_runloop_run_once((unsigned int)timeout_ms);
+        (void)fx_drain_one_runloop_task(st);
     }
     /* Runloop thread owns its own autorelease pool state; drain/free before exit. */
     autorelease_pool_free();
@@ -127,6 +126,7 @@ bool start_runloop_thread(EvalState *st) {
         return true;
     }
     fx_runloop_liveness_reset();
+    atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, fx_runloop_monotonic_now_ns(), memory_order_relaxed);
     g_runloop_thread.eval_state = st;
     atomic_store_explicit(&g_runloop_thread.running, true, memory_order_release);
@@ -151,6 +151,7 @@ void stop_runloop_thread(void) {
         return;
     }
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
+    event_loop_wake();
     (void)pthread_join(g_runloop_thread.thread, NULL);
     subjective_c_clear_interpreter_thread();
     g_runloop_thread.started = false;

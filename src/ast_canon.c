@@ -45,13 +45,86 @@ static INLINE void move_meta(ID src, ID dst) {
 #if defined(META_ENABLED) && META_ENABLED
   ID meta = meta_get(src);
   if (meta) {
-    meta_set(dst, meta);
+    if (dst && !IS_IMMEDIATE(dst)) {
+      meta_set(dst, meta);
+    }
     meta_clear(src);
   }
 #else
   (void)src;
   (void)dst;
 #endif
+}
+
+// Minimal bootstrap fallback for defn when clojure.core macros are not loaded yet.
+// Supports: (defn name [params] body...) and skips optional docstring/attr-map.
+static ID expand_defn_without_macro(CljList *form) {
+  if (!form) {
+    return NULL;
+  }
+
+  CljList *cursor = list_rest_normalized(form); // after defn symbol
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID name = LIST_FIRST(cursor);
+  if (!name || TAG(name) != CLJ_SYMBOL || IS_KEYWORD(name)) {
+    return NULL;
+  }
+
+  cursor = list_rest_normalized(cursor);
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID head = LIST_FIRST(cursor);
+  if (head && TAG(head) == CLJ_STRING) {
+    cursor = list_rest_normalized(cursor); // optional docstring
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  head = LIST_FIRST(cursor);
+  if (head && is_map(head)) {
+    cursor = list_rest_normalized(cursor); // optional attr-map
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID params = LIST_FIRST(cursor);
+  if (!params) {
+    return NULL;
+  }
+  CljList *body = list_rest_normalized(cursor);
+  if (!body) {
+    return NULL;
+  }
+
+  ID fn_rest = AUTORELEASE(make_list(name,
+                                     AUTORELEASE(make_list(params, body))));
+  if (!fn_rest) {
+    return NULL;
+  }
+  ID fn_form = AUTORELEASE(make_list(SYM_FN, as_list(fn_rest)));
+  if (!fn_form) {
+    return NULL;
+  }
+
+  ID def_rest = AUTORELEASE(make_list(name,
+                                      AUTORELEASE(make_list(fn_form, NULL))));
+  if (!def_rest) {
+    return NULL;
+  }
+  ID def_form = AUTORELEASE(make_list(SYM_DEF, as_list(def_rest)));
+  if (!def_form) {
+    return NULL;
+  }
+
+  move_meta((ID)form, def_form);
+  return def_form;
 }
 
 static ID make_ast_call_with_body(ID op,
@@ -94,6 +167,14 @@ static ID make_ast_call_with_body(ID op,
 
 static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljPersistentVector **scope_stack);
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
+
+static INLINE bool should_lookup_macro_for_head_symbol(CljSymbol *head_sym) {
+  if (!head_sym) {
+    return false;
+  }
+  bool is_qualified = head_sym->ns_name != NULL;
+  return !is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified);
+}
 
 // Canonicalize a list tail (rest chain) into plain CLJ_LIST cons cells.
 // Important: This must NOT run macro expansion / destructuring on the tail itself.
@@ -177,7 +258,7 @@ static bool macro_expansion_seq_needs_fallback(ID expanded_first, bool in_quote,
   if (TAG(expanded_first) != CLJ_SYMBOL)
     return false;
 
-  CljSymbol *head_sym = as_symbol(expanded_first);
+  CljSymbol *head_sym = symbol_normalize_core_dispatch_symbol(as_symbol(expanded_first));
   if (!head_sym)
     return true;
   if (is_special_symbol(head_sym))
@@ -410,10 +491,6 @@ static CljSymbol *canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
       ns_name_sym = intern_symbol_global(ns_buf);
     }
 
-    if (!ns_name_sym && ns_buf[0] != '\0') {
-      ns_name_sym = intern_symbol_global(ns_buf);
-    }
-
     if (!ns_name_sym || sym_buf[0] == '\0') {
       return NULL; // Invalid symbol
     }
@@ -504,8 +581,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     return expr; // Actual string literal, leave unchanged
   }
 
-  // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
-  // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
+  // Lexical addressing: rewrite symbol references in lexical scope to (depth, slot).
   if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
     // Keywords evaluate to themselves and must never be rewritten.
     if (!IS_KEYWORD(expr)) {
@@ -518,11 +594,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
       if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
         uint8_t depth = 0, slot = 0;
         if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
-          if (depth == 0) {
-            ID ref = (ID)make_slot_ref(sym, 0, slot);
-            // Canonicalizer returns pool-safe heap values; SlotRef must match.
-            return AUTORELEASE(ref);
-          }
+          ID ref = (ID)make_slot_ref(sym, depth, slot);
+          // Canonicalizer returns pool-safe heap values; SlotRef must match.
+          return AUTORELEASE(ref);
         }
       }
     }
@@ -535,20 +609,25 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     CLJ_ASSERT(list != NULL);
 
     ID first = canonicalize_expr_with_scope(list->first, st, in_quote, scope_stack);
+    CljSymbol *first_sym = (first && TAG(first) == CLJ_SYMBOL) ? as_symbol(first) : NULL;
+    CljSymbol *dispatch_head_sym = symbol_normalize_core_dispatch_symbol(first_sym);
+    ID dispatch_head = (ID)dispatch_head_sym;
 
     // Check if we're entering a quote-like expression
     // Treat (quote ...) and (quasiquote ...) as data contexts for canonicalization.
-    bool is_quote_form = (first == SYM_QUOTE || first == SYM_QUASIQUOTE);
+    bool is_quote_form = (dispatch_head == (ID)SYM_QUOTE || dispatch_head == (ID)SYM_QUASIQUOTE);
     bool child_in_quote = in_quote || is_quote_form;
+    if (!in_quote && first_sym && dispatch_head_sym && dispatch_head_sym != first_sym) {
+      first = dispatch_head;
+    }
 
     // ========== MACRO EXPANSION (compile-time) ==========
     // Expand macros before destructuring and other transformations
     // Skip macro lookup for special forms and native functions (they can't be macros)
-    if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
-      CljSymbol *head_sym = as_symbol(first);
+    if (!in_quote && dispatch_head_sym) {
+      CljSymbol *head_sym = dispatch_head_sym;
       CljFunction *macro = NULL;
-      bool is_qualified = head_sym && head_sym->ns_name;
-      if (!is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified)) {
+      if (should_lookup_macro_for_head_symbol(head_sym)) {
         macro = lookup_macro_resolve(st, head_sym);
       }
       if (macro) {
@@ -664,12 +743,19 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         RELEASE(macro_expanded);
         return result;
       }
+
+      if (head_sym == SYM_DEFN) {
+        ID expanded_def = expand_defn_without_macro(list);
+        if (expanded_def) {
+          return canonicalize_expr_with_scope(expanded_def, st, in_quote, scope_stack);
+        }
+      }
     }
 
     // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
     // Transform let/loop bindings and fn/defn params
-    if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
-      CljSymbol *head_sym = as_symbol(first);
+    if (!in_quote && dispatch_head_sym) {
+      CljSymbol *head_sym = dispatch_head_sym;
 
       // (let [bindings] body...) - expand bindings using Clojure destructure
       if (head_sym == SYM_LET) {
@@ -808,7 +894,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // Lexical addressing for `let`: the body runs with a fresh CallFrame containing the let-bindings.
     // We canonicalize the bindings vector without lexical rewrite (init exprs should not see later bindings),
     // then push a scope of the let binding names for the body.
-    if (!in_quote && first == SYM_LET && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_LET && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         // Canonicalize bindings vector without lexical rewrite.
@@ -854,7 +940,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // IMPORTANT: Inside a loop, depth=0 refers to the loop frame. If we don't push a loop scope here,
     // outer function parameters (like `n`) can be incorrectly rewritten to (depth=0, slot=0) and
     // then read from the loop frame instead of the parent function frame.
-    if (!in_quote && first == SYM_LOOP && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_LOOP && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         // Canonicalize bindings vector without lexical rewrite.
@@ -899,7 +985,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // Lexical addressing for `dotimes`: the body runs with a fresh CallFrame binding the loop var.
     // We canonicalize the binding vector without lexical rewrite (name + count expr),
     // then push a scope with just the loop var for the body.
-    if (!in_quote && first == SYM_DOTIMES && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_DOTIMES && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
@@ -936,7 +1022,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
     // Lexical addressing (step 1): rewrite references to fn-parameters inside the fn body.
     // IMPORTANT: Do NOT lexicalize the fn name or parameter declarations themselves.
-    if (!in_quote && first == SYM_FN) {
+    if (!in_quote && dispatch_head == (ID)SYM_FN) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1) {
         ID second = rest1->first;  // name OR params
@@ -984,20 +1070,22 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
               vector_conj_inplace(&param_scope, p);
             }
 
-            // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
-            // This prevents accidentally rewriting free variables (depth>0) before
-            // closure-capture support exists.
+            // Extend existing lexical scope (if any) so nested fn bodies can
+            // resolve both local params (depth=0) and free vars (depth>0).
             CljPersistentVector *fn_scope_stack = NULL;
-            scope_stack_push_inplace(&fn_scope_stack, param_scope);
+            CljPersistentVector **active_scope_stack = scope_stack ? scope_stack : &fn_scope_stack;
+            scope_stack_push_inplace(active_scope_stack, param_scope);
             RELEASE(param_scope);
 
             // Canonicalize body with param scope active.
             CljList *canon_body = body_rest
-                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
+                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, active_scope_stack)
                                       : NULL;
 
-            scope_stack_pop_inplace(&fn_scope_stack);
-            RELEASE(fn_scope_stack);
+            scope_stack_pop_inplace(active_scope_stack);
+            if (!scope_stack) {
+              RELEASE(fn_scope_stack);
+            }
 
             ID prefix_args[2] = {NULL, NULL};
             unsigned int prefix_count = named ? 2 : 1;
@@ -1223,14 +1311,14 @@ ID ast_canon_macroexpand_1(EvalState *st, ID form) {
     return form;
   }
 
-  bool is_qualified = head_sym && head_sym->ns_name;
-  if (is_special_symbol(head_sym) || (is_native_symbol(head_sym) && !is_qualified)) {
+  CljSymbol *dispatch_head_sym = symbol_normalize_core_dispatch_symbol(head_sym);
+  if (!should_lookup_macro_for_head_symbol(dispatch_head_sym)) {
     if (converted_head)
       RELEASE(converted_head);
     RETAIN(form);
     return form;
   }
-  CljFunction *macro = lookup_macro_resolve(st, head_sym);
+  CljFunction *macro = lookup_macro_resolve(st, dispatch_head_sym);
   if (converted_head)
     RELEASE(converted_head);
   if (!macro) {

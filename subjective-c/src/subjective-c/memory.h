@@ -344,6 +344,11 @@ void autorelease_pool_free(void);
  */
 bool is_autorelease_pool_active(void);
 
+/** @brief Check whether autorelease pool is currently draining.
+ * @return True while drain_to_depth() is releasing pool entries.
+ */
+bool is_autorelease_pool_draining(void);
+
 /** @brief Mark current autorelease pool depth for later restoration
  * @return Current pool depth marker
  */

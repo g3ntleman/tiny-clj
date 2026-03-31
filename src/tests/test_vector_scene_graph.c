@@ -3580,6 +3580,10 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_captured_valu
     TEST_ASSERT_EQUAL_INT(1800, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":period-ms"))));
     TEST_ASSERT_EQUAL_INT(250, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
     TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":loop")) == clj_true);
+    TEST_ASSERT_NOT_NULL(map_get(progress_map, (ID)intern_symbol_global(":slot-id")));
+    TEST_ASSERT_EQUAL_INT(3001, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":entity-id"))));
+    TEST_ASSERT_EQUAL_PTR((ID)intern_symbol_global(":t"),
+                          map_get(progress_map, (ID)intern_symbol_global(":field")));
 
     vg_rendered_state_reset_all();
 }
@@ -3757,6 +3761,10 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
     TEST_ASSERT_EQUAL_INT(1000, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
     TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":loop")) == clj_false);
     TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":end-event")) == clj_false);
+    TEST_ASSERT_NULL(map_get(progress_map, (ID)intern_symbol_global(":event-id")));
+    TEST_ASSERT_NOT_NULL(map_get(progress_map, (ID)intern_symbol_global(":slot-id")));
+    TEST_ASSERT_NOT_NULL(map_get(progress_map, (ID)intern_symbol_global(":entity-id")));
+    TEST_ASSERT_NOT_NULL(map_get(progress_map, (ID)intern_symbol_global(":field")));
     TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":at-end")) == clj_true);
     TEST_ASSERT_EQUAL_INT(92, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":snapshot-gen"))));
     TEST_ASSERT_EQUAL_INT(150, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":ts-ms"))));
@@ -3771,7 +3779,7 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {:tiny-fx.scene/root (->Line :tiny-fx.scene/root nil (->Style 65535 1 true false 0 false 0) true "
-        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false true]) 8 20 8 nil)}] "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false true :demo/end]) 8 20 8 nil)}] "
         "    (record-create (quote FrameScene) [:tiny-fx.scene/root entities [0 0 64 48] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -3804,6 +3812,10 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_
 
     TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":loop")) == clj_false);
     TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":end-event")) == clj_true);
+    TEST_ASSERT_NOT_NULL(map_get(result, (ID)intern_symbol_global(":event-id")));
+    TEST_ASSERT_NOT_NULL(map_get(result, (ID)intern_symbol_global(":slot-id")));
+    TEST_ASSERT_NOT_NULL(map_get(result, (ID)intern_symbol_global(":entity-id")));
+    TEST_ASSERT_NOT_NULL(map_get(result, (ID)intern_symbol_global(":field")));
     TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":at-end")) == clj_true);
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(map_get(result, (ID)intern_symbol_global(":step"))));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(map_get(result, (ID)intern_symbol_global(":period-ms"))));
@@ -3812,59 +3824,79 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_
     vg_rendered_state_reset_all();
 }
 
-TEST(test_vector_scene_graph_timeline_watch_polls_marked_end_edges_once) {
+TEST(test_vector_scene_graph_timeline_watch_dispatches_marked_end_edges_once_until_rearmed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     event_loop_clear();
     vg_rendered_state_reset_all();
 
-    VgRenderedTimelineSample sample = {
-        .step_index = 1u,
-        .keyframe_count = 2u,
-        .phase_ms = 100u,
-        .period_ms = 100u,
-        .loop = false,
-        .end_event = true,
-        .at_end = true,
-    };
-
-    vg_rendered_state_capture_begin(2u, 44u, 150u);
-    vg_rendered_state_capture_record_timeline((uintptr_t)fixnum(3001), VG_RENDERED_FIELD_T, sample);
-    vg_rendered_state_capture_commit();
-
-    ID result = eval_string(
-        "(do (require 'tiny-clj.runtime) "
-        "    (require 'tiny-fx.gfx) "
-        "    (require 'tiny-fx.gfx-timeline) "
-        "    (require 'tiny-fx.game-demo) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
+    ID ok = eval_string(
+        "(do (require 'tiny-fx.gfx-timeline) "
         "    (let [seen (atom [])] "
         "      (tiny-fx.gfx-timeline/watch :demo/end "
         "        (fn [event] "
         "          (swap! seen conj [(:id event) (:at-end (:progress event))]) "
-        "          nil) "
-        "        {:slot :game :entity-id 3001 :field :t}) "
-        "      (tiny-fx.gfx-timeline/poll-watchers!) "
+        "          nil)) "
+        "      (tiny-fx.gfx-timeline/dispatch-watch! :demo/end {:end-event true :at-end true}) "
         "      (run-next-task) "
-        "      (tiny-fx.gfx-timeline/poll-watchers!) "
+        "      (tiny-fx.gfx-timeline/dispatch-watch! :demo/end {:end-event true :at-end true}) "
+        "      (run-next-task) "
+        "      (tiny-fx.gfx-timeline/dispatch-watch! :demo/end {:end-event true :at-end false}) "
+        "      (tiny-fx.gfx-timeline/dispatch-watch! :demo/end {:end-event true :at-end true}) "
+        "      (run-next-task) "
         "      (tiny-fx.gfx-timeline/watch :demo/end nil) "
-        "      @seen))",
+        "      (= [[:demo/end true] [:demo/end true]] @seen)))",
         g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
-    CljPersistentVector *vec = as_vector(result);
-    TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(1, vector_count(vec));
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
 
-    ID entry = vector_nth(vec, 0);
-    TEST_ASSERT_NOT_NULL(entry);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entry));
-    CljPersistentVector *event_vec = as_vector(entry);
-    TEST_ASSERT_NOT_NULL(event_vec);
-    TEST_ASSERT_EQUAL_INT(2, vector_count(event_vec));
-    TEST_ASSERT_NOT_NULL(vector_nth(event_vec, 0));
-    TEST_ASSERT_TRUE(vector_nth(event_vec, 1) == clj_true);
+TEST(test_vector_scene_graph_timeline_event_on_dispatches_progress_by_event_id_once_until_rearmed) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
 
-    vg_rendered_state_reset_all();
+    ID ok = eval_string(
+        "(do (require 'tiny-clj.event) "
+        "    (require 'tiny-fx.gfx-timeline) "
+        "    (let [seen (atom [])] "
+        "      (tiny-clj.event/on {:source :timeline :id :demo/end} "
+        "        (fn [event] "
+        "          (swap! seen conj [(:id event) (:event-id (:progress event))]) "
+        "          nil)) "
+        "      (tiny-clj.event/dispatch-timeline-progress! {:event-id :demo/end :end-event true :at-end true}) "
+        "      (run-next-task) "
+        "      (tiny-clj.event/dispatch-timeline-progress! {:event-id :demo/end :end-event true :at-end true}) "
+        "      (run-next-task) "
+        "      (tiny-clj.event/dispatch-timeline-progress! {:event-id :demo/end :end-event true :at-end false}) "
+        "      (tiny-clj.event/dispatch-timeline-progress! {:event-id :demo/end :end-event true :at-end true}) "
+        "      (run-next-task) "
+        "      (tiny-clj.event/on {:source :timeline :id :demo/end} nil) "
+        "      (= [[:demo/end :demo/end] [:demo/end :demo/end]] @seen)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_vector_scene_graph_timeline_event_on_distinguishes_sources_for_same_event_id) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    ID ok = eval_string(
+        "(do (require 'tiny-clj.event) "
+        "    (require 'tiny-fx.gfx-timeline) "
+        "    (let [seen (atom [])] "
+        "      (tiny-clj.event/on {:source :timeline :id :demo/end} "
+        "        (fn [event] "
+        "          (let [progress (:progress event)] "
+        "            (swap! seen conj [(:id event) (:slot-id progress) (:entity-id progress) (:field progress)])) "
+        "          nil)) "
+        "      (tiny-clj.event/dispatch-timeline-progress! "
+        "        {:event-id :demo/end :end-event true :at-end true :slot-id :game :entity-id 3001 :field :t}) "
+        "      (tiny-clj.event/dispatch-timeline-progress! "
+        "        {:event-id :demo/end :end-event true :at-end true :slot-id :game :entity-id 3002 :field :t}) "
+        "      (run-next-task) "
+        "      (run-next-task) "
+        "      (tiny-clj.event/on {:source :timeline :id :demo/end} nil) "
+        "      (= [[:demo/end :game 3001 :t] [:demo/end :game 3002 :t]] @seen)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
 TEST(test_vector_scene_graph_runtime_rendered_state_queries_validate_arity_and_args) {

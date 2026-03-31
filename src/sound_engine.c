@@ -176,10 +176,6 @@ static ID sound_make_finished_event(ID track_id) {
 }
 
 typedef struct {
-    ID retained_obj;
-} SoundDeferredRelease;
-
-typedef struct {
     ID callback_fn;
     ID track_id;
     uint32_t epoch;
@@ -190,40 +186,19 @@ static uint32_t g_sound_engine_callback_epoch_counter = 0u;
 
 static void sound_deferred_release_run(void *ctx, EvalState *st) {
     (void)st;
-    SoundDeferredRelease *release_ctx = (SoundDeferredRelease *)ctx;
-    if (!release_ctx) {
-        return;
-    }
-    RELEASE(release_ctx->retained_obj);
-}
-
-static void sound_deferred_release_cleanup(void *ctx) {
-    SoundDeferredRelease *release_ctx = (SoundDeferredRelease *)ctx;
-    if (!release_ctx) {
-        return;
-    }
-    CLJ_FREE(release_ctx);
+    ID retained_obj = ctx;
+    RELEASE(retained_obj);
 }
 
 static void sound_release_retained_obj(ID retained_obj) {
     if (!retained_obj) {
         return;
     }
-
-    SoundDeferredRelease *release_ctx = (SoundDeferredRelease *)CLJ_MALLOC(sizeof(SoundDeferredRelease));
-    if (!release_ctx) {
-        RELEASE(retained_obj);
-        return;
-    }
-    release_ctx->retained_obj = retained_obj;
-
     if (event_loop_dispatch_native(sound_deferred_release_run,
-                                   release_ctx,
-                                   sound_deferred_release_cleanup)) {
+                                   retained_obj,
+                                   NULL)) {
         return;
     }
-
-    sound_deferred_release_cleanup(release_ctx);
     RELEASE(retained_obj);
 }
 

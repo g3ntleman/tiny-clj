@@ -106,6 +106,28 @@ TEST_SHARED(test_string_ends_with) {
 }
 
 // ============================================================================
+// STARTS-WITH? TESTS
+// ============================================================================
+
+TEST_SHARED(test_string_starts_with) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    load_clojure_string_namespace();
+
+    CljObject *result1 = eval_string("(clojure.string/starts-with? \"hello\" \"he\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(result1 == clj_true);
+
+    CljObject *result2 = eval_string("(clojure.string/starts-with? \"hello\" \"lo\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(result2 == clj_false);
+
+    CljObject *result3 = eval_string("(clojure.string/starts-with? nil \"he\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(result3 == clj_false);
+}
+
+// ============================================================================
 // ESCAPE TESTS
 // ============================================================================
 
@@ -142,6 +164,62 @@ TEST_SHARED(test_string_includes) {
     CljObject *result2 = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(result2 == clj_false);
+}
+
+// ============================================================================
+// TRIML/TRIMR/TRIM-NEWLINE TESTS
+// ============================================================================
+
+TEST_SHARED(test_string_trim_left_right_newline) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+
+    CljObject *triml = eval_string("(clojure.string/triml \"  hi\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(triml);
+    TEST_ASSERT_TRUE(TAG(triml) == CLJ_STRING);
+    TEST_ASSERT_EQUAL_STRING("hi", clj_string_data(as_clj_string(triml)));
+
+    CljObject *trimr = eval_string("(clojure.string/trimr \"hi  \")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(trimr);
+    TEST_ASSERT_TRUE(TAG(trimr) == CLJ_STRING);
+    TEST_ASSERT_EQUAL_STRING("hi", clj_string_data(as_clj_string(trimr)));
+
+    CljObject *trim_newline = eval_string("(clojure.string/trim-newline \"hi\\n\\r\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(trim_newline);
+    TEST_ASSERT_TRUE(TAG(trim_newline) == CLJ_STRING);
+    TEST_ASSERT_EQUAL_STRING("hi", clj_string_data(as_clj_string(trim_newline)));
+}
+
+// ============================================================================
+// JOIN2 / SPLIT-LINES REGRESSION TESTS
+// ============================================================================
+
+TEST_SHARED(test_string_join2_matches_join_behavior) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+
+    CljObject *result1 = eval_string("(= (clojure.string/join2 \",\" '(\"a\" \"b\" \"c\")) \"a,b,c\")",
+                                     g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(result1 == clj_true);
+
+    CljObject *result2 = eval_string("(= (clojure.string/join2 nil '(\"a\" \"b\")) \"ab\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(result2 == clj_true);
+}
+
+TEST_SHARED(test_string_split_lines_handles_lf_and_crlf) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+
+    CljObject *lf = eval_string("(= (clojure.string/split-lines \"a\\nb\") [\"a\" \"b\"])", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(lf);
+    TEST_ASSERT_TRUE(lf == clj_true);
+
+    CljObject *crlf = eval_string("(= (clojure.string/split-lines \"a\\r\\nb\") [\"a\" \"b\"])",
+                                  g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(crlf);
+    TEST_ASSERT_TRUE(crlf == clj_true);
 }
 
 // ============================================================================
@@ -263,5 +341,3 @@ TEST(test_string_pad_left_empty_string) {
     CljString *str1 = as_clj_string(result1);
     TEST_ASSERT_EQUAL_STRING("xxx", clj_string_data(str1));
 }
-
-

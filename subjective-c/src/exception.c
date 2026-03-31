@@ -16,6 +16,8 @@
 #include "strings.h"
 #if defined(ESP_PLATFORM)
 #include "esp_debug_helpers.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #endif
 
 static void errf(const char *fmt, ...) {
@@ -38,6 +40,34 @@ static void safe_strncpy(char *dest, const char *src, size_t dest_size) {
     if (!dest || !src || dest_size == 0) return;
     strncpy(dest, src, dest_size - 1);
     dest[dest_size - 1] = '\0';
+}
+
+// During autorelease-pool drain, throw paths must be allocation-free and must
+// not call AUTORELEASE again (would recurse through autorelease() guard).
+static THREAD_LOCAL CLJException g_drain_exception;
+
+static CLJException *prepare_drain_exception(const char *type,
+                                             const char *message,
+                                             const char *file,
+                                             int line,
+                                             int col) {
+    memset(&g_drain_exception, 0, sizeof(g_drain_exception));
+    g_drain_exception.base.type = CLJ_EXCEPTION;
+    g_drain_exception.base.rc = SINGLETON_RC;
+    safe_strncpy(g_drain_exception.type,
+                 (type && type[0] != '\0') ? type : "RuntimeException",
+                 sizeof(g_drain_exception.type));
+    safe_strncpy(g_drain_exception.message,
+                 (message && message[0] != '\0') ? message : "error",
+                 sizeof(g_drain_exception.message));
+    safe_strncpy(g_drain_exception.file, file ? file : "", sizeof(g_drain_exception.file));
+    g_drain_exception.line = line;
+    g_drain_exception.col = col;
+#ifdef DEBUG
+    g_drain_exception.stacktrace = NULL;
+    g_drain_exception.object = 0;
+#endif
+    return &g_drain_exception;
 }
 
 // Shorten file path to show only from /src/ onwards
@@ -98,23 +128,33 @@ struct CljString* stacktrace(void);
 THREAD_LOCAL GlobalExceptionStack global_exception_stack = {0};
 
 #ifdef DEBUG
-// Thread-local Clojure call stack (function names, innermost frame at [depth-1])
-THREAD_LOCAL CljCallStack g_clj_callstack = { .depth = 0 };
+// Clojure call stack (function names, innermost frame at [depth-1]).
+CljCallStack g_clj_callstack = { .depth = 0 };
+static char g_clj_stacktrace_buf[CLJ_CALLSTACK_MAX * 40];
 
 /**
  * @brief Build a human-readable Clojure stacktrace from the current call stack.
  * @return New CljString (rc=1) listing frames from innermost to outermost, or NULL if empty.
  */
 struct CljString *clj_stacktrace_build(void) {
-    if (g_clj_callstack.depth == 0) return NULL;
-    char buf[CLJ_CALLSTACK_MAX * 40];
+    int depth = g_clj_callstack.depth;
+    if (depth <= 0) return NULL;
+    if (depth > CLJ_CALLSTACK_MAX) {
+        depth = CLJ_CALLSTACK_MAX;
+    }
+    char *buf = g_clj_stacktrace_buf;
+    int buf_size = (int)sizeof(g_clj_stacktrace_buf);
     int pos = 0;
-    pos += mini_snprintf(buf + pos, (int)sizeof(buf) - pos, "Clojure call stack:\n");
-    for (int i = g_clj_callstack.depth - 1; i >= 0 && pos < (int)sizeof(buf) - 1; i--) {
-        int frame_num = g_clj_callstack.depth - i;
-        pos += mini_snprintf(buf + pos, (int)sizeof(buf) - pos, "  %2d: %s\n",
+    pos += mini_snprintf(buf + pos, buf_size - pos, "Clojure call stack:\n");
+    for (int i = depth - 1; i >= 0 && pos < buf_size - 1; i--) {
+        int frame_num = depth - i;
+        const char *name = g_clj_callstack.names[i];
+        if (!name || name[0] == '\0') {
+            name = "<anonymous>";
+        }
+        pos += mini_snprintf(buf + pos, buf_size - pos, "  %2d: %s\n",
                              frame_num,
-                             g_clj_callstack.frames[i] ? g_clj_callstack.frames[i] : "<anonymous>");
+                             name);
     }
     return make_string(buf);
 }
@@ -141,19 +181,34 @@ const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_mai
 const SubjectiveCThreadState *const subjective_c_interpreter_thread = &subjective_c_interpreter_thread_storage;
 
 static bool subjective_c_thread_state_matches_current(const SubjectiveCThreadState *state) {
-    return state && state->initialized && pthread_equal(state->value, pthread_self()) != 0;
+    if (!state || !state->initialized) {
+        return false;
+    }
+#if defined(ESP_PLATFORM)
+    return state->task_handle == (void *)xTaskGetCurrentTaskHandle();
+#else
+    return pthread_equal(state->value, pthread_self()) != 0;
+#endif
 }
 
 void subjective_c_register_main_thread(void) {
     if (!subjective_c_main_thread_storage.initialized) {
+#if defined(ESP_PLATFORM)
+        subjective_c_main_thread_storage.task_handle = (void *)xTaskGetCurrentTaskHandle();
+#else
         subjective_c_main_thread_storage.value = pthread_self();
+#endif
         subjective_c_main_thread_storage.initialized = true;
         subjective_c_set_thread_name("main");
     }
 }
 
 void subjective_c_register_interpreter_thread(void) {
+#if defined(ESP_PLATFORM)
+    subjective_c_interpreter_thread_storage.task_handle = (void *)xTaskGetCurrentTaskHandle();
+#else
     subjective_c_interpreter_thread_storage.value = pthread_self();
+#endif
     subjective_c_interpreter_thread_storage.initialized = true;
 }
 
@@ -303,10 +358,12 @@ CLJException* make_exception(const char *type, const char *message, const char *
     exc->col = col;
 
 #ifdef DEBUG
-    // Prefer Clojure-level call stack (useful to end users); fall back to native C backtrace
+    // Prefer Clojure-level call stack (useful to end users).
+    // Avoid native backtrace symbolization here: in deep/error-heavy paths this can
+    // exhaust the remaining stack and crash while constructing the exception object.
     exc->stacktrace = clj_stacktrace_build();
     if (!exc->stacktrace) {
-        exc->stacktrace = stacktrace();
+        exc->stacktrace = make_string("Clojure call stack unavailable");
     }
     exc->object = 0;  // Initialize to 0 (unset)
 #else
@@ -357,6 +414,21 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
+    if (is_autorelease_pool_draining()) {
+        char message[256];
+        message[0] = '\0';
+#if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
+        (void)mini_snprintf(message, sizeof(message), "%s", (format != NULL) ? format : "Err");
+#else
+        va_list args;
+        va_start(args, format);
+        (void)mini_vsnprintf(message, sizeof(message), format ? format : "Err", args);
+        va_end(args);
+#endif
+        throw_exception_object(prepare_drain_exception(exception_type, message, file, line, code));
+        return;
+    }
+
     // CRITICAL: OutOfMemoryError must never allocate, even if memory is still available.
     if (is_out_of_memory_exception_type(exception_type)) {
         char message[256];
@@ -397,6 +469,13 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
+    if (is_autorelease_pool_draining()) {
+        throw_exception_object(prepare_drain_exception(exception_type,
+                                                       message ? message : "error",
+                                                       file, line, col));
+        return;
+    }
+
     // CRITICAL: OutOfMemoryError must never allocate.
     if (is_out_of_memory_exception_type(exception_type)) {
         CLJException *oom = make_exception(EXCEPTION_OUT_OF_MEMORY,
@@ -427,13 +506,14 @@ struct CljString* stacktrace(void) {
         return NULL;
     }
 
-    // Calculate total length needed using our own symbolizer so the textual
-    // stacktrace matches crash-path output.
+    // Keep exception stacktrace capture lightweight and avoid symbolication.
+    // dladdr()-based symbolization can recurse into dyld internals and blow
+    // small stacks in stress paths.
     size_t total_len = 0;
-    char line_buf[512];
+    char line_buf[64];
     size_t last_index = (size > 0u) ? (size - 1u) : 0u;
     for (size_t i = 0; i < last_index; i++) {
-        exception_format_symbolized_frame(line_buf, sizeof(line_buf), (int)i, array[i]);
+        (void)mini_snprintf(line_buf, sizeof(line_buf), "  %d: %p\n", (int)i, array[i]);
         total_len += strlen(line_buf);
     }
 
@@ -446,7 +526,7 @@ struct CljString* stacktrace(void) {
     // Build stacktrace string, skipping the last line (often contains loader frames).
     size_t pos = 0;
     for (size_t i = 0; i < last_index; i++) {
-        exception_format_symbolized_frame(line_buf, sizeof(line_buf), (int)i, array[i]);
+        (void)mini_snprintf(line_buf, sizeof(line_buf), "  %d: %p\n", (int)i, array[i]);
         size_t len = strlen(line_buf);
         memcpy(buffer + pos, line_buf, len);
         pos += len;

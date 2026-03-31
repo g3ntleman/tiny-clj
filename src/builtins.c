@@ -176,6 +176,7 @@ ID native_mark_private_bang(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
+ID native_inc(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
 ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
@@ -3093,6 +3094,8 @@ ID native_type(ID *args, unsigned int argc) {
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
   case CLJ_RECORD:
     return intern_symbol(SYM_CLOJURE_LANG, "Record");
+  case CLJ_NAMESPACE:
+    return intern_symbol(SYM_CLOJURE_LANG, "Namespace");
   case CLJ_LIST:
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
   case CLJ_FUNC:
@@ -3847,8 +3850,7 @@ ID native_bound_p(ID *args, unsigned int argc) {
 
 // all-ns: Returns a list of all namespace objects
 // Usage: (all-ns)
-ID native_all_ns(ID *args, unsigned int argc) {
-  (void)args;
+ID native_all_ns(__attribute__((unused)) ID *args, unsigned int argc) {
   if (argc != 0) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "all-ns expects no arguments, got %u", argc);
@@ -3861,12 +3863,12 @@ ID native_all_ns(ID *args, unsigned int argc) {
 
   ID result = NULL;
   MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
-    (void)key;
-    if (!val) {
+    /* Registry stores clojure.core twice (name key + NULL key for ns_find_by_symbol); list once. */
+    if (!key || !val) {
       continue;
     }
-    CljList *old_result = (CljList *)result;
-    result = make_list(val, (CljList *)result);
+    CljList *old_result = as_list(result);
+    result = make_list(val, as_list(result));
     RELEASE(old_result);
   }
 
@@ -4513,6 +4515,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_macroexpand_1, "macroexpand-1"),
     NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
+    NATIVE_ENTRY_BOOT_CNAME(native_run_next_task, "run-next-task-native"),
 
     // tiny-clj.datetime functions
     NATIVE_ENTRY(&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days),
@@ -4543,8 +4546,10 @@ static const NativeFunctionEntry native_function_table[] = {
                       native_tinyclj_runtime_renderer_timeline_progress,
                       "tiny-clj.runtime/renderer-timeline-progress"),
     NATIVE_ENTRY(&sym_tinyfx_gfx_color_qualified_data.sym, native_tinyfx_color_color),
-    NATIVE_ENTRY(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb),
-    NATIVE_ENTRY(&sym_fx_interpolate_segment_qualified_data.sym, native_fx_interpolate_segment),
+    NATIVE_ENTRY_BOOT(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb, "fx/sweep-aabb"),
+    NATIVE_ENTRY_BOOT(&sym_fx_interpolate_segment_qualified_data.sym,
+                      native_fx_interpolate_segment,
+                      "fx/interpolate-segment"),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
@@ -4582,6 +4587,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_meta_data.sym, native_meta, "meta"),
     NATIVE_ENTRY_BOOT(&sym_with_meta_data.sym, native_with_meta, "with-meta"),
     NATIVE_ENTRY(&sym_reduce_data.sym, native_reduce),
+    NATIVE_ENTRY_BOOT_CNAME(native_inc, "inc"),
     NATIVE_ENTRY_BOOT(&sym_list_data.sym, native_list, "list"),
     NATIVE_ENTRY(&sym_destructure_data.sym, native_destructure),
     NATIVE_ENTRY(&sym_map_data.sym, native_map),
@@ -4639,7 +4645,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_some_data.sym, native_some),
     NATIVE_ENTRY_BOOT(&sym_cons_data.sym, native_cons, "cons"),
     NATIVE_ENTRY(&sym_count_data.sym, native_count),
-    NATIVE_ENTRY(&sym_nilp_data.sym, native_nilp),
+    NATIVE_ENTRY_BOOT(&sym_nilp_data.sym, native_nilp, "nil?"),
     NATIVE_ENTRY(&sym_reverse_data.sym, native_reverse),
     NATIVE_ENTRY(&sym_assoc_data.sym, native_assoc),
     NATIVE_ENTRY(&sym_dissoc_data.sym, native_dissoc),
@@ -4707,6 +4713,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_reset_bang_data.sym, native_reset_bang),
     NATIVE_ENTRY(&sym_swap_bang_data.sym, native_swap_bang),
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
+    NATIVE_ENTRY(&sym_slurp_bytes_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
     NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
@@ -5273,31 +5280,14 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
  * @param symbols Vector of symbols to copy
  */
 static inline CljSymbol *refer_mapping_key_for_target_ns(CljNamespace *target_ns, CljSymbol *symbol) {
-  if (!target_ns || !symbol || !symbol->cname) {
+  (void)target_ns;
+  if (!symbol || !symbol->cname) {
     return NULL;
   }
 
-  // clojure.core stores symbols unqualified to match JVM behavior.
-  if (target_ns->name == SYM_CLOJURE_CORE) {
-    return intern_symbol_global(symbol->cname);
-  }
-
-  // Already qualified to this namespace.
-  if (symbol->ns_name && target_ns->name && symbol->ns_name == target_ns->name) {
-    return symbol;
-  }
-
-  // Keep explicitly qualified symbol as-is.
-  if (symbol->ns_name && symbol->ns_name->cname) {
-    return symbol;
-  }
-
-  // Qualify unqualified symbol for target namespace.
-  if (target_ns->name && target_ns->name->cname) {
-    return intern_symbol(target_ns->name, symbol->cname);
-  }
-
-  return symbol;
+  // Keep refer-bindings unqualified in the target namespace.
+  // This avoids creating one target-qualified symbol per referred var.
+  return intern_symbol_global(symbol->cname);
 }
 
 static inline bool refer_assoc_into_namespace(CljNamespace *target_ns, CljSymbol *symbol, ID value) {
@@ -5483,6 +5473,9 @@ static NsInitFn ns_lookup_init(const char *ns_name) {
 static inline bool bootstrap_register_cname_allowed(const char *cname) {
   if (!cname || !cname[0]) {
     return false;
+  }
+  if (strncmp(cname, "fx/", 3) == 0) {
+    return true;
   }
   // Keep bootstrap minimal: only unqualified core names are eagerly registered.
   if (cname[0] == '/' && cname[1] == '\0') {
@@ -6062,6 +6055,12 @@ ID native_add_variadic(ID *args, unsigned int argc) {
   }
 
   return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
+}
+
+ID native_inc(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "inc");
+  ID add_args[2] = {args[0], fixnum(1)};
+  return native_add_variadic(add_args, 2);
 }
 
 ID native_mul_variadic(ID *args, unsigned int argc) {
@@ -8241,6 +8240,9 @@ static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len)
   if (!cname) {
     return false;
   }
+  if (ns_len == 2 && cname[0] == 'f' && cname[1] == 'x') {
+    return true;
+  }
   if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
     return true;
   }
@@ -8299,6 +8301,15 @@ static void register_builtin(const char *cname, BuiltinFn func) {
   } else {
     symbol = intern_symbol_global(symbol_name);
   }
+  if (symbol && target_ns->mappings) {
+    // Keep existing namespace bindings untouched.
+    // This makes repeated register_builtins() idempotent and avoids clobbering
+    // Clojure-level defs (and their metadata) with raw native registrations.
+    ID existing = map_get_sentinel((CljValue)target_ns->mappings, symbol, NULL);
+    if (existing) {
+      return;
+    }
+  }
   ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), native_cfunc_flags(func));
   if (symbol && func_obj) {
     ns_define(target_ns, symbol, func_obj);
@@ -8309,7 +8320,7 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     init_special_symbols();
 
     // Create metadata map with :name and :ns
-    CljPersistentMap *meta_map = make_map(2);
+    CljPersistentMap *meta_map = make_map(3);
     if (meta_map) {
       // Add :name (function name as symbol for Clojure compatibility)
       if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
@@ -8322,6 +8333,10 @@ static void register_builtin(const char *cname, BuiltinFn func) {
       // Add :ns (namespace name as symbol)
       if (SYM_KW_NS && target_ns && target_ns->name) {
         ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, target_ns->name));
+      }
+      // Native functions have no parser location; expose a stable synthetic line.
+      if (SYM_KW_LINE) {
+        ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_LINE, fixnum(1)));
       }
 
       // Set metadata on function object

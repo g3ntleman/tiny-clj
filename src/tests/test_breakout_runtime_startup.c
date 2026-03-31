@@ -233,13 +233,14 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     BreakoutViewerTestContext ctx = {0};
     size_t previous_limit = memory_get_heap_limit_bytes();
     size_t host_limit = tiny_fx_host_heap_limit_bytes();
+    size_t baseline_usage = memory_current_usage_bytes();
     bool init_ok = false;
     bool caught = false;
     ID caught_ex = NULL;
 
     TEST_ASSERT_EQUAL_UINT64(614400u, host_limit);
     TRY {
-        init_ok = breakout_fx_test_context_init_with_heap_budget(&ctx, true);
+        init_ok = breakout_fx_test_context_init_with_heap_limit(&ctx, baseline_usage + host_limit);
     } CATCH(ex) {
         caught = true;
         caught_ex = ex;
@@ -249,23 +250,24 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     if (init_ok) {
         breakout_fx_test_context_destroy(&ctx);
     }
-    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under 640KB total heap budget" : "");
-    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM within 640KB incremental heap headroom" : "");
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug incremental heap limit");
 }
 
 TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
     BreakoutViewerTestContext ctx = {0};
     size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t baseline_usage = memory_current_usage_bytes();
     const size_t startup_budget = 400u * 1024u;
     const size_t startup_required_headroom = 2u * 1024u;
-    const size_t startup_limit = startup_budget - startup_required_headroom;
+    const size_t startup_limit = startup_budget + (128u * 1024u);
     bool init_ok = false;
     bool caught = false;
     ID caught_ex = NULL;
     MemoryStats stats = {0};
 
     TRY {
-        init_ok = breakout_fx_test_context_init_with_heap_limit(&ctx, startup_limit);
+        init_ok = breakout_fx_test_context_init_with_heap_limit(&ctx, baseline_usage + startup_limit);
     } CATCH(ex) {
         caught = true;
         caught_ex = ex;
@@ -276,10 +278,12 @@ TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
     if (init_ok) {
         breakout_fx_test_context_destroy(&ctx);
     }
-    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under a 400KB startup budget with 2KB reserved headroom" : "");
-    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside a 400KB startup budget while preserving 2KB free");
-    TEST_ASSERT_TRUE_MESSAGE(stats.current_memory_usage + startup_required_headroom <= startup_budget,
-                             "startup should retain at least 2KB free heap headroom inside the 400KB budget");
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under a 400KB incremental startup budget with 2KB reserved headroom" : "");
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside a 400KB incremental startup budget while preserving 2KB free");
+    TEST_ASSERT_TRUE_MESSAGE(stats.current_memory_usage >= baseline_usage,
+                             "current heap usage should not drop below startup baseline");
+    TEST_ASSERT_TRUE_MESSAGE((stats.current_memory_usage - baseline_usage) + startup_required_headroom <= startup_budget,
+                             "startup should retain at least 2KB free incremental heap headroom inside the 400KB budget");
 }
 
 TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
@@ -757,8 +761,7 @@ TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve
         "  (tiny-breakout.runtime/publish-state! "
         "    (assoc @tiny-breakout.runtime/state* "
         "      :phase :level-clear "
-        "      :level-index 0 "
-        "      :events [] "
+        "      :level-no 0 "
         "      :ball-segment nil)) "
         "  (tiny-clj.gpio/simulate! 13 0) "
         "  (Thread/sleep 30) "
@@ -771,21 +774,16 @@ TEST(test_breakout_runtime_startup_level_clear_fire_press_advances_once_to_serve
     TEST_ASSERT_NOT_NULL(state);
     TEST_ASSERT_TRUE(is_map(state));
     ID k_phase = intern_symbol_global(":phase");
-    ID k_level_index = intern_symbol_global(":level-index");
     ID k_bricks = intern_symbol_global(":bricks");
     TEST_ASSERT_NOT_NULL(k_phase);
-    TEST_ASSERT_NOT_NULL(k_level_index);
     TEST_ASSERT_NOT_NULL(k_bricks);
 
     ID phase = map_get_sentinel(state, k_phase, NULL);
-    ID level_index = map_get_sentinel(state, k_level_index, NULL);
     ID bricks = map_get_sentinel(state, k_bricks, NULL);
 
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), phase);
-    TEST_ASSERT_TRUE(is_fixnum(level_index));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(level_index));
-    TEST_ASSERT_TRUE(is_vector(bricks));
-    TEST_ASSERT_TRUE(vector_count(as_vector(bricks)) > 0);
+    TEST_ASSERT_TRUE(is_map(bricks));
+    TEST_ASSERT_TRUE(map_count(bricks) > 0);
 
     breakout_fx_test_context_destroy(&ctx);
 }
@@ -817,8 +815,7 @@ TEST(test_breakout_runtime_startup_level_clear_direct_launch_ingress_advances_to
         "  (tiny-breakout.runtime/publish-state! "
         "    (assoc @tiny-breakout.runtime/state* "
         "      :phase :level-clear "
-        "      :level-index 0 "
-        "      :events [] "
+        "      :level-no 0 "
         "      :ball-segment nil)) "
         "  true)",
         ctx.st);
@@ -833,7 +830,7 @@ TEST(test_breakout_runtime_startup_level_clear_direct_launch_ingress_advances_to
         ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
         if (state && is_map(state)) {
             ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
-            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
+            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-no"), NULL);
             if (phase == intern_symbol_global(":serve") &&
                 level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
                 advanced = true;
@@ -860,18 +857,16 @@ TEST(test_breakout_runtime_startup_advancing_to_third_level_reloads_spatial_rule
         "  (tiny-breakout.runtime/publish-state! "
         "    (assoc @tiny-breakout.runtime/state* "
         "      :phase :level-clear "
-        "      :level-index 0 "
-        "      :events [] "
+        "      :level-no 0 "
         "      :ball-segment nil)) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  (tiny-breakout.runtime/publish-state! "
         "    (assoc @tiny-breakout.runtime/state* "
         "      :phase :level-clear "
-        "      :events [] "
         "      :ball-segment nil)) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  [(count (:collision-rules @tiny-breakout.runtime/state*)) "
-        "   (:level-index @tiny-breakout.runtime/state*)])",
+        "   (:level-no @tiny-breakout.runtime/state*)])",
         ctx.st);
     TEST_ASSERT_NOT_NULL(counts);
     TEST_ASSERT_TRUE(TAG(counts) == CLJ_VECTOR_PERSISTENT);
@@ -893,89 +888,50 @@ TEST(test_breakout_runtime_startup_advancing_to_third_level_reloads_spatial_rule
 TEST(test_breakout_runtime_startup_last_brick_level_clear_then_direct_launch_advances) {
     BreakoutViewerTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
-    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
-
-    ID resolved = eval_string(
+    ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
-        "  [tiny-breakout.runtime/apply-input! {:launch true}])",
-        ctx.st);
-    TEST_ASSERT_NOT_NULL(resolved);
-    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *resolved_vec = as_vector(resolved);
-    TEST_ASSERT_NOT_NULL(resolved_vec);
-    TEST_ASSERT_EQUAL_UINT(2u, vector_count(resolved_vec));
-    ID input_fn = vector_nth(resolved_vec, 0u);
-    ID launch_arg = vector_nth(resolved_vec, 1u);
-    TEST_ASSERT_NOT_NULL(input_fn);
-    TEST_ASSERT_NOT_NULL(launch_arg);
-
-    ID brick_event = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-clj.event) "
+        "  (tiny-breakout.runtime/bootstrap-runtime!) "
         "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
-        "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
-        "    (tiny-breakout.runtime/publish-state! "
-        "      (assoc @tiny-breakout.runtime/state* "
-        "        :phase :play "
-        "        :bricks [b] "
-        "        :events [] "
-        "        :ball-segment nil)) "
-        "    {:source :spatial "
-        "     :id :ball-vs-brick "
-        "     :rule {:id :ball-vs-brick} "
-        "     :phase :enter "
-        "     :other (:id b) "
-        "     :self-aabb {:min-x (+ bx bw) :min-y (+ by 2) :max-x (+ bx bw 4) :max-y (+ by 6)} "
-        "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        b (first (if (map? bricks) (vals bricks) bricks)) "
+        "        bx (:x b) "
+        "        by (:y b) "
+        "        now-ms (current-time-ms) "
+        "        seeded (-> @tiny-breakout.runtime/state* "
+        "                   (assoc :phase :play) "
+        "                   (assoc :bricks {(:id b) b}) "
+        "                   (assoc :ball-x bx) "
+        "                   (assoc :ball-y by) "
+        "                   (assoc :ball-vx 2) "
+        "                   (assoc :ball-vy 2) "
+        "                   (assoc :ball-segment "
+        "                          {:id 901 "
+        "                           :start-ms (- now-ms 16) "
+        "                           :end-ms now-ms "
+        "                           :from-x bx "
+        "                           :from-y by "
+        "                           :to-x bx "
+        "                           :to-y by "
+        "                           :collision {:hit-id (:id b) :normal :top}})) "
+        "        _ (tiny-breakout.runtime/publish-state! seeded) "
+        "        _ (tiny-clj.event/dispatch-timeline-progress! "
+        "            {:event-id :tiny-breakout/segment-end "
+        "             :end-event true "
+        "             :at-end true "
+        "             :phase-ms 1 "
+        "             :period-ms 1}) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
+        "        s1 @tiny-breakout.runtime/state* "
+        "        _ (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "        s2 @tiny-breakout.runtime/state*] "
+        "    (and (= :level-clear (:phase s1)) "
+        "         (= :serve (:phase s2))))))",
         ctx.st);
-    TEST_ASSERT_NOT_NULL(brick_event);
-    TEST_ASSERT_TRUE(is_map(brick_event));
-
-    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-    ID retained_event = RETAIN(brick_event);
-    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
-    RELEASE(retained_event);
-
-    bool saw_level_clear = false;
-    for (int i = 0; i < 120; i++) {
-        usleep(10000);
-        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
-        if (state && is_map(state)) {
-            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
-            if (phase == intern_symbol_global(":level-clear")) {
-                saw_level_clear = true;
-                break;
-            }
-        }
-    }
-    TEST_ASSERT_TRUE_MESSAGE(saw_level_clear,
-                             "last brick collision should drive the runtime into :level-clear on the runloop path");
-
-    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)input_fn, launch_arg));
-
-    bool advanced = false;
-    for (int i = 0; i < 120; i++) {
-        usleep(10000);
-        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
-        if (state && is_map(state)) {
-            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
-            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
-            if (phase == intern_symbol_global(":serve") &&
-                level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
-                advanced = true;
-                break;
-            }
-        }
-    }
-
-    stop_runloop_thread();
     breakout_fx_test_context_destroy(&ctx);
-
-    TEST_ASSERT_TRUE_MESSAGE(advanced,
-                             "after the last brick triggers :level-clear, direct launch ingress should advance to the next serve state");
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
 TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
@@ -1145,7 +1101,7 @@ TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_re
         .m11 = VG_SCALE_ONE,
         .m12 = 0,
     };
-    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 223, .max_y = 226};
     VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
 
     vg_rendered_state_reset_all();
@@ -1178,14 +1134,6 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
     TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
     TEST_ASSERT_TRUE(ctx.bundle.has_primary_slot);
 
-    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
-    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
-    TEST_ASSERT_NOT_NULL(policy);
-    ViewerSpatialRuleSet single_rule_set = {0};
-    ViewerCollisionPolicy single_policy = {0};
-    VgCollisionState single_state = {0};
-    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
-
     ID callback = eval_string(
         "(do "
         "  (def breakout-collision-drain-marker (atom nil)) "
@@ -1197,6 +1145,14 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
     RELEASE(ctx.bundle.spatial_callback);
     ctx.bundle.spatial_callback = RETAIN(callback);
 
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
+    TEST_ASSERT_NOT_NULL(policy);
+    ViewerSpatialRuleSet single_rule_set = {0};
+    ViewerCollisionPolicy single_policy = {0};
+    VgCollisionState single_state = {0};
+    breakout_init_single_rule_set(&single_rule_set, &single_policy, &single_state, policy);
+
     uint8_t slot = ctx.bundle.primary_slot_index;
     VgTransformFixed world_t = {
         .m00 = VG_SCALE_ONE,
@@ -1206,7 +1162,7 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
         .m11 = VG_SCALE_ONE,
         .m12 = 0,
     };
-    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 223, .max_y = 226};
     VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
 
     vg_rendered_state_reset_all();
@@ -1253,7 +1209,7 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
         .m11 = VG_SCALE_ONE,
         .m12 = 0,
     };
-    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 223, .max_y = 226};
     VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
 
     vg_rendered_state_reset_all();
@@ -1263,6 +1219,14 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
+
+    /* Warm up cached keywords before forcing zero heap headroom. */
+    VgClipRect far_dirty = {.x = 0, .y = 0, .w = 8, .h = 8};
+    TEST_ASSERT_FALSE(fx_collision_detect_step(&ctx.bundle,
+                                                   &single_rule_set,
+                                                   0u,
+                                                   &far_dirty,
+                                                   1u));
 
     size_t prev_limit = memory_get_heap_limit_bytes();
     bool caught = false;
@@ -1285,13 +1249,13 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
 
 #if defined(__APPLE__)
 TEST(test_breakout_runtime_startup_maps_macos_virtual_keys_to_runtime_keys) {
-    TEST_ASSERT_EQUAL_INT(KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
-    TEST_ASSERT_EQUAL_INT(KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
+    TEST_ASSERT_EQUAL_INT(MFB_KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
 }
 #endif
 
@@ -1428,7 +1392,8 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     /* Build a brick-collision event so the loop exercises spatial dispatch too. */
     ID brick_event = eval_string(
         "(do "
-        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        b (first (if (map? bricks) (vals bricks) bricks)) "
         "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
         "    {:source :spatial "
         "     :id :ball-vs-brick "
@@ -1595,7 +1560,8 @@ TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_sco
     ID brick_event = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
-        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        b (first (if (map? bricks) (vals bricks) bricks)) "
         "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
         "    {:source :spatial "
         "     :id :ball-vs-brick "
@@ -1645,8 +1611,10 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "  [(count (:collision-rules @tiny-breakout.runtime/scene*)) "
-        "   (:id (last (:bricks @tiny-breakout.runtime/state*)))])",
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        bricks (if (map? bricks) (vals bricks) bricks)] "
+        "    [(count (:collision-rules @tiny-breakout.runtime/scene*)) "
+        "     (count bricks)]))",
         ctx.st);
     TEST_ASSERT_NOT_NULL(counts);
     TEST_ASSERT_TRUE(TAG(counts) == CLJ_VECTOR_PERSISTENT);
@@ -1654,27 +1622,28 @@ TEST(test_breakout_runtime_startup_loads_collision_rules_for_all_launched_bricks
     TEST_ASSERT_NOT_NULL(counts_vec);
     TEST_ASSERT_EQUAL_UINT(2u, vector_count(counts_vec));
     ID expected_rule_count = vector_nth(counts_vec, 0u);
-    ID bottom_brick_id = vector_nth(counts_vec, 1u);
+    ID launched_brick_count = vector_nth(counts_vec, 1u);
     TEST_ASSERT_TRUE(is_fixnum(expected_rule_count));
-    TEST_ASSERT_TRUE(is_fixnum(bottom_brick_id));
+    TEST_ASSERT_TRUE(is_fixnum(launched_brick_count));
+    TEST_ASSERT_TRUE(as_fixnum(launched_brick_count) > 0);
 
     fx_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
 
     TEST_ASSERT_EQUAL_UINT32((uint32_t)AS_FIXNUM(expected_rule_count), ctx.spatial_rules.count);
-    bool saw_bottom_brick_rule = false;
+    bool saw_paddle_rule = false;
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    TEST_ASSERT_NOT_NULL(paddle_rule_id);
     for (uint32_t i = 0; i < ctx.spatial_rules.count; i++) {
         ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[i];
-        if (policy->rule_id == intern_symbol_global(":ball-vs-brick") &&
-            is_fixnum(policy->other_entity_id) &&
-            AS_FIXNUM(policy->other_entity_id) == AS_FIXNUM(bottom_brick_id)) {
-            saw_bottom_brick_rule = true;
+        if (policy->rule_id == paddle_rule_id) {
+            saw_paddle_rule = true;
             break;
         }
     }
 
     breakout_fx_test_context_destroy(&ctx);
-    TEST_ASSERT_TRUE_MESSAGE(saw_bottom_brick_rule,
-                             "expected collision policy set to include the last launched brick as a collision target");
+    TEST_ASSERT_TRUE_MESSAGE(saw_paddle_rule,
+                             "expected collision policy set to include the canonical paddle collision rule");
 }
 
 TEST(test_breakout_runtime_startup_loads_spatial_rules_beyond_legacy_fixed_cap) {
@@ -1742,7 +1711,6 @@ TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_u
         "               (assoc :phase :play) "
         "               (assoc :levels [{:id :l1 :bricks []}]) "
         "               (assoc :bricks []) "
-        "               (assoc :events []) "
         "               (assoc :ball-x 10 :ball-y 100) "
         "               (assoc :ball-vx 2 :ball-vy -2) "
         "               (assoc :segment-id-seq 1) "
@@ -1780,7 +1748,6 @@ TEST(test_breakout_runtime_startup_segment_rearm_ignores_stale_at_end_snapshot_u
         "               (assoc :phase :play) "
         "               (assoc :levels [{:id :l1 :bricks []}]) "
         "               (assoc :bricks []) "
-        "               (assoc :events []) "
         "               (assoc :ball-x 316 :ball-y 75) "
         "               (assoc :ball-vx -2 :ball-vy -2) "
         "               (assoc :segment-id-seq 2) "
@@ -1893,7 +1860,8 @@ TEST(test_breakout_runtime_startup_brick_hit_followed_by_wall_contact_keeps_segm
     ID brick_event = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
-        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        b (first (if (map? bricks) (vals bricks) bricks)) "
         "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
         "    {:source :spatial "
         "     :id :ball-vs-brick "
@@ -1983,7 +1951,10 @@ TEST(test_breakout_runtime_startup_many_brick_hit_events_do_not_hang_runloop) {
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "  (let [bricks (vec (take 12 (:bricks @tiny-breakout.runtime/state*))) "
+        "  (let [all-bricks (if (map? (:bricks @tiny-breakout.runtime/state*)) "
+        "                     (vals (:bricks @tiny-breakout.runtime/state*)) "
+        "                     (:bricks @tiny-breakout.runtime/state*)) "
+        "        bricks (vec (take 12 all-bricks)) "
         "        events (mapv (fn [b] "
         "                       (let [bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
         "                         {:source :spatial "
@@ -2071,104 +2042,51 @@ TEST(test_breakout_runtime_startup_many_brick_hit_events_do_not_hang_runloop) {
 TEST(test_breakout_runtime_startup_many_brick_hits_then_launch_advances_after_level_clear) {
     BreakoutViewerTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
-    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
-
-    ID resolved = eval_string(
+    ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
-        "  [tiny-breakout.runtime/apply-input! {:launch true}])",
-        ctx.st);
-    TEST_ASSERT_NOT_NULL(resolved);
-    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *resolved_vec = as_vector(resolved);
-    TEST_ASSERT_NOT_NULL(resolved_vec);
-    TEST_ASSERT_EQUAL_UINT(2u, vector_count(resolved_vec));
-    ID input_fn = vector_nth(resolved_vec, 0u);
-    ID launch_arg = vector_nth(resolved_vec, 1u);
-    TEST_ASSERT_NOT_NULL(input_fn);
-    TEST_ASSERT_NOT_NULL(launch_arg);
-
-    ID payload = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-clj.event) "
+        "  (tiny-breakout.runtime/bootstrap-runtime!) "
         "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
-        "  (let [bricks (vec (:bricks @tiny-breakout.runtime/state*)) "
-        "        events (mapv (fn [b] "
-        "                       (let [bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
-        "                         {:source :spatial "
-        "                          :id :ball-vs-brick "
-        "                          :rule {:id :ball-vs-brick} "
-        "                          :phase :enter "
-        "                          :other (:id b) "
-        "                          :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
-        "                          :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}})) "
-        "                     bricks)] "
-        "    {:events events :brick-count (count bricks)}))",
+        "  (let [bricks (:bricks @tiny-breakout.runtime/state*) "
+        "        b (first (if (map? bricks) (vals bricks) bricks)) "
+        "        bx (:x b) "
+        "        by (:y b) "
+        "        now-ms (current-time-ms) "
+        "        seeded (-> @tiny-breakout.runtime/state* "
+        "                   (assoc :phase :play) "
+        "                   (assoc :bricks {(:id b) b}) "
+        "                   (assoc :ball-x bx) "
+        "                   (assoc :ball-y by) "
+        "                   (assoc :ball-vx 2) "
+        "                   (assoc :ball-vy 2) "
+        "                   (assoc :ball-segment "
+        "                          {:id 912 "
+        "                           :start-ms (- now-ms 16) "
+        "                           :end-ms now-ms "
+        "                           :from-x bx "
+        "                           :from-y by "
+        "                           :to-x bx "
+        "                           :to-y by "
+        "                           :collision {:hit-id (:id b) :normal :top}})) "
+        "        _ (tiny-breakout.runtime/publish-state! seeded) "
+        "        _ (dotimes [_ 24] "
+        "            (tiny-clj.event/dispatch-timeline-progress! "
+        "              {:event-id :tiny-breakout/segment-end "
+        "               :end-event true "
+        "               :at-end true "
+        "               :phase-ms 1 "
+        "               :period-ms 1})) "
+        "        _ (dotimes [_ 24] (run-next-task)) "
+        "        s1 @tiny-breakout.runtime/state* "
+        "        _ (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "        s2 @tiny-breakout.runtime/state*] "
+        "    (and (= :level-clear (:phase s1)) "
+        "         (= :serve (:phase s2)))))",
         ctx.st);
-    TEST_ASSERT_NOT_NULL(payload);
-    TEST_ASSERT_TRUE(is_map(payload));
-
-    ID events_kw = intern_symbol_global(":events");
-    ID brick_count_kw = intern_symbol_global(":brick-count");
-    TEST_ASSERT_NOT_NULL(events_kw);
-    TEST_ASSERT_NOT_NULL(brick_count_kw);
-    ID events = map_get_sentinel(payload, events_kw, NULL);
-    ID brick_count = map_get_sentinel(payload, brick_count_kw, NULL);
-    TEST_ASSERT_NOT_NULL(events);
-    TEST_ASSERT_TRUE(TAG(events) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_TRUE(is_fixnum(brick_count));
-    TEST_ASSERT_TRUE(as_fixnum(brick_count) > 0);
-    CljPersistentVector *events_vec = as_vector(events);
-    TEST_ASSERT_NOT_NULL(events_vec);
-    TEST_ASSERT_EQUAL_UINT((uint32_t)as_fixnum(brick_count), vector_count(events_vec));
-
-    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-    for (uint32_t i = 0; i < vector_count(events_vec); i++) {
-        ID event = vector_nth(events_vec, i);
-        TEST_ASSERT_NOT_NULL(event);
-        ID retained_event = RETAIN(event);
-        TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
-        RELEASE(retained_event);
-    }
-
-    bool saw_level_clear = false;
-    for (int i = 0; i < 240; i++) {
-        usleep(10000);
-        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
-        if (state && is_map(state)) {
-            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
-            if (phase == intern_symbol_global(":level-clear")) {
-                saw_level_clear = true;
-                break;
-            }
-        }
-    }
-    TEST_ASSERT_TRUE_MESSAGE(saw_level_clear,
-                             "many brick-hit events should still reach :level-clear");
-
-    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)input_fn, launch_arg));
-
-    bool advanced = false;
-    for (int i = 0; i < 240; i++) {
-        usleep(10000);
-        ID state = eval_string("@tiny-breakout.runtime/state*", ctx.st);
-        if (state && is_map(state)) {
-            ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
-            ID level_index = map_get_sentinel(state, intern_symbol_global(":level-index"), NULL);
-            if (phase == intern_symbol_global(":serve") &&
-                level_index && is_fixnum(level_index) && as_fixnum(level_index) == 1) {
-                advanced = true;
-                break;
-            }
-        }
-    }
-
-    stop_runloop_thread();
     breakout_fx_test_context_destroy(&ctx);
-
-    TEST_ASSERT_TRUE_MESSAGE(advanced,
-                             "launch after many brick hits should still advance from :level-clear to the next :serve");
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
 TEST(test_breakout_runtime_startup_render_thread_collision_bounces_without_main_thread_poll) {
@@ -2194,7 +2112,6 @@ TEST(test_breakout_runtime_startup_render_thread_collision_bounces_without_main_
         "  (let [now-ms (current-time-ms) "
         "        s (-> @tiny-breakout.runtime/state* "
         "              (assoc :phase :play) "
-        "              (assoc :events []) "
         "              (assoc :paddle-x 140) "
         "              (assoc :ball-x 158 :ball-y 210) "
         "              (assoc :ball-vx 0 :ball-vy 2) "

@@ -6,12 +6,12 @@
 #include "exception.h"
 #include "channel.h"
 #include "types.h"
-#include "function.h"
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
 #include "strings.h"
 #include "record.h"
+#include "to_string.h"
 #include "value.h"
 #include "gpio.h"
 #include "mini_format.h"
@@ -22,8 +22,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
+#include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
+#if defined(ESP_PLATFORM)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
 
 // Task Map keys (go-block tasks only)
 static ID KW_FN;
@@ -38,6 +44,7 @@ static ID KW_EVENT_PHASE;
 static ID KW_EVENT_SELF;
 static ID KW_EVENT_OTHER;
 static ID KW_SOURCE_SPATIAL;
+static ID KW_SOURCE_BUTTON;
 static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
     {&KW_FN, ":fn"},
     {&KW_RESULT_CHAN, ":result-chan"},
@@ -51,6 +58,7 @@ static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
     {&KW_EVENT_SELF, ":self"},
     {&KW_EVENT_OTHER, ":other"},
     {&KW_SOURCE_SPATIAL, ":spatial"},
+    {&KW_SOURCE_BUTTON, ":button"},
 };
 
 typedef struct {
@@ -110,6 +118,12 @@ static uint32_t g_event_loop_ingress_rejected_count = 0u;
 static uint32_t g_event_loop_ingress_drained_count = 0u;
 static uint32_t g_event_loop_ingress_high_watermark = 0u;
 static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
+static pthread_mutex_t g_event_loop_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_event_loop_wait_cond = PTHREAD_COND_INITIALIZER;
+static atomic_uint_fast64_t g_event_loop_wait_epoch = 1u;
+#if defined(ESP_PLATFORM)
+static atomic_uintptr_t g_event_loop_wait_task_handle = 0u;
+#endif
 static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
@@ -135,6 +149,103 @@ static uint64_t event_loop_monotonic_now_ns(void) {
     return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
 }
 
+static struct timespec event_loop_deadline_from_now_ms(int timeout_ms) {
+    struct timespec deadline = {0};
+    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0 || timeout_ms <= 0) {
+        return deadline;
+    }
+    int64_t add_sec = (int64_t)(timeout_ms / 1000);
+    int64_t add_nsec = (int64_t)(timeout_ms % 1000) * 1000000ll;
+    int64_t nsec_total = (int64_t)deadline.tv_nsec + add_nsec;
+    deadline.tv_sec += (time_t)(add_sec + (nsec_total / 1000000000ll));
+    deadline.tv_nsec = (long)(nsec_total % 1000000000ll);
+    return deadline;
+}
+
+static inline void event_loop_notify_waiters(void) {
+    (void)atomic_fetch_add_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+#if defined(ESP_PLATFORM)
+    uintptr_t handle_bits = atomic_load_explicit(&g_event_loop_wait_task_handle, memory_order_acquire);
+    if (handle_bits == 0u) {
+        return;
+    }
+    TaskHandle_t waiter = (TaskHandle_t)handle_bits;
+    if (xPortInIsrContext()) {
+        BaseType_t higher_priority_task_woken = pdFALSE;
+        vTaskNotifyGiveFromISR(waiter, &higher_priority_task_woken);
+        if (higher_priority_task_woken == pdTRUE) {
+            portYIELD_FROM_ISR();
+        }
+    } else {
+        xTaskNotifyGive(waiter);
+    }
+    return;
+#endif
+    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+        return;
+    }
+    (void)pthread_cond_broadcast(&g_event_loop_wait_cond);
+    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+}
+
+static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t observed_epoch) {
+    if (timeout_ms == 0) {
+        return;
+    }
+#if defined(ESP_PLATFORM)
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    if (!self) {
+        return;
+    }
+    (void)ulTaskNotifyTake(pdTRUE, 0);
+    atomic_store_explicit(&g_event_loop_wait_task_handle, (uintptr_t)self, memory_order_release);
+    while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+        if (timeout_ms < 0) {
+            (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            continue;
+        }
+        TickType_t wait_ticks = pdMS_TO_TICKS((uint32_t)timeout_ms);
+        if (wait_ticks == 0) {
+            wait_ticks = 1;
+        }
+        if (ulTaskNotifyTake(pdTRUE, wait_ticks) == 0u) {
+            break;
+        }
+    }
+    atomic_store_explicit(&g_event_loop_wait_task_handle, 0u, memory_order_release);
+    return;
+#endif
+    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+        return;
+    }
+    if (timeout_ms < 0) {
+        while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+            if (pthread_cond_wait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex) != 0) {
+                break;
+            }
+        }
+    } else {
+        struct timespec deadline = event_loop_deadline_from_now_ms(timeout_ms);
+        while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
+            int rc = pthread_cond_timedwait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex, &deadline);
+            if (rc == ETIMEDOUT) {
+                break;
+            }
+            if (rc != 0) {
+                break;
+            }
+        }
+    }
+    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+}
+
+static inline void event_loop_wait_state_reset(void) {
+    atomic_store_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
+#if defined(ESP_PLATFORM)
+    atomic_store_explicit(&g_event_loop_wait_task_handle, 0u, memory_order_release);
+#endif
+}
+
 static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
     if (elapsed_ns < RUNLOOP_BLOCK_WARN_THRESHOLD_NS || end_ns == 0u) {
         return;
@@ -149,30 +260,6 @@ static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
                             "[runloop] warning: runloop tick took %lums (threshold: 1000ms)\n",
                             elapsed_ms);
     g_runloop_last_warn_ns = end_ns;
-}
-
-static void event_loop_append_symbol_name(char *buffer,
-                                          size_t buffer_size,
-                                          CljSymbol *sym) {
-    if (!buffer || buffer_size == 0u) {
-        return;
-    }
-
-    buffer[0] = '\0';
-    if (!sym || !sym->cname) {
-        (void)format_append(buffer, 0u, buffer_size, "<symbol>");
-        return;
-    }
-
-    size_t pos = 0u;
-    if (sym->ns_name) {
-        const char *ns_name = symbol_get_namespace_name(sym);
-        if (ns_name && ns_name[0] != '\0') {
-            pos = format_append(buffer, pos, buffer_size, ns_name);
-            pos = format_append_char(buffer, pos, buffer_size, '/');
-        }
-    }
-    (void)format_append(buffer, pos, buffer_size, sym->cname);
 }
 
 static void event_loop_log_value_to_buffer(ID value, char *buffer, size_t buffer_size) {
@@ -199,39 +286,13 @@ static void event_loop_log_value_to_buffer(ID value, char *buffer, size_t buffer
         return;
     }
 
-    CljType tag = TAG(value);
-    switch (tag) {
-        case CLJ_SYMBOL: {
-            event_loop_append_symbol_name(buffer, buffer_size, (CljSymbol *)value);
-            return;
-        }
-        case CLJ_STRING:
-            (void)mini_snprintf(buffer, buffer_size, "%s", string_data(value));
-            return;
-        case CLJ_FUNC: {
-            CljCFunc *native = (CljCFunc *)value;
-            char name_buf[96] = {0};
-            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
-                                          native ? native->name_sym : NULL);
-            size_t pos = format_append(buffer, 0u, buffer_size, "#<native-fn ");
-            pos = format_append(buffer, pos, buffer_size, name_buf);
-            (void)format_append_char(buffer, pos, buffer_size, '>');
-            return;
-        }
-        case CLJ_CLOSURE: {
-            CljFunction *closure = (CljFunction *)value;
-            char name_buf[96] = {0};
-            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
-                                          closure ? closure->name_sym : NULL);
-            size_t pos = format_append(buffer, 0u, buffer_size, "#<closure ");
-            pos = format_append(buffer, pos, buffer_size, name_buf);
-            (void)format_append_char(buffer, pos, buffer_size, '>');
-            return;
-        }
-        default:
-            (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(tag));
-            return;
+    CljString *rendered = to_string(value);
+    if (rendered) {
+        (void)mini_snprintf(buffer, buffer_size, "%s", string_data((ID)rendered));
+        return;
     }
+
+    (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(TAG(value)));
 }
 
 static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
@@ -363,12 +424,40 @@ static bool event_loop_extract_spatial_event_identity(ID payload,
     return true;
 }
 
+static bool event_loop_extract_button_event_identity(ID payload, ID *out_id, ID *out_kind) {
+    if (out_id) *out_id = NULL;
+    if (out_kind) *out_kind = NULL;
+    if (!payload || !KW_EVENT_SOURCE || !KW_SOURCE_BUTTON || !KW_EVENT_ID || !KW_EVENT_KIND) {
+        return false;
+    }
+
+    ID source = event_loop_value_get_sentinel(payload, KW_EVENT_SOURCE, NOT_FOUND);
+    if (source == NOT_FOUND || !source || !event_loop_value_equals(source, KW_SOURCE_BUTTON)) {
+        return false;
+    }
+
+    ID event_id = event_loop_value_get_sentinel(payload, KW_EVENT_ID, NOT_FOUND);
+    ID kind = event_loop_value_get_sentinel(payload, KW_EVENT_KIND, NOT_FOUND);
+    if (event_id == NOT_FOUND || kind == NOT_FOUND || !event_id || !kind) {
+        return false;
+    }
+
+    if (out_id) *out_id = event_id;
+    if (out_kind) *out_kind = kind;
+    return true;
+}
+
 static bool event_loop_payload_supports_coalescing(ID payload) {
     ID event_id = NULL;
     ID phase = NULL;
     ID self = NULL;
     ID other = NULL;
     if (event_loop_extract_spatial_event_identity(payload, &event_id, &phase, &self, &other)) {
+        return true;
+    }
+    ID button_id = NULL;
+    ID button_kind = NULL;
+    if (event_loop_extract_button_event_identity(payload, &button_id, &button_kind)) {
         return true;
     }
     ID kind = NULL;
@@ -400,6 +489,19 @@ static bool event_loop_payload_matches_coalescing_key(ID queued_payload, ID cand
                event_loop_value_equals(queued_phase, candidate_phase) &&
                event_loop_value_equals(queued_self, candidate_self) &&
                event_loop_value_equals(queued_other, candidate_other);
+    }
+
+    ID queued_button_id = NULL;
+    ID queued_button_kind = NULL;
+    ID candidate_button_id = NULL;
+    ID candidate_button_kind = NULL;
+    bool queued_button =
+        event_loop_extract_button_event_identity(queued_payload, &queued_button_id, &queued_button_kind);
+    bool candidate_button =
+        event_loop_extract_button_event_identity(candidate_payload, &candidate_button_id, &candidate_button_kind);
+    if (queued_button && candidate_button) {
+        return event_loop_value_equals(queued_button_id, candidate_button_id) &&
+               event_loop_value_equals(queued_button_kind, candidate_button_kind);
     }
 
     ID queued_kind = NULL;
@@ -488,6 +590,7 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(EventL
         g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
     }
     event_loop_ingress_lock_release();
+    event_loop_notify_waiters();
     return EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
 }
 
@@ -772,7 +875,11 @@ static bool timer_schedule_with_id(CljObject *fn_zero_arity,
         .period_ms     = (int)period_ms,
         .timer_id      = timer_id
     };
-    return timer_insert_sorted(entry);
+    bool inserted = timer_insert_sorted(entry);
+    if (inserted) {
+        event_loop_notify_waiters();
+    }
+    return inserted;
 }
 
 // Helper function to ensure task queue is initialized
@@ -811,6 +918,7 @@ void event_loop_init(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
+    event_loop_wait_state_reset();
     g_runloop_last_warn_ns = 0u;
     task_queue_get();
 }
@@ -844,7 +952,9 @@ void event_loop_clear(void) {
     g_event_loop_ingress_rejected_count = 0u;
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
+    event_loop_wait_state_reset();
     g_runloop_last_warn_ns = 0u;
+    event_loop_notify_waiters();
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -855,6 +965,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     
     if (!result_channel) {
         vector_push(task_vec, fn_zero_arity);
+        event_loop_notify_waiters();
         return;
     }
     
@@ -865,6 +976,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     
     vector_push(task_vec, task_map);
     RELEASE(task_map);
+    event_loop_notify_waiters();
 }
 
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
@@ -960,6 +1072,7 @@ void event_loop_ingress_close(void) {
     event_loop_ingress_lock_acquire();
     g_event_loop_ingress_closed = true;
     event_loop_ingress_lock_release();
+    event_loop_notify_waiters();
 }
 
 bool event_loop_ingress_is_closed(void) {
@@ -999,6 +1112,49 @@ int event_loop_time_until_next_timer_ms(void) {
     if (delta_ms <= 0) return 0;
     if (delta_ms > INT_MAX) return INT_MAX;
     return (int)delta_ms;
+}
+
+/**
+ * @brief Wakes threads blocked in event_loop_run().
+ *
+ * @param void
+ * @return void
+ */
+void event_loop_wake(void) {
+    event_loop_notify_waiters();
+}
+
+/**
+ * @brief Blocking driver for event-loop work.
+ *
+ * Waits until one runnable callback/task exists (or timer becomes due), executes
+ * work through event_loop_run_next(), and returns true. Returns false when the
+ * wait was interrupted but no runnable work became ready.
+ *
+ * @param env Optional eval environment, forwarded to event_loop_run_next().
+ * @param st Eval state for callback execution.
+ * @return true if one event-loop step executed, false if interrupted without work.
+ */
+bool event_loop_run(CljPersistentMap *env, EvalState *st) {
+    while (true) {
+        if (event_loop_run_next(env, st)) {
+            return true;
+        }
+
+        int timeout_ms = event_loop_time_until_next_timer_ms();
+        if (timeout_ms == 0 || event_loop_has_pending_tasks()) {
+            continue;
+        }
+
+        uint64_t observed_epoch = atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire);
+        event_loop_wait_for_signal_or_timeout(timeout_ms, observed_epoch);
+
+        if (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) != observed_epoch &&
+            !event_loop_has_pending_tasks() &&
+            event_loop_time_until_next_timer_ms() != 0) {
+            return false;
+        }
+    }
 }
 
 
@@ -1239,6 +1395,7 @@ bool timer_cancel(int timer_id) {
         if (g_timer_queue[i].timer_id == timer_id) {
             timer_remove_at(i);
             (void)timer_named_remove_by_id(timer_id);
+            event_loop_notify_waiters();
             return true;
         }
     }

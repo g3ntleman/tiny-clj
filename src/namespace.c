@@ -204,7 +204,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     ns->mappings = make_map(mappings_cap);
     ns->private_mappings = NULL;
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
-    ns->aliases = make_map(4);
+    ns->aliases = NULL;  // Lazy initialization in ns_set_alias()
 
     ns->loaded = false;
     ns->loading = false;
@@ -214,7 +214,6 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     if (file && !ns->filename) {
         // strdup failed - OOM
         RELEASE(ns->mappings);
-        RELEASE(ns->aliases);
         free(ns);
         return NULL;
     }
@@ -1019,7 +1018,7 @@ void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name) {
 
     // Create or update aliases map
     if (!ns->aliases) {
-        ns->aliases = make_map(16);
+        ns->aliases = make_map(4);
     }
 
     // Store alias-namespace binding (overwrites existing). Key = unqualified symbol for lookup.

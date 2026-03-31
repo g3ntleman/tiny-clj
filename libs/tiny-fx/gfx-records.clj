@@ -9,7 +9,7 @@
 (defrecord Rect [id t style visible x y w h prototype])
 (defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3 prototype])
 (defrecord VText [id t style visible x y scale rot text prototype])
-(defrecord Timeline [keyframes loop end-event])
+(defrecord Timeline [keyframes loop end-event event-id])
 (defrecord Scene [root index clip-rect erase-color collision-rules])
 (defrecord FrameScene [root index clip-rect z visible opaque erase-color guard-px collision-rules])
 (defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])

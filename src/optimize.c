@@ -307,6 +307,23 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
           return true;
       }
       return false;
+    } else if (head == SYM_CASE) {
+      if (argc <= 1)
+        return false;
+      unsigned int forms = argc - 1;
+      bool has_default = (forms & 1u) != 0;
+      unsigned int pair_forms = has_default ? (forms - 1) : forms;
+      for (unsigned int i = 2; i < 1 + pair_forms; i += 2) {
+        ID branch = vector_nth(args, i);
+        if (branch == expr || is_tail_position(expr, branch))
+          return true;
+      }
+      if (has_default) {
+        ID default_expr = vector_nth(args, argc - 1);
+        if (default_expr == expr || is_tail_position(expr, default_expr))
+          return true;
+      }
+      return false;
     }
 
     return expr == body;
@@ -366,6 +383,25 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
         return true;
       rest = as_list(rest->rest);
       is_test = !is_test;
+    }
+  } else if (head == SYM_CASE) {
+    // (case expr test expr ... default?) - each branch/default is tail
+    CljList *forms = as_list(rest->rest); // Skip case expression.
+    unsigned int count = 0;
+    for (CljList *n = forms; n; n = as_list(n->rest))
+      count++;
+    bool has_default = (count & 1u) != 0;
+    unsigned int pair_forms = has_default ? (count - 1) : count;
+    unsigned int idx = 0;
+    for (CljList *n = forms; n; n = as_list(n->rest), idx++) {
+      if (idx < pair_forms) {
+        if ((idx & 1u) == 1u && (n->first == expr || is_tail_position(expr, n->first)))
+          return true;
+        continue;
+      }
+      if (has_default && idx == count - 1 &&
+          (n->first == expr || is_tail_position(expr, n->first)))
+        return true;
     }
   }
 

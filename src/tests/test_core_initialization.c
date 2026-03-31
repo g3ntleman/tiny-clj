@@ -2,6 +2,7 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "runtime.h"
+#include "hashset.h"
 #include "map.h"
 #include "kv_macros.h"
 #include "reader.h"
@@ -115,6 +116,24 @@ TEST(test_core_initialization_plus_available) {
     CljObject *plus_value = map_get_sentinel(clojure_core->mappings, plus_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(plus_value, 
                                  "+ should be in clojure.core mappings (registered by register_builtins)");
+}
+
+/* After core load: cname in data segment vs. heap (is_pointer_in_data_segment). */
+TEST(test_symbol_table_cname_off_datasegment_count_after_core) {
+    unsigned in_seg = 0, off_seg = 0, no_cname = 0;
+    ID k;
+    HASHSET_FOR_EACH(g_runtime.symbol_table, k) {
+        const char *cn = as_symbol(k)->cname;
+        if (!cn) {
+            no_cname++;
+            continue;
+        }
+        if (is_pointer_in_data_segment(cn))
+            in_seg++;
+        else
+            off_seg++;
+    }
+    TEST_ASSERT_EQUAL_UINT(hashset_count(g_runtime.symbol_table), in_seg + off_seg + no_cname);
 }
 
 // ============================================================================

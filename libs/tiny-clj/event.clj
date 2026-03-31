@@ -1,18 +1,8 @@
 (ns tiny-clj.event
   (:require [tiny-clj.button :as button]
             [tiny-clj.sensor :as sensor]
-            [tiny-fx.gfx-collision :as collision]))
-
-(def gfx-timeline-loaded? (atom false))
-
-(defn preload-timeline-runtime!
-  []
-  (if @gfx-timeline-loaded?
-    nil
-    (do
-      (require 'tiny-fx.gfx-timeline)
-      (reset! gfx-timeline-loaded? true)
-      nil)))
+            [tiny-fx.gfx-collision :as collision]
+            [tiny-fx.gfx-timeline :as timeline]))
 
 (defn- subscribe [descriptor callback opts]
   (let [source (get descriptor :source)
@@ -25,12 +15,9 @@
       (= source :button) (button/watch id callback opts)
       (= source :sensor) (sensor/watch id callback opts)
       (= source :spatial) (collision/watch id callback opts)
-      (= source :timeline) (if (and (nil? callback) (not @gfx-timeline-loaded?))
-                             nil
-                             (do
-                               (when-not @gfx-timeline-loaded?
-                                 (preload-timeline-runtime!))
-                               (tiny-fx.gfx-timeline/watch id callback opts)))
+      (= source :timeline) (if (or (nil? opts) (empty? opts))
+                             (timeline/watch id callback)
+                             (throw "event/on: :timeline does not support options"))
       :else (throw (str "event/on: unsupported :source " source)))))
 
 (defn on
@@ -45,9 +32,10 @@ Supported sources:
   :button  -> semantic button events
   :sensor  -> semantic sensor events
   :spatial -> semantic spatial/collision events
-  :timeline -> semantic timeline-end events (loads tiny-fx.gfx-timeline on first subscribe with a callback)
+  :timeline -> semantic timeline-end events
 
-Options are forwarded to the underlying source-specific runtime."
+Options are forwarded for :button/:sensor/:spatial.
+:timeline currently does not accept source options."
   [& args]
   (let [argc (count args)]
     (cond
@@ -66,14 +54,24 @@ Options are forwarded to the underlying source-specific runtime."
       :else
       (throw "event/on expects 2, 3, or 4 arguments"))))
 
-(defn kick-timeline-watchers!
-  []
-  (when @gfx-timeline-loaded?
-    (tiny-fx.gfx-timeline/kick-watchers!))
-  nil)
+(defn dispatch-timeline-watch!
+  "Pushes one timeline progress sample into a specific watcher.
+
+Returns true when the watcher exists and was dispatched, else false."
+  [watch-id progress]
+  (if watch-id
+    (timeline/dispatch-watch! watch-id progress)
+    false))
+
+(defn dispatch-timeline-progress!
+  "Pushes one timeline progress sample that contains :event-id.
+
+Returns true when a watcher for :event-id exists and was dispatched, else false."
+  [progress]
+  (timeline/dispatch-progress! progress))
 
 (defn rearm-timeline-watch-edge!
   [watch-id]
-  (when (and watch-id @gfx-timeline-loaded?)
-    (tiny-fx.gfx-timeline/reset-watch-edge! watch-id))
+  (when watch-id
+    (timeline/reset-watch-edge! watch-id))
   nil)

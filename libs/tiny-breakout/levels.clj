@@ -7,6 +7,7 @@
 (def brick-top 36)
 
 (defn- pattern-row->bricks
+  "Expands one binary row pattern into positioned brick map entries."
   [level-id row-idx row-pattern]
   (loop [col 0
          out {}]
@@ -25,6 +26,7 @@
       out)))
 
 (defn- pattern->bricks
+  "Expands all row patterns into one brick id->brick map."
   [level-id rows]
   (loop [row-idx 0
          out {}]
@@ -101,11 +103,11 @@ Accepts compact {:ordinal n :rows [...]} forms plus pre-expanded
 
 (defn level-bricks-by-index
   "Returns concrete bricks for a built-in level index, or {} when out of range."
-  [level-index]
-  (if (and (number? level-index)
-           (<= 0 level-index)
-           (< level-index (count default-levels)))
-    (level-bricks (nth default-levels level-index))
+  [level-no]
+  (if (and (number? level-no)
+           (<= 0 level-no)
+           (< level-no (count default-levels)))
+    (level-bricks (nth default-levels level-no))
     {}))
 
 (defn load-levels

@@ -181,8 +181,8 @@ void runtime_reset(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
     reset_eval_state_current_ns();
-    ns_cleanup();
     meta_registry_cleanup();
+    ns_cleanup();
     macro_cache_reset();
     builtins_reset_cached_funcs();
     ast_canon_reset_caches();

@@ -27,5 +27,9 @@ set(EXCLUDE_COMPONENTS
     "ESP-IDF components to exclude for tinyclj baseline build")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Project-wide compile definitions for every component (see ESP-IDF component.cmake add_compile_definitions).
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/tinyclj_idf_compile_flags.cmake")
+
 project(tinyclj_esp32_idf)
 

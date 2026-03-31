@@ -15,6 +15,7 @@
 (def segment-step-ms 16)
 
 (defn- custom-levels
+  "Returns the state-provided levels vector when it is non-empty, else nil."
   [state]
   (let [xs (:levels state)]
     (if (and (vector? xs)
@@ -23,6 +24,7 @@
       nil)))
 
 (defn- state-level-count
+  "Returns the active level count from state overrides or built-in levels."
   [state]
   (let [xs (custom-levels state)]
     (if xs
@@ -30,51 +32,67 @@
       (levels/level-count))))
 
 (defn- current-level-bricks
-  [state level-index]
+  "Returns bricks for one level index from overrides or built-in levels."
+  [state level-no]
   (let [xs (custom-levels state)]
     (if xs
-      (levels/level-bricks (nth xs level-index))
-      (levels/level-bricks-by-index level-index))))
+      (levels/level-bricks (nth xs level-no))
+      (levels/level-bricks-by-index level-no))))
 
 (defn- normalize-bricks
+  "Normalizes brick containers to an id->brick map."
   [bricks]
   (levels/normalize-bricks bricks))
 
-(defn- clear-events
+(defn- clear-effects
+  "Clears transient gameplay effect cues from state."
   [state]
-  (assoc state :events []))
+  (if (contains? state :effects)
+    (dissoc state :effects)
+    state))
+
+(defn- state-effects
+  "Returns transient effect cues carried in state."
+  [state]
+  (let [events (:effects state)]
+    (if (vector? events) events [])))
 
 (defn- clear-ball-segment
+  "Removes the active ball segment from state."
   [state]
   (assoc state :ball-segment nil))
 
 (defn- clear-paddle-motion
+  "Removes active paddle motion from state."
   [state]
   (assoc state :paddle-motion nil))
 
 (defn- serve-ball
+  "Places the ball on the paddle and clears active segment motion."
   [state]
   (-> state
       (clear-ball-segment)
       (assoc :ball-x (+ (:paddle-x state) (quot paddle-width 2))
-             :ball-y (- paddle-y 6))))
+             :ball-y (- paddle-y 5))))
 
 (defn- prepare-level
-  [state level-index phase]
+  "Prepares one level with fresh bricks and serve-phase defaults."
+  [state level-no phase]
   (let [state2 (assoc state
                       :phase phase
-                      :level-index level-index
-                      :bricks (current-level-bricks state level-index)
-                      :events []
+                      :level-no level-no
+                      :bricks (current-level-bricks state level-no)
                       :ball-vx launch-speed-x
                       :ball-vy launch-speed-y)]
     (serve-ball state2)))
 
 (defn- fresh-game-state
+  "Builds a fresh game state with reset score/lives on level 0."
   [state]
   (prepare-level (assoc state :score 0 :lives default-lives) 0 :serve))
 
 (defn- launch-from-serve
+  "Transitions from serve to play and plans the next segment."
   [state now-ms]
   (plan-next-segment (assoc (serve-ball state)
                             :phase :play
@@ -88,9 +106,8 @@
   {:phase :title
    :score 0
    :lives default-lives
-   :level-index 0
+   :level-no 0
    :bricks {}
-   :events []
    :paddle-x 140
    :ball-x 160
    :ball-y 210
@@ -100,6 +117,7 @@
    :segment-id-seq 0})
 
 (defn- paddle-bounce-vx
+  "Computes horizontal bounce velocity from paddle contact offset."
   [paddle-x ball-x]
   (let [ball-center (+ ball-x (quot ball-size 2))
         paddle-center (+ paddle-x (quot paddle-width 2))
@@ -112,6 +130,7 @@
       :else 0)))
 
 (defn- duration-ms-for-distance
+  "Converts distance and speed to segment duration in milliseconds."
   [distance speed]
   (if (<= speed 0)
     0
@@ -119,6 +138,7 @@
       (quot (+ scaled (- speed 1)) speed))))
 
 (defn- project-axis
+  "Projects one axis using velocity and duration in segment time units."
   [pos velocity duration-ms]
   (+ pos (quot (* velocity duration-ms) segment-step-ms)))
 
@@ -145,63 +165,67 @@
     {:vx (:ball-vx state) :vy (- (:ball-vy state))}))
 
 (defn- wall-id->wall
+  "Maps sweep wall obstacle ids to logical wall keywords."
   [hit-id]
-  (cond
-    (= hit-id -101) :right
-    (= hit-id -102) :left
-    (= hit-id -103) :top
-    (= hit-id -104) :bottom
-    :else nil))
+  (case hit-id
+    -101 :right
+    -102 :left
+    -103 :top
+    -104 :bottom
+    nil))
 
 (defn- create-wall-chosen
+  "Builds chosen segment data for a wall collision target."
   [ball-x ball-y vx vy wall]
   (let [right-limit  (- playfield-width ball-size)
         bottom-limit (+ playfield-height 1)]
-    (cond
-      (= wall :right)
+    (case wall
+      :right
       (let [d (duration-ms-for-distance (- right-limit ball-x) vx)]
         {:wall :right :duration-ms d :to-x right-limit :to-y (project-axis ball-y vy d)})
 
-      (= wall :left)
+      :left
       (let [d (duration-ms-for-distance ball-x (- vx))]
         {:wall :left :duration-ms d :to-x 0 :to-y (project-axis ball-y vy d)})
 
-      (= wall :top)
+      :top
       (let [d (duration-ms-for-distance ball-y (- vy))]
         {:wall :top :duration-ms d :to-x (project-axis ball-x vx d) :to-y 0})
 
-      (= wall :bottom)
+      :bottom
       (let [d (duration-ms-for-distance (- bottom-limit ball-y) vy)]
         {:wall :bottom :duration-ms d :to-x (project-axis ball-x vx d) :to-y bottom-limit})
 
-      :else nil)))
+      nil)))
 
 (defn- create-brick-chosen
+  "Builds chosen segment data for a brick collision target."
   [ball-x ball-y vx vy brick normal]
   (let [bx (:x brick) by (:y brick) bw (:w brick) bh (:h brick)
         duration
-        (cond
-          (= normal :left)   (duration-ms-for-distance (max 0 (- bx (+ ball-x ball-size))) vx)
-          (= normal :right)  (duration-ms-for-distance (max 0 (- ball-x (+ bx bw))) (- vx))
-          (= normal :top)    (duration-ms-for-distance (max 0 (- by (+ ball-y ball-size))) vy)
-          (= normal :bottom) (duration-ms-for-distance (max 0 (- ball-y (+ by bh))) (- vy))
-          :else 0)
+        (case normal
+          :left   (duration-ms-for-distance (max 0 (- bx (+ ball-x ball-size))) vx)
+          :right  (duration-ms-for-distance (max 0 (- ball-x (+ bx bw))) (- vx))
+          :top    (duration-ms-for-distance (max 0 (- by (+ ball-y ball-size))) vy)
+          :bottom (duration-ms-for-distance (max 0 (- ball-y (+ by bh))) (- vy))
+          0)
         to-x
-        (cond
-          (= normal :left)  (- bx ball-size)
-          (= normal :right) (+ bx bw)
-          :else (project-axis ball-x vx duration))
+        (case normal
+          :left  (- bx ball-size)
+          :right (+ bx bw)
+          (project-axis ball-x vx duration))
         to-y
-        (cond
-          (= normal :top)    (- by ball-size)
-          (= normal :bottom) (+ by bh)
-          :else (project-axis ball-y vy duration))]
+        (case normal
+          :top    (- by ball-size)
+          :bottom (+ by bh)
+          (project-axis ball-y vy duration))]
     {:collision {:hit-id (:id brick) :normal normal}
      :duration-ms duration
      :to-x to-x
      :to-y to-y}))
 
 (defn- hit->chosen
+  "Converts one sweep hit payload into a chosen segment target map."
   [ball-x ball-y vx vy bricks hit]
   (let [hit-id (:hit-id hit)
         normal (:normal hit)]
@@ -247,6 +271,7 @@
            :ball-vy vy2)))
 
 (defn- plan-next-segment
+  "Plans the next deterministic ball segment for play phase."
   [state now-ms]
   (if (not= (:phase state) :play)
     (clear-ball-segment state)
@@ -275,25 +300,27 @@
                                 :collision (:collision chosen)}))))))
 
 (defn- apply-bottom-out
+  "Applies life-loss or game-over transition for bottom-out."
   [state]
   (if (> (:ball-y state) playfield-height)
     (let [lives-left (- (:lives state) 1)
-          events (conj (:events state) :life-lost)]
+          events (conj (state-effects state) :sfx/life-lost)]
       (if (<= lives-left 0)
         (assoc state
                :phase :game-over
                :lives 0
-               :events (conj events :game-over)
+               :effects (conj events :sfx/game-over)
                :ball-segment nil)
         (serve-ball (assoc state
                            :phase :serve
                            :lives lives-left
                            :ball-vx launch-speed-x
                            :ball-vy launch-speed-y
-                           :events events))))
+                           :effects events))))
     state))
 
 (defn- anchor-ball
+  "Anchors ball position immediately and clears active segment."
   [state ball-x ball-y]
   (assoc state
          :ball-x ball-x
@@ -301,6 +328,7 @@
          :ball-segment nil))
 
 (defn- anchor-ball-from-render
+  "Anchors the ball from rendered position samples when available."
   [state rendered-ball]
   (if (and (map? rendered-ball)
            (number? (:x rendered-ball))
@@ -308,81 +336,67 @@
     (anchor-ball state (:x rendered-ball) (:y rendered-ball))
     state))
 
-(defn- event-rule-id
-  [event]
-  (let [id (:id event)
-        rule (:rule event)
-        rule-id (if rule (:id rule) nil)]
-    (if (nil? id) rule-id id)))
-
-(defn- ball-anchor-from-event
-  [event]
-  (let [self-aabb (:self-aabb event)]
-    {:x (:min-x self-aabb)
-     :y (:min-y self-aabb)}))
-
 (defn- remove-brick-by-id
+  "Removes one brick id and returns removed brick plus remaining bricks."
   [bricks brick-id]
   (let [bricks (normalize-bricks bricks)
         hit (get bricks brick-id)]
     {:hit hit :bricks (dissoc bricks brick-id)}))
 
 (defn- finish-brick-hit
+  "Applies level-clear or victory transitions after brick removal."
   [state remaining]
   (if (empty? remaining)
-    (if (= (+ (:level-index state) 1) (state-level-count state))
+    (if (= (+ (:level-no state) 1) (state-level-count state))
       (-> state
           (clear-paddle-motion)
           (assoc :phase :victory
                  :ball-segment nil
-                 :events (conj (:events state) :victory)))
+                 :effects (conj (state-effects state) :sfx/victory)))
       (-> state
           (clear-paddle-motion)
           (assoc :phase :level-clear
                  :ball-segment nil
-                 :events (conj (:events state) :level-clear))))
+                 :effects (conj (state-effects state) :sfx/level-clear))))
     state))
 
-(defn apply-spatial-event
-  "Pure domain transition for one host-provided spatial event.
-  Only handles :ball-vs-paddle; brick collisions are handled predictively
-  by fx/sweep-aabb inside choose-segment-target."
-  [state event now-ms]
-  (let [phase (:phase state)
-        event-phase (:phase event)
-        rule-id (event-rule-id event)]
-    (if (or (not= phase :play) (not= event-phase :enter))
-      (clear-events state)
-      (if (= rule-id :ball-vs-paddle)
-        (let [anchor (ball-anchor-from-event event)
-              ball-x (:x anchor)
-              ball-y (:y anchor)
-              other-aabb (:other-aabb event)
-              paddle-x (:min-x other-aabb)
-              next-state (-> state
-                             (clear-events)
-                             (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
-                             (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
-                                    :ball-vy (- (max 2 (abs (:ball-vy state))))
-                                    :events [:paddle-hit]))]
-          (plan-next-segment next-state now-ms))
-        (clear-events state)))))
-
 (defn- bounce-off-wall
+  "Applies wall bounce response and appends a wall-hit event."
   [state wall]
   (let [bounced (if (= wall :top)
                   (assoc state :ball-vy (- (:ball-vy state)))
                   (assoc state :ball-vx (- (:ball-vx state))))]
-    (assoc bounced :events (conj (:events bounced) :wall-hit))))
+    (assoc bounced :effects (conj (state-effects bounced) :sfx/wall-hit))))
 
-(defn apply-segment-end-at-ms
-  "Pure domain transition for one expected segment-end notification.
-now-ms may be nil; in that case the segment end timestamp is used."
+(defn- resolve-paddle-hit
+  "Resolves one paddle hit into the next in-play ball state."
+  [state event now-ms]
+  (if (not= (:phase state) :play)
+    (clear-effects state)
+    (let [ball-x (:ball-x event)
+          ball-y (:ball-y event)
+          paddle-x (:paddle-x event)
+          paddle-y (:paddle-y event)
+          anchor-y (if (number? paddle-y) (- paddle-y ball-size) ball-y)]
+      (if (and (number? ball-x)
+               (number? anchor-y)
+               (number? paddle-x))
+        (let [next-state (-> state
+                             (clear-effects)
+                             (anchor-ball ball-x anchor-y)
+                             (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
+                                    :ball-vy (- (max 2 (abs (:ball-vy state))))
+                                    :effects [:sfx/paddle-hit]))]
+          (plan-next-segment next-state now-ms))
+        (clear-effects state)))))
+
+(defn- resolve-segment-end
+  "Resolves what happens when the active ball travel segment finishes."
   [state segment-id now-ms]
   (let [segment (:ball-segment state)
         result
         (if (or (nil? segment) (not= (:id segment) segment-id))
-          (clear-events state)
+          (clear-effects state)
           (let [end-ms    (:end-ms segment)
                 resume-ms (if (number? now-ms) now-ms end-ms)
                 collision (:collision segment)]
@@ -397,13 +411,13 @@ now-ms may be nil; in that case the segment end timestamp is used."
                         vel     (bounce-velocity state normal)
                         removal (remove-brick-by-id bricks hit-id)
                         state2  (-> state
-                                    (clear-events)
+                                    (clear-effects)
                                     (anchor-ball (:to-x segment) (:to-y segment))
                                     (assoc :bricks   (:bricks removal)
                                            :ball-vx  (:vx vel)
                                            :ball-vy  (:vy vel)
                                            :score    (+ (:score state) (:points (:hit removal)))
-                                           :events   [:brick-hit]))
+                                           :effects  [:sfx/brick-hit]))
                         advanced (finish-brick-hit state2 (:bricks removal))]
                     (if (= (:phase advanced) :play)
                       (plan-next-segment advanced resume-ms)
@@ -415,28 +429,16 @@ now-ms may be nil; in that case the segment end timestamp is used."
               ;; Wall hit
               (let [wall    (:wall segment)
                     anchored (-> state
-                                 (clear-events)
+                                 (clear-effects)
                                  (anchor-ball (:to-x segment) (:to-y segment)))]
-                (cond
-                  (or (= wall :left) (= wall :right) (= wall :top))
-                  (plan-next-segment (bounce-off-wall anchored wall) resume-ms)
-
-                  (= wall :bottom)
-                  (apply-bottom-out anchored)
-
-                  :else
+                (case wall
+                  (:left :right :top) (plan-next-segment (bounce-off-wall anchored wall) resume-ms)
+                  :bottom (apply-bottom-out anchored)
                   anchored)))))]
     result))
 
-(defn apply-segment-end
-  "Pure domain transition for one expected segment-end notification."
-  [state segment-id]
-  (apply-segment-end-at-ms state segment-id nil))
-
-(defn apply-input
-  "Pure domain transition for one normalized input map.
-Optional `rendered-ball` should be {:x n :y n} when the host can sample the
-current animated ball position before interrupting motion."
+(defn- apply-player-input
+  "Applies player intent (move/launch/pause) to the current game phase."
   [state input now-ms rendered-ball]
   (let [dx (let [v (get input :dx)] (if (number? v) v 0))
         launch? (or (= true (get input :launch))
@@ -445,43 +447,72 @@ current animated ball position before interrupting motion."
                    (= true (get input :pause?)))
         next-paddle (max 0 (min (- playfield-width paddle-width)
                                 (+ (:paddle-x state) (* dx paddle-speed))))
-        moved (assoc (clear-events state) :paddle-x next-paddle)]
-    (cond
-      (= (:phase moved) :title)
+        moved (assoc (clear-effects state) :paddle-x next-paddle)]
+    (case (:phase moved)
+      :title
       (if launch?
         (launch-from-serve (fresh-game-state moved) now-ms)
         moved)
 
-      (= (:phase moved) :serve)
+      :serve
       (if launch?
         (launch-from-serve moved now-ms)
         (serve-ball moved))
 
-      (= (:phase moved) :play)
+      :play
       (if pause?
         (-> moved
             (anchor-ball-from-render rendered-ball)
             (assoc :phase :pause))
         moved)
 
-      (= (:phase moved) :pause)
+      :pause
       (if pause?
         (plan-next-segment (assoc moved :phase :play) now-ms)
         moved)
 
-      (= (:phase moved) :level-clear)
+      :level-clear
       (if launch?
-        (prepare-level moved (+ (:level-index moved) 1) :serve)
+        (prepare-level moved (+ (:level-no moved) 1) :serve)
         moved)
 
-      (= (:phase moved) :game-over)
-      (if launch?
-        (fresh-game-state moved)
-        moved)
-
-      (= (:phase moved) :victory)
+      :game-over
       (if launch?
         (fresh-game-state moved)
         moved)
 
-      :else moved)))
+      :victory
+      (if launch?
+        (fresh-game-state moved)
+        moved)
+
+      moved)))
+
+(defn step
+  "Applies one breakout domain event and returns
+  {:state next-state-without-effects :effects ordered-effect-cues}.
+  Supported event types:
+  - :game/input with :input and optional :rendered-ball
+  - :game/segment-ended with :segment-id
+  - :game/ball-hit-paddle with :ball-x/:ball-y/:paddle-x"
+  [state event now-ms]
+  (let [event-type (:type event)
+        next-state (case event-type
+                     :game/input
+                     (apply-player-input state
+                                         (:input event)
+                                         now-ms
+                                         (:rendered-ball event))
+
+                     :game/segment-ended
+                     (resolve-segment-end state (:segment-id event) now-ms)
+
+                     :game/ball-hit-paddle
+                     (resolve-paddle-hit state event now-ms)
+
+                     (clear-effects state))
+        effects (state-effects next-state)
+        state-without-effects (clear-effects next-state)]
+    {:state state-without-effects
+     :effects effects}))
+

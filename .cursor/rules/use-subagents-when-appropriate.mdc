@@ -1,0 +1,15 @@
+---
+description: Use subagents for suitable complex tasks
+alwaysApply: true
+---
+
+# Use Subagents Where Appropriate
+
+- Use subagents proactively when a task benefits from delegation.
+- Prefer subagents for:
+  - Broad codebase exploration across multiple modules.
+  - Independent investigations that can run in parallel.
+  - Longer workflows that benefit from a dedicated context.
+- Do not use subagents for narrow, simple tasks where direct tools are faster.
+- When independent investigations exist, launch subagents in parallel.
+- Summarize subagent findings clearly, then continue implementation and testing in the main agent.

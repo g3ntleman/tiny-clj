@@ -141,6 +141,7 @@ static FILE *open_breakout_repl_regression_pipe(void) {
         "  (require 'tiny-clj.runtime) "
         "  (require 'tiny-breakout.runtime) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    ((:prepare-callback cfg)) "
         "    (tiny-clj.runtime/start-renderer! (:slots cfg)) "
         "    (tiny-breakout.runtime/start-runtime! nil) "
         "    (tiny-breakout.runtime/apply-input! {:launch true}) "

@@ -838,7 +838,6 @@ TEST(test_def_isolated_problem) {
     if (resolved && resolved != NOT_FOUND) {
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "Resolved value should be a fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)resolved), "Resolved value should be 42");
-        RELEASE(resolved);
     } else {
         TEST_FAIL_MESSAGE("ns_resolve should find test-value after def");
     }
@@ -937,7 +936,6 @@ TEST(test_def_function_isolated_problem) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
         RELEASE(test_fn_sym);
-        RELEASE(resolved);
         return;
     } END_TRY
 
@@ -952,7 +950,6 @@ TEST(test_def_function_isolated_problem) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
         RELEASE(test_fn_sym);
-        RELEASE(resolved);
         // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
         return;
     } END_TRY
@@ -966,7 +963,6 @@ TEST(test_def_function_isolated_problem) {
 
     // Cleanup
     RELEASE(test_fn_sym);
-    RELEASE(resolved);
     // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
 }
 

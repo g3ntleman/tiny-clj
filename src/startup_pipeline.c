@@ -255,7 +255,7 @@ bool tinyclj_startup_bootstrap_language(EvalState *st,
 
     if (effective.refer_repl) {
       evalstate_set_ns(st, "user");
-      (void)eval_string("(require '[clojure.repl :refer :all])", st);
+      (void)eval_string("(require '[clojure.repl :refer [doc source dir find-doc pst]])", st);
     }
 
     evalstate_set_ns(st, "user");

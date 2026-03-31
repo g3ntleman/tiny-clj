@@ -4,19 +4,19 @@
 
 #include "memory.h"
 #include "platform.h"
-#include "runtime.h"
-#include "builtins.h"
 #include "source_resolver.h"
 #include "namespace.h"
-#include "meta.h"
 #include "line_editor.h"
 #include "event_loop.h"
+#include "exception.h"
 #include "mini_format.h"
 #include "repl.h"
 #include "startup_pipeline.h"
 #include "tiny_clj.h"
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
 #include "tinyclj_idf_display.h"
 #include "panel.h"
+#endif
 
 #ifndef ESP_REPL_HISTORY_PERSIST_ENABLED
 #define ESP_REPL_HISTORY_PERSIST_ENABLED 1
@@ -54,19 +54,6 @@ static bool esp_boot_load_root_file(EvalState *st) {
     END_TRY
 
     return ok;
-}
-
-static unsigned int esp_repl_idle_sleep_ms(void) {
-    if (event_loop_has_pending_tasks()) {
-        return 1u;
-    }
-
-    int until_next_timer_ms = event_loop_time_until_next_timer_ms();
-    if (until_next_timer_ms >= 0 && until_next_timer_ms < 10) {
-        return (until_next_timer_ms <= 1) ? 1u : (unsigned int)until_next_timer_ms;
-    }
-
-    return 10u;
 }
 
 #if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
@@ -176,6 +163,7 @@ void tinyclj_idf_start(void) {
         platform_put_string(NULL, "Error: runtime bootstrap failed\n");
         return;
     }
+    subjective_c_register_interpreter_thread();
 
     bool boot_root_loaded = true;
     bool boot_root_present = (resolve_path_to_bytes("/boot/root.edn") != NULL);
@@ -254,11 +242,11 @@ void tinyclj_idf_start(void) {
             }
             if (r == LINE_EDITOR_EOF) {
                 (void)esp_repl_history_save(ed);  // best-effort
+                subjective_c_clear_interpreter_thread();
                 return;
             }
-            repl_process_event_loop(st);
             esp_report_display_throughput_if_due();
-            platform_sleep_ms(esp_repl_idle_sleep_ms());
+            (void)event_loop_run(NULL, st);
         }
 
         LineEditorState s;

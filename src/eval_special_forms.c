@@ -48,6 +48,66 @@ static INLINE ID args_nth(CljPersistentVector *args, unsigned int idx) {
   return vector_nth(args, idx);
 }
 
+static INLINE bool case_value_equals(ID a, ID b) {
+  return (a == b) || clj_equal(a, b);
+}
+
+static unsigned int case_test_constant_count(ID test_form) {
+  if (!test_form)
+    return 1;
+  CljType tag = TAG(test_form);
+  if (is_list_type(tag)) {
+    unsigned int count = 0;
+    for (CljList *node = as_list(test_form); node; node = list_rest_normalized(node)) {
+      count++;
+    }
+    return count;
+  }
+  if (tag == CLJ_AST_CALL) {
+    CljASTCall *call = as_ast_call(test_form);
+    return 1u + (call && call->args ? vector_count(call->args) : 0u);
+  }
+  return 1;
+}
+
+static ID case_test_constant_nth(ID test_form, unsigned int idx) {
+  if (!test_form)
+    return NULL;
+  CljType tag = TAG(test_form);
+  if (is_list_type(tag)) {
+    unsigned int i = 0;
+    for (CljList *node = as_list(test_form); node; node = list_rest_normalized(node), i++) {
+      if (i == idx)
+        return LIST_FIRST(node);
+    }
+    return NULL;
+  }
+  if (tag == CLJ_AST_CALL) {
+    CljASTCall *call = as_ast_call(test_form);
+    if (!call)
+      return NULL;
+    if (idx == 0)
+      return call->op;
+    unsigned int arg_idx = idx - 1;
+    unsigned int argc = call->args ? vector_count(call->args) : 0;
+    return arg_idx < argc ? vector_nth(call->args, arg_idx) : NULL;
+  }
+  return idx == 0 ? test_form : NULL;
+}
+
+static const char *case_value_repr(ID v, char *fallback, size_t fallback_size) {
+  if (!v)
+    return "nil";
+  CljString *s = to_string(v);
+  if (s) {
+    const char *data = string_data(s);
+    if (data)
+      return data;
+  }
+  snprintf(fallback, fallback_size, "<%s>", clj_type_name(TAG(v)));
+  return fallback;
+}
+
 // Ensure list-like forms are canonicalized into CLJ_AST_CALL on demand.
 static INLINE ID ensure_ast_call(ID form, EvalState *st) {
   if (!form || IS_IMMEDIATE(form))
@@ -228,6 +288,65 @@ ID eval_special_cond(CljPersistentVector *args, CljPersistentMap *env, EvalState
     i = next_index;
   }
 
+  return NULL;
+}
+
+ID eval_special_case(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  unsigned int argc = args_count(args);
+  if (argc == 0) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "case requires an expression", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  unsigned int forms = argc - 1;
+  bool has_default = (forms & 1u) != 0;
+  unsigned int pair_forms = has_default ? (forms - 1) : forms;
+
+  // Reject duplicate test constants before evaluating the expression.
+  for (unsigned int i = 1; i < 1 + pair_forms; i += 2) {
+    ID test_form = args_nth(args, i);
+    unsigned int test_count = case_test_constant_count(test_form);
+    for (unsigned int t = 0; t < test_count; t++) {
+      ID test_const = case_test_constant_nth(test_form, t);
+      for (unsigned int j = 1; j < i; j += 2) {
+        ID prev_form = args_nth(args, j);
+        unsigned int prev_count = case_test_constant_count(prev_form);
+        for (unsigned int p = 0; p < prev_count; p++) {
+          ID prev_const = case_test_constant_nth(prev_form, p);
+          if (!case_value_equals(test_const, prev_const))
+            continue;
+          char fallback[64];
+          const char *repr = case_value_repr(test_const, fallback, sizeof(fallback));
+          throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                   "Duplicate case test constant: %s", repr);
+          return NULL;
+        }
+      }
+    }
+  }
+
+  ID expr = args_nth(args, 0);
+  ID value = eval_arg_from_expr_with_context(expr, env, st, ctx);
+
+  for (unsigned int i = 1; i < 1 + pair_forms; i += 2) {
+    ID test_form = args_nth(args, i);
+    ID then_expr = args_nth(args, i + 1);
+    unsigned int test_count = case_test_constant_count(test_form);
+    for (unsigned int t = 0; t < test_count; t++) {
+      ID test_const = case_test_constant_nth(test_form, t);
+      if (case_value_equals(value, test_const))
+        return eval_body(then_expr, env, st, ctx);
+    }
+  }
+
+  if (has_default) {
+    return eval_body(args_nth(args, argc - 1), env, st, ctx);
+  }
+
+  char fallback[64];
+  const char *repr = case_value_repr(value, fallback, sizeof(fallback));
+  throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                           "No matching clause: %s", repr);
   return NULL;
 }
 
@@ -654,6 +773,11 @@ ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalSt
   return eval_dotimes(args, env, st, ctx);
 }
 
+ID eval_special_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  (void)ctx;
+  return eval_ns(args, eval_env_or_ns_mappings(env, st), st);
+}
+
 ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   unsigned int argc = args_count(args);
   if (argc == 0)
@@ -729,7 +853,6 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
       result = eval_body(expr, base_env, st, ctx);
     }
     eval_finally_clause(finally_clause, base_env, st, ctx);
-    return result;
   }
   CATCH(ex) {
     // Exception value is a first-class CLJ_EXCEPTION object.
@@ -841,8 +964,7 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
                       exc->file, exc->line, exc->col);
       return NULL;
     }
-
-    return handler_result;
+    result = handler_result;
   }
   END_TRY
 
@@ -916,7 +1038,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
     ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
 
     // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
-    if (sym == SYM_NS_STAR || (sym->cname && strcmp(sym->cname, "*ns*") == 0)) {
+    if (symbol_is_ns_star(sym)) {
       if (!value) {
         RELEASE(frame);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "*ns* cannot be bound to nil", __FILE__, __LINE__, 0);
@@ -966,9 +1088,6 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
       }
       result = eval_body(expr, base_env, st, ctx);
     }
-    evalstate_pop_dynamic_bindings_to(st, base_depth);
-    st->current_ns = saved_ns;
-    return result;
   }
   CATCH(ex) {
     evalstate_pop_dynamic_bindings_to(st, base_depth);
@@ -980,7 +1099,9 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
   }
   END_TRY
 
-  return NULL;
+  evalstate_pop_dynamic_bindings_to(st, base_depth);
+  st->current_ns = saved_ns;
+  return result;
 }
 
 static inline ID eval_recur_arg_owned(ID arg, const EvalContext *ctx) {
@@ -990,9 +1111,8 @@ static inline ID eval_recur_arg_owned(ID arg, const EvalContext *ctx) {
     return arg;
 
   if (TAG(arg) == CLJ_SLOT_REF) {
-    const CljSlotRef *ref = (const CljSlotRef *)arg;
-    CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
-    ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+    CLJ_ASSERT(ctx && "CLJ_SLOT_REF requires eval context");
+    ID v = eval_resolve_slot_ref(ctx, arg);
     if (v == NOT_FOUND || !v)
       return NULL;
     return RETAIN(v);

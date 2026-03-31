@@ -33,6 +33,36 @@ TEST(test_special_do_dispatch) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
+TEST(test_special_try_success_path_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(try 42 (catch e 7))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
+TEST(test_special_binding_success_path_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(binding [*ns* *ns*] 11)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(11, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
+TEST(test_special_plain_eval_restores_exception_handler_stack) {
+    ExceptionHandler *before = global_exception_stack.top;
+
+    ID result = eval_string("(do 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+
+    TEST_ASSERT_EQUAL_PTR(before, global_exception_stack.top);
+}
+
 TEST(test_special_when_dispatch) {
     ID result = eval_string("(when true 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
@@ -147,6 +177,70 @@ TEST(test_special_cond_simple_nesting_problem) {
     ID result2 = eval_string("(cond false 1 :else 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result2));
+}
+
+TEST(test_special_case_basic_match) {
+    ID result = eval_string("(case 2 1 :a 2 :b)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_keyword(result));
+    TEST_ASSERT_EQUAL_STRING(":b", as_symbol(result)->cname);
+}
+
+TEST(test_special_case_default_clause) {
+    ID result = eval_string("(case :x :a 1 :b 2 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(99, as_fixnum(result));
+}
+
+TEST(test_special_case_no_match_without_default_throws) {
+    bool did_throw = false;
+    TRY {
+        (void)eval_string("(case 3 1 :a 2 :b)", g_test_eval_state);
+    } CATCH(ex) {
+        did_throw = true;
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+        TEST_ASSERT_NOT_NULL(strstr(ex->message, "No matching clause: 3"));
+    } END_TRY
+    TEST_ASSERT_TRUE(did_throw);
+}
+
+TEST(test_special_case_duplicate_constant_throws) {
+    bool did_throw = false;
+    TRY {
+        (void)eval_string("(case 1 1 :a 1 :b :d)", g_test_eval_state);
+    } CATCH(ex) {
+        did_throw = true;
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+        TEST_ASSERT_NOT_NULL(strstr(ex->message, "Duplicate case test constant: 1"));
+    } END_TRY
+    TEST_ASSERT_TRUE(did_throw);
+}
+
+TEST(test_special_case_grouped_constants_list) {
+    ID result = eval_string("(case 2 (1 2) :hit :miss)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_keyword(result));
+    TEST_ASSERT_EQUAL_STRING(":hit", as_symbol(result)->cname);
+}
+
+TEST(test_special_case_test_constants_are_not_evaluated) {
+    ID result = eval_string("(do (def one 1) (case 1 one :one :default))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_keyword(result));
+    TEST_ASSERT_EQUAL_STRING(":default", as_symbol(result)->cname);
+}
+
+TEST(test_special_case_expression_evaluated_once) {
+    ID result = eval_string(
+        "(do "
+        "  (def x (atom 0)) "
+        "  (case (do (swap! x inc) @x) "
+        "    1 :hit "
+        "    :miss) "
+        "  @x)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
 }
 
 // Low-level test that demonstrates the nesting problem directly
@@ -271,6 +365,10 @@ TEST(test_all_special_symbols_have_eval_fn) {
     CljSpecialSymbol *sym_cond = as_special_symbol(SYM_COND);
     TEST_ASSERT_NOT_NULL(sym_cond);
     TEST_ASSERT_NOT_NULL(sym_cond->eval_fn);
+
+    CljSpecialSymbol *sym_case = as_special_symbol(SYM_CASE);
+    TEST_ASSERT_NOT_NULL(sym_case);
+    TEST_ASSERT_NOT_NULL(sym_case->eval_fn);
 }
 
 // ============================================================================

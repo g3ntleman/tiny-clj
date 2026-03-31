@@ -286,6 +286,21 @@ TEST(test_repl_source_shows_qualified_recursive_call) {
     // body_str and foo_fn_obj are not owned here.
 }
 
+TEST(test_repl_to_string_labels_anonymous_closure_as_anonymous) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID anon_fn = eval_string("(fn [x] x)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(anon_fn);
+    TEST_ASSERT_EQUAL(CLJ_CLOSURE, TAG(anon_fn));
+
+    CljString *rendered = to_string(anon_fn);
+    TEST_ASSERT_NOT_NULL(rendered);
+    const char *rendered_cstr = string_data(rendered);
+    TEST_ASSERT_NOT_NULL(rendered_cstr);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(rendered_cstr, "anonymous"),
+                                 "anonymous closure string should include anonymous label");
+}
+
 // ============================================================================
 // DIR FUNCTION TESTS
 // ============================================================================

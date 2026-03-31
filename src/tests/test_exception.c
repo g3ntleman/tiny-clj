@@ -98,6 +98,28 @@ typedef struct {
     bool after_clear_is_interpreter_thread;
 } InterpreterThreadRegistrationWorkerArgs;
 
+static bool g_release_throw_invoked_during_drain = false;
+static bool g_release_throw_caught = false;
+
+static void byte_array_release_throw_while_draining(CljObject *obj) {
+    CljByteArray *ba = (CljByteArray *)obj;
+    g_release_throw_invoked_during_drain = is_autorelease_pool_draining();
+
+    // Mirror default CLJ_BYTE_ARRAY payload cleanup for this test override.
+    if (ba && ba->data && ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) == 0)) {
+        CLJ_FREE(ba->data);
+        ba->data = NULL;
+    }
+
+    TRY {
+        throw_exception_formatted("AutoreleasePoolError",
+                                  __FILE__, __LINE__, 0,
+                                  "release callback throw during drain");
+    } CATCH(ex) {
+        g_release_throw_caught = (ex != NULL && strcmp(ex->type, "AutoreleasePoolError") == 0);
+    } END_TRY
+}
+
 static void *throw_oom_worker_main(void *arg) {
     ThrowOomWorkerArgs *args = (ThrowOomWorkerArgs *)arg;
     if (!args) {
@@ -353,6 +375,33 @@ TEST(test_with_autorelease_pool_swallows_exceptions) {
         "WITH_AUTORELEASE_POOL should now properly propagate exceptions to outer TRY/CATCH");
     
     // This test should now PASS, proving the fix works
+}
+
+TEST(test_throw_exception_formatted_during_pool_drain_does_not_recurse) {
+    bool escaped = false;
+    g_release_throw_invoked_during_drain = false;
+    g_release_throw_caught = false;
+
+    subjective_c_register_release_fn(CLJ_BYTE_ARRAY, byte_array_release_throw_while_draining);
+
+    uint32_t mark = autorelease_pool_mark();
+    CljByteArray *ba = AUTORELEASE(make_byte_array(8));
+    TEST_ASSERT_NOT_NULL(ba);
+
+    TRY {
+        autorelease_pool_drain_to_depth(mark);
+    } CATCH(ex) {
+        (void)ex;
+        escaped = true;
+    } END_TRY
+
+    subjective_c_register_release_fn(CLJ_BYTE_ARRAY, NULL);
+
+    TEST_ASSERT_FALSE_MESSAGE(escaped, "Exception from release callback should be catchable without recursion");
+    TEST_ASSERT_TRUE_MESSAGE(g_release_throw_invoked_during_drain,
+                             "Release callback must execute while autorelease pool is draining");
+    TEST_ASSERT_TRUE_MESSAGE(g_release_throw_caught,
+                             "throw_exception_formatted must be catchable during drain (no recursive throw)");
 }
 
 TEST(test_throw_existing_exception) {

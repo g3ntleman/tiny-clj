@@ -10,6 +10,7 @@
 #include "../sound_tick_scheduler.h"
 #include "../event_loop.h"
 #include "byte_array.h"
+#include <pthread.h>
 
 static uint32_t g_test_backend_set_voice_call_count = 0u;
 static uint32_t g_test_backend_set_voice_nonzero_count = 0u;
@@ -122,6 +123,12 @@ static ID make_test_trk1(uint8_t note, uint32_t gate_ticks, uint8_t channel_coun
 static ID make_test_trk1_with_delay(uint8_t note, uint32_t gate_ticks, uint32_t delay_ticks,
                                     uint8_t channel_count) {
   return make_test_trk1_common(note, gate_ticks, delay_ticks, true, channel_count, 0);
+}
+
+static void *sound_tick_once_worker(void *arg) {
+  (void)arg;
+  sound_engine_tick();
+  return NULL;
 }
 
 typedef struct {
@@ -972,6 +979,55 @@ TEST(test_sound_sfx_last_start_wins_when_all_slots_busy) {
 
   RELEASE(ba);
   sound_engine_shutdown();
+}
+
+TEST(test_sound_deferred_release_from_sound_thread_avoids_per_event_heap_context_allocations) {
+  sound_engine_init(1);
+  event_loop_clear();
+  subjective_c_clear_interpreter_thread();
+  subjective_c_register_interpreter_thread();
+
+  ID track_sym = intern_symbol_global(":deferred-release-test");
+  ID ba = make_test_trk1(69, 4, 1, 0);
+
+  for (int i = 0; i < SOUND_CMD_QUEUE_CAP; i++) {
+    TEST_ASSERT_TRUE_MESSAGE(sound_engine_play_music(track_sym, ba, 1),
+                             "play_music enqueue should succeed up to command queue capacity");
+  }
+
+  MemoryStats before = memory_profiler_get_stats();
+
+  pthread_t worker;
+  int rc = pthread_create(&worker, NULL, sound_tick_once_worker, NULL);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+  rc = pthread_join(worker, NULL);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+
+  MemoryStats after = memory_profiler_get_stats();
+  long long raw_blocks_delta = (long long)after.raw_blocks_current - (long long)before.raw_blocks_current;
+  long long raw_bytes_delta = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+
+  int drained = 0;
+  while (event_loop_has_pending_tasks() && drained < 128) {
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "event loop should drain deferred release callbacks");
+    drained++;
+  }
+  TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(),
+                            "deferred release callbacks should be fully drained");
+  TEST_ASSERT_EQUAL_INT(1, retain_count(ba));
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+  subjective_c_clear_interpreter_thread();
+  event_loop_clear();
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(0,
+                                        (int)raw_blocks_delta,
+                                        "deferred release on sound thread must not allocate per-event heap contexts");
+  TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(0,
+                                        (int)raw_bytes_delta,
+                                        "deferred release on sound thread must not grow raw heap usage");
 }
 
 TEST(test_sound_finished_callback_runs_via_event_loop) {

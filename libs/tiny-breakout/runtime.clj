@@ -4,7 +4,8 @@
             [tiny-breakout.scene :as scene]
             [tiny-clj.event :as event]
             [tiny-clj.runtime :as runtime]
-            [tiny-fx.gfx-collision :as gfx-collision]))
+            [tiny-fx.gfx-collision :as gfx-collision]
+            [tiny-fx.sound-demos :as sound-demos]))
 
 (def state* (atom nil))
 (def scene* (atom nil))
@@ -12,29 +13,30 @@
 (def ^:private overlay-animation* (atom idle-overlay-animation))
 (def idle-held-buttons {:left false :right false :last nil})
 (def held-buttons* (atom idle-held-buttons))
+;; Audio warmup status is kept in runtime state (:audio-prewarmed?) so reset/start
+;; flows can stay explicit and data-driven.
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
-(def ^:private segment-watch-base-opts {:slot :game
-                                        :entity-id :ball})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
-(def ^:private segment-watch-field* (atom nil))
-(def ^:private segment-fallback-timer-id :tiny-breakout/segment-end-fallback)
-;; Coalesced timeline-kick timer: avoid schedule-0 burst buildup under heavy publish-state! churn.
-;; Use a named non-zero-delay timer so repeated schedules upsert/cancel instead of queueing unbounded tasks.
-(def ^:private timeline-kick-timer-id :tiny-breakout/timeline-kick)
+(def ^:private segment-end-timer-id* (atom nil))
 
-(defn- kick-timeline-watchers-task
+(defn- state-audio-prewarmed?
+  "Returns true when runtime state already marks audio prewarmed."
+  [state]
+  (= true (:audio-prewarmed? state)))
+
+(defn- ensure-audio-prewarmed!
+  "Prewarms audio once and persists the prewarm marker in runtime state."
   []
-  (event/kick-timeline-watchers!)
+  (when-not (state-audio-prewarmed? @state*)
+    (audio/prewarm-engine!)
+    (when (map? @state*)
+      (swap! state* assoc :audio-prewarmed? true)))
   nil)
 
-(def ^:private timeline-kick-timer-spec {:id timeline-kick-timer-id
-                                         :fn kick-timeline-watchers-task})
-
-
-
 (defn- button-down-event?
+  "Returns true when an event represents a semantic button-down."
   [event]
   (let [kind (get event :kind)]
     (or (= :button/down kind)
@@ -43,6 +45,7 @@
              (nil? (get event :held-ms))))))
 
 (defn- button-release-event?
+  "Returns true when an event represents a semantic button-release."
   [event]
   (let [kind (get event :kind)]
     (or (= :button/up kind)
@@ -51,47 +54,72 @@
              (number? (get event :pressed-ms))
              (nil? (get event :held-ms))))))
 
-(defn- scene-record
-  [state]
-  (let [overlay (scene/overlay-text (:phase state))
-        animation @overlay-animation*
-        scene-state (if (and (not= overlay "")
-                             (= overlay (:text animation)))
-                      (assoc state :overlay-start-ms (:start-ms animation))
-                      (dissoc state :overlay-start-ms))]
-    (record-from-map 'FrameScene (dissoc (scene/build-scene scene-state) :type))))
-
 (defn- overlay-animation-for-state
-  [state]
+  "Builds initial overlay animation data for the current phase."
+  [state now-ms]
   (let [overlay (scene/overlay-text (:phase state))]
     (if (= overlay "")
       idle-overlay-animation
       {:text overlay
-       :start-ms (current-time-ms)})))
+       :start-ms now-ms})))
 
-(defn- sync-overlay-animation!
-  [previous-state next-state]
+(defn- next-overlay-animation
+  "Computes the next overlay animation from phase transitions."
+  [current-animation previous-state next-state now-ms]
   (let [previous-overlay (scene/overlay-text (:phase previous-state))
         next-overlay (scene/overlay-text (:phase next-state))]
     (cond
       (= next-overlay "")
-      (reset! overlay-animation* idle-overlay-animation)
+      idle-overlay-animation
 
       (not= previous-overlay next-overlay)
-      (reset! overlay-animation* {:text next-overlay
-                                  :start-ms (current-time-ms)})
+      {:text next-overlay
+       :start-ms now-ms}
 
-      :else nil)))
+      :else
+      current-animation)))
+
+(defn- scene-state-with-overlay-animation
+  "Injects overlay animation timestamps into scene state."
+  [state animation]
+  (let [overlay (scene/overlay-text (:phase state))]
+    (if (and (not= overlay "")
+             (= overlay (:text animation)))
+      (assoc state :overlay-start-ms (:start-ms animation))
+      (dissoc state :overlay-start-ms))))
+
+(defn- scene-record-for-animation
+  "Builds a FrameScene record using a provided overlay animation."
+  [state animation]
+  (record-from-map 'FrameScene
+                   (dissoc (scene/build-scene (scene-state-with-overlay-animation state animation))
+                           :type)))
+
+(defn- scene-record
+  "Builds a FrameScene record using the current overlay animation atom."
+  [state]
+  (scene-record-for-animation state @overlay-animation*))
+
+(defn- normalized-state-without-effects
+  "Returns state with transient effect transport keys removed."
+  [state]
+  (if (contains? state :effects)
+    (dissoc state :effects)
+    state))
 
 (defn- restart-overlay-animation!
+  "Restarts overlay animation from current state and rebuilds the scene."
   []
-  (let [state @state*]
-    (reset! overlay-animation* (overlay-animation-for-state state))
+  (let [state @state*
+        now-ms (current-time-ms)
+        animation (overlay-animation-for-state state now-ms)]
+    (reset! overlay-animation* animation)
     (when (map? state)
-      (reset! scene* (scene-record state))))
+      (reset! scene* (scene-record-for-animation state animation))))
   nil)
 
 (defn- on-segment-timeline-event!
+  "Handles timeline end notifications and applies segment-end transitions."
   [event]
   (let [now-ms (current-time-ms)
         current @state*
@@ -102,11 +130,11 @@
                      (= true (:at-end progress))
                      (= true (:end-event progress)))
         end-ms (:end-ms segment)
-        ready? (or at-end?
-                   (and (number? end-ms)
-                        (<= end-ms now-ms)))
-        resume-ms (if (and at-end? (number? end-ms))
-                    end-ms
+        ready? (if (number? end-ms)
+                 (<= end-ms now-ms)
+                 at-end?)
+        resume-ms (if (number? end-ms)
+                    (max now-ms end-ms)
                     now-ms)]
     (when (and (map? segment)
                (number? segment-id)
@@ -115,15 +143,53 @@
             latest-segment (:ball-segment latest)]
         (when (and (map? latest-segment)
                    (= segment-id (:id latest-segment)))
-          (publish-state!
-           (core/apply-segment-end-at-ms latest segment-id resume-ms))))))
+          (publish-transition!
+           (core/step latest
+                      {:type :game/segment-ended
+                       :segment-id segment-id}
+                      resume-ms))))))
+  nil)
+
+(defn- cancel-segment-end-timer!
+  "Cancels pending fallback segment-end timer and clears timer state."
+  []
+  (let [timer-id @segment-end-timer-id*]
+    (when (number? timer-id)
+      (cancel-timer timer-id)))
+  (reset! segment-end-timer-id* nil)
+  nil)
+
+(defn- schedule-segment-end-timer!
+  "Schedules fallback segment-end timer for the active segment deadline."
+  [segment-id end-ms]
+  (cancel-segment-end-timer!)
+  (when (and (number? segment-id)
+             (number? end-ms))
+    (let [delay-ms (max 0 (- end-ms (current-time-ms)))
+          timer-id
+          (schedule delay-ms
+                    (fn []
+                      (let [latest @state*
+                            latest-segment (:ball-segment latest)
+                            now-ms (current-time-ms)]
+                        (when (and (map? latest-segment)
+                                   (= segment-id (:id latest-segment)))
+                          (publish-transition!
+                           (core/step latest
+                                      {:type :game/segment-ended
+                                       :segment-id segment-id}
+                                      now-ms))))
+                      nil))]
+      (reset! segment-end-timer-id* timer-id)))
   nil)
 
 (defn- rendered-entity-state
+  "Returns renderer snapshot state for one entity in the game slot."
   [entity-id]
   (runtime/renderer-state :game entity-id))
 
 (defn- rendered-ball-position
+  "Returns rendered ball position map when renderer state is available."
   []
   (let [rendered (rendered-entity-state :ball)]
     (if (and (map? rendered)
@@ -134,23 +200,28 @@
       nil)))
 
 (defn- clamp-paddle-x
+  "Clamps paddle x position to playfield bounds."
   [x]
   (let [right-limit (- core/playfield-width core/paddle-width)]
     (max 0 (min right-limit x))))
 
 (defn- attached-ball-x
+  "Returns served ball x aligned to paddle center."
   [paddle-x]
   (+ paddle-x (quot core/paddle-width 2)))
 
 (defn- attached-ball-y
+  "Returns served ball y offset above the paddle."
   []
   (- core/paddle-y 6))
 
-(defn- stop-paddle-motion
+(defn- stopped-paddle-motion
+  "Returns state with paddle motion removed."
   [state]
   (assoc state :paddle-motion nil))
 
 (defn- paddle-motion-x
+  "Computes interpolated paddle x for the given timestamp."
   [state now-ms]
   (let [motion (:paddle-motion state)
         start-ms (get motion :start-ms)
@@ -171,6 +242,7 @@
       from-x)))
 
 (defn- sync-paddle-state
+  "Synchronizes paddle and served ball positions for current time."
   [state now-ms]
   (let [motion (:paddle-motion state)
         resolved-x (paddle-motion-x state now-ms)
@@ -184,10 +256,11 @@
     (if (and (map? motion)
              (number? (:end-ms motion))
              (>= now-ms (:end-ms motion)))
-      (stop-paddle-motion state3)
+      (stopped-paddle-motion state3)
       state3)))
 
 (defn- paddle-motion-duration-ms
+  "Computes paddle travel duration in milliseconds for distance."
   [distance]
   (if (<= distance 0)
     0
@@ -196,12 +269,14 @@
           core/paddle-speed)))
 
 (defn- paddle-motion-direction
+  "Returns current paddle motion direction or nil."
   [state]
   (let [motion (:paddle-motion state)
         dir (:dir motion)]
     (if (number? dir) dir nil)))
 
 (defn- plan-paddle-motion
+  "Plans paddle motion toward the requested edge direction."
   [state dir now-ms]
   (let [from-x (clamp-paddle-x (let [v (:paddle-x state)] (if (number? v) v 0)))
         to-x (if (< dir 0)
@@ -219,6 +294,7 @@
                             nil))))
 
 (defn- desired-paddle-direction
+  "Resolves effective paddle direction from held button state."
   [held]
   (let [left? (= true (get held :left))
         right? (= true (get held :right))
@@ -230,47 +306,55 @@
       right? 1
       :else nil)))
 
-(defn- apply-held-paddle-direction!
-  []
-  (let [now-ms (current-time-ms)
-        current (sync-paddle-state @tiny-breakout.runtime/state* now-ms)
-        desired-dir (desired-paddle-direction @tiny-breakout.runtime/held-buttons*)
+(defn- next-held-buttons
+  "Updates held-button map for one button state transition."
+  [held button-id pressed?]
+  (assoc held
+         button-id pressed?
+         :last (if pressed? button-id (get held :last))))
+
+(defn- next-state-for-held-paddle-direction
+  "Builds next state for updated held-button direction."
+  [state held now-ms]
+  (let [current (sync-paddle-state state now-ms)
+        desired-dir (desired-paddle-direction held)
         current-dir (paddle-motion-direction current)]
     (cond
       (nil? desired-dir)
-      (tiny-breakout.runtime/publish-state! (stop-paddle-motion current))
+      (if current-dir
+        (stopped-paddle-motion current)
+        nil)
 
       (= desired-dir current-dir)
       nil
 
       :else
-      (tiny-breakout.runtime/publish-state! (plan-paddle-motion (stop-paddle-motion current)
-                                                                desired-dir
-                                                                now-ms)))))
+      (plan-paddle-motion (stopped-paddle-motion current)
+                          desired-dir
+                          now-ms))))
+
+(defn- apply-held-paddle-direction!
+  "Applies held-button direction updates to runtime state."
+  [held]
+  (let [now-ms (current-time-ms)
+        current-state @state*
+        next-state (next-state-for-held-paddle-direction current-state held now-ms)]
+    (when (and (map? next-state)
+               (not (identical? current-state next-state)))
+      (publish-state! next-state))))
 
 (defn- update-held-button!
+  "Updates held-button atom and applies resulting paddle direction."
   [button-id pressed?]
-  (swap! tiny-breakout.runtime/held-buttons*
-         (fn [held]
-           (assoc held
-                  button-id pressed?
-                  :last (if pressed? button-id (get held :last)))))
-  (apply-held-paddle-direction!))
-
-(defn- state-after-input
-  [input-map]
-  (let [now-ms (current-time-ms)
-        current (sync-paddle-state @tiny-breakout.runtime/state* now-ms)
-        current (if (not= 0 (get input-map :dx))
-                  (stop-paddle-motion current)
-                  current)
-        rendered (if (or (= (:phase current) :play)
-                         (= (:phase current) :pause))
-                   (rendered-ball-position)
-                   nil)]
-    (core/apply-input current input-map now-ms rendered)))
+  (let [held @held-buttons*
+        was-pressed? (= true (get held button-id))
+        next-pressed? (= true pressed?)]
+    (when (not= was-pressed? next-pressed?)
+      (let [next-held (swap! held-buttons* next-held-buttons button-id next-pressed?)]
+        (apply-held-paddle-direction! next-held)))))
 
 (defn- normalize-paddle-intent
+  "Normalizes raw input map into bounded dx/launch/pause intent."
   [input]
   (let [left? (= true (get input :left))
         right? (= true (get input :right))
@@ -288,6 +372,7 @@
      :pause? pause?}))
 
 (defn- on-movement-button-event!
+  "Handles left/right movement button events."
   [button-id event]
   (cond
     (button-down-event? event)
@@ -299,225 +384,232 @@
     :else nil))
 
 (defn- on-action-button-event!
+  "Handles action button down events and maps them to input."
   [input-map event]
   (when (button-down-event? event)
     (apply-input! input-map))
   nil)
 
 (defn- on-launch-button-event!
+  "Handles launch button down events."
   [event]
   (when (button-down-event? event)
     (apply-input! {:launch true}))
   nil)
 
-(defn- on-segment-fallback-timer!
-  []
-  (let [now-ms (current-time-ms)
-        current @state*
-        segment (:ball-segment current)
-        segment-id (if (map? segment) (:id segment) nil)
-        end-ms (if (map? segment) (:end-ms segment) nil)]
-    (if (and (map? segment)
-             (number? segment-id)
-             (number? end-ms))
-      (if (<= end-ms now-ms)
-        (publish-state! (core/apply-segment-end-at-ms current segment-id end-ms))
-        (schedule (max 1 (- end-ms now-ms))
-                  {:id tiny-breakout.runtime/segment-fallback-timer-id
-                   :fn tiny-breakout.runtime/on-segment-fallback-timer!}))
-      (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)))
+(defn- on-left-button-event!
+  "Handles :left button events via the shared movement handler."
+  [event]
+  (on-movement-button-event! :left event))
+
+(defn- on-right-button-event!
+  "Handles :right button events via the shared movement handler."
+  [event]
+  (on-movement-button-event! :right event))
+
+(defn- on-pause-button-event!
+  "Handles :y button events and maps them to pause input."
+  [event]
+  (on-action-button-event! {:pause true} event))
+
+(defn- publish-transition!
+  "Publishes one core transition map {:state ... :effects ...} and rebuilds scene
+  only when gameplay state identity changed."
+  [transition]
+  (let [next-state (:state transition)
+        effects (:effects transition)]
+    (when (map? next-state)
+      (let [now-ms (current-time-ms)
+            previous-state @state*
+            segment-watch-active? @segment-watch-active*
+            segment-watch-segment-id @segment-watch-segment-id*
+            state (scene/with-expanded-collision-rules next-state)
+            state-without-effects (normalized-state-without-effects state)
+            state-changed? (not (identical? previous-state state-without-effects))]
+        (if state-changed?
+          (let [current-overlay-animation @overlay-animation*
+                segment (:ball-segment state-without-effects)
+                segment-id (when (map? segment) (:id segment))
+                install-segment-watch? (and (map? segment)
+                                            (not segment-watch-active?))
+                active-after-install? (or segment-watch-active?
+                                          install-segment-watch?)
+                next-segment-watch-id (if (and active-after-install?
+                                               (number? segment-id))
+                                        segment-id
+                                        nil)
+                rearm-segment-watch? (and active-after-install?
+                                          (number? segment-id)
+                                          (not= segment-id segment-watch-segment-id))
+                overlay-animation (next-overlay-animation current-overlay-animation
+                                                         previous-state
+                                                         state-without-effects
+                                                         now-ms)]
+            (reset! overlay-animation* overlay-animation)
+            (when install-segment-watch?
+              (event/on {:source :timeline :id segment-watch-id}
+                        on-segment-timeline-event!)
+              (reset! segment-watch-active* true))
+            (when rearm-segment-watch?
+              (event/rearm-timeline-watch-edge! segment-watch-id))
+            (reset! segment-watch-segment-id* next-segment-watch-id)
+            (let [segment-end-ms (when (map? segment) (:end-ms segment))
+                  timer-id @segment-end-timer-id*]
+              (cond
+                (and (number? next-segment-watch-id)
+                     (number? segment-end-ms)
+                     (or rearm-segment-watch?
+                         (not (number? timer-id))))
+                (schedule-segment-end-timer! next-segment-watch-id segment-end-ms)
+
+                (not (and (number? next-segment-watch-id)
+                          (number? segment-end-ms)))
+                (cancel-segment-end-timer!)
+
+                :else nil))
+            (reset! state* state-without-effects)
+            (reset! scene* (scene-record state-without-effects)))
+          nil)
+        (when (seq effects)
+          (audio/play-cues! effects)))))
   nil)
-
-(defn- segment-watch-field
-  [segment]
-  (let [from-x (:from-x segment)
-        to-x (:to-x segment)
-        from-y (:from-y segment)
-        to-y (:to-y segment)
-        vertical? (and (number? from-x)
-                       (number? to-x)
-                       (= from-x to-x)
-                       (number? from-y)
-                       (number? to-y)
-                       (not= from-y to-y))]
-    (if vertical?
-      :y
-      :x)))
-
-(defn- segment-watch-opts-for-state
-  [state]
-  (assoc segment-watch-base-opts
-         :field (segment-watch-field (:ball-segment state))))
-
-(defn- register-segment-watch!
-  [state]
-  (let [opts (segment-watch-opts-for-state state)]
-    (event/on {:source :timeline :id segment-watch-id}
-              on-segment-timeline-event!
-              opts)
-    (reset! segment-watch-active* true)
-    (reset! segment-watch-field* (:field opts))))
-
-(defn- activate-segment-watch!
-  []
-  (when (and (map? (:ball-segment @state*))
-             (not @segment-watch-active*))
-    (register-segment-watch! @state*))
-  nil)
-
-(defn- store-published-state!
-  [state]
-  (let [state (scene/with-expanded-collision-rules state)
-        events (:events state)
-        state-without-events (assoc state :events [])]
-    (reset! state* state-without-events)
-    (reset! scene* (scene-record state-without-events))
-    {:events events
-     :state state-without-events}))
-
-(defn- kick-segment-watchers!
-  [state]
-  (when (map? (:ball-segment state))
-    (event/kick-timeline-watchers!))
-  nil)
-
-(defn- schedule-audio-events!
-  [events]
-  (when (seq events)
-    (schedule 0 (fn breakout-audio-events-task []
-                  (audio/play-events! events)
-                  nil)))
-  nil)
-
-(defn- publish-state-core!
-  "Updates state atom, plays audio, manages segment watchers. Returns
-  state-without-events for optional immediate scene rebuild by callers."
-  [state]
-  (let [previous-state @state*
-        state (scene/with-expanded-collision-rules state)
-        events (:events state)
-        state-without-events (assoc state :events [])
-        segment (:ball-segment state-without-events)
-        segment-id (if (map? segment) (:id segment) nil)
-        segment-field (if (map? segment)
-                        (segment-watch-field segment)
-                        nil)
-        end-ms (if (map? segment) (:end-ms segment) nil)]
-    (sync-overlay-animation! previous-state state-without-events)
-    (when (and (map? (:ball-segment state-without-events))
-               @event/gfx-timeline-loaded?)
-      (when (or (not @tiny-breakout.runtime/segment-watch-active*)
-                (not= segment-field @tiny-breakout.runtime/segment-watch-field*))
-        (register-segment-watch! state-without-events)))
-    (if (and @tiny-breakout.runtime/segment-watch-active*
-             (number? segment-id))
-      (do
-        (when (not= segment-id @tiny-breakout.runtime/segment-watch-segment-id*)
-          (event/rearm-timeline-watch-edge! tiny-breakout.runtime/segment-watch-id))
-        (reset! tiny-breakout.runtime/segment-watch-segment-id* segment-id))
-      (do
-        (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
-        (reset! tiny-breakout.runtime/segment-watch-field* nil)))
-    (if (and (number? segment-id)
-             (number? end-ms))
-      (let [delay-ms (max 1 (- end-ms (current-time-ms)))]
-        (schedule delay-ms {:id tiny-breakout.runtime/segment-fallback-timer-id
-                            :fn tiny-breakout.runtime/on-segment-fallback-timer!}))
-      (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id))
-    (reset! state* state-without-events)
-    (if (and (map? (:ball-segment state-without-events))
-             @event/gfx-timeline-loaded?)
-      (schedule 1 tiny-breakout.runtime/timeline-kick-timer-spec)
-      nil)
-    (schedule-audio-events! events)
-    state-without-events))
 
 (defn publish-state!
-  "Full state publish with immediate scene rebuild."
+  "Publishes one explicit runtime state map and optional effect cues in :effects."
   [state]
-  (let [s (publish-state-core! state)]
-    (reset! scene* (scene-record s)))
+  (when (map? state)
+    (publish-transition! {:state (normalized-state-without-effects state)
+                          :effects (:effects state)}))
   nil)
 
 (defn apply-input!
+  "Applies one raw input map to runtime state and scene."
   [input-map]
-  (let [intent (normalize-paddle-intent input-map)
-        next-state (state-after-input intent)]
-    (tiny-breakout.runtime/publish-state! next-state)))
+  (let [current-state @state*
+        now-ms (current-time-ms)
+        intent (normalize-paddle-intent input-map)
+        current (sync-paddle-state current-state now-ms)
+        current (if (not= 0 (get intent :dx))
+                  (stopped-paddle-motion current)
+                  current)
+        rendered (if (and (= (:phase current) :play)
+                          (= true (:pause? intent)))
+                   (rendered-ball-position)
+                   nil)
+        transition (core/step current
+                              {:type :game/input
+                               :input intent
+                               :rendered-ball rendered}
+                              now-ms)
+        next-state (:state transition)]
+    (when (and (map? next-state)
+               (not (or (identical? current-state next-state)
+                        (= current-state next-state))))
+      (publish-transition! transition))))
 
-(defn on-spatial-event!
-  "Handles one spatial collision event from the render thread.
-  Paddle-only since brick collisions are resolved predictively by fx/sweep-aabb."
+(defn- collision-rule-id
+  "Extracts a stable collision rule id from one host collision payload."
   [event]
-  (let [now-ms (current-time-ms)
-        next-state (core/apply-spatial-event @tiny-breakout.runtime/state* event now-ms)]
-    (publish-state! next-state)
+  (let [id (:id event)
+        rule (:rule event)
+        rule-id (if (map? rule) (:id rule) nil)]
+    (if (nil? id) rule-id id)))
+
+(defn- collision-event->game-event
+  "Maps host collision payloads to breakout domain events."
+  [event]
+  (let [rule-id (collision-rule-id event)
+        phase (:phase event)
+        self-aabb (:self-aabb event)
+        other-aabb (:other-aabb event)
+        ball-x (:min-x self-aabb)
+        ball-y (:min-y self-aabb)
+        paddle-x (:min-x other-aabb)
+        paddle-y (:min-y other-aabb)]
+    (when (and (= rule-id :ball-vs-paddle)
+               (= phase :enter)
+               (number? ball-x)
+               (number? ball-y)
+               (number? paddle-x))
+      {:type :game/ball-hit-paddle
+       :ball-x ball-x
+       :ball-y ball-y
+       :paddle-x paddle-x
+       :paddle-y paddle-y})))
+
+(defn on-game-collision-event!
+  "Handles one renderer collision callback and maps it to breakout gameplay events."
+  [event]
+  (let [game-event (collision-event->game-event event)]
+    (when (map? game-event)
+      (publish-transition! (core/step @state* game-event (current-time-ms))))
     (gfx-collision/dispatch-spatial-watchers! event))
   nil)
 
 (defn configure-input-watchers!
+  "Registers breakout button watchers on the generic event bus."
   []
-  (event/on {:source :button :id :left}
-            (fn [event]
-              (on-movement-button-event! :left event)))
-  (event/on {:source :button :id :right}
-            (fn [event]
-              (on-movement-button-event! :right event)))
-  (event/on {:source :button :id :fire}
-            (fn [event]
-              (on-launch-button-event! event)))
-  (event/on {:source :button :id :y}
-            (fn [event]
-              (on-action-button-event! {:pause true} event)))
+  (event/on {:source :button :id :left} on-left-button-event!)
+  (event/on {:source :button :id :right} on-right-button-event!)
+  (event/on {:source :button :id :fire} on-launch-button-event!)
+  (event/on {:source :button :id :y} on-pause-button-event!)
   nil)
 
-(defn reset-runtime!
+(defn- deactivate-segment-watch!
+  "Removes segment timeline watcher and clears fallback timer."
   []
-  (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
-  (reset! tiny-breakout.runtime/overlay-animation* tiny-breakout.runtime/idle-overlay-animation)
-  (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
-  (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
-  (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
-  (reset! tiny-breakout.runtime/segment-watch-field* nil)
-  (when @tiny-breakout.runtime/segment-watch-active*
-    (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
-    (reset! tiny-breakout.runtime/segment-watch-active* false))
-  (let [state (scene/with-expanded-collision-rules (core/init-state))
-        events (:events state)
-        state-without-events (assoc state :events [])]
-    (reset! tiny-breakout.runtime/overlay-animation*
-            (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
-    (reset! tiny-breakout.runtime/state* state-without-events)
-    (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events))
-    (when (seq events)
-      (audio/play-events! events)))
+  (cancel-segment-end-timer!)
+  (reset! segment-watch-segment-id* nil)
+  (when @segment-watch-active*
+    (event/on {:source :timeline :id segment-watch-id} nil)
+    (reset! segment-watch-active* false))
+  nil)
+
+(defn- install-initial-state!
+  "Installs initial runtime/scene atoms and optionally plays events."
+  [state play-events?]
+  (let [now-ms (current-time-ms)
+        events (:effects state)
+        state-without-events (normalized-state-without-effects state)
+        animation (overlay-animation-for-state state-without-events now-ms)]
+    (reset! overlay-animation* animation)
+    (reset! state* state-without-events)
+    (reset! scene* (scene-record-for-animation state-without-events animation))
+    (when (and play-events? (seq events))
+      (audio/play-cues! events)))
+  nil)
+
+(defn- reset-to-initial-state!
+  "Resets runtime atoms to deterministic initial breakout state."
+  [play-events?]
+  (let [prewarmed? (state-audio-prewarmed? @state*)
+        initial-state (-> (core/init-state)
+                          (scene/with-expanded-collision-rules)
+                          (assoc :audio-prewarmed? prewarmed?))]
+    (reset! held-buttons* idle-held-buttons)
+    (reset! overlay-animation* idle-overlay-animation)
+    (deactivate-segment-watch!)
+    (install-initial-state! initial-state play-events?)))
+
+(defn reset-runtime!
+  "Resets breakout runtime to initial state and plays reset events."
+  []
+  (reset-to-initial-state! true)
   nil)
 
 (defn bootstrap-runtime!
-  "Lightweight config-time init (title state). Actual skip-to-play happens in
-  start-runtime! (startup callback) so the heavy work runs after config load
-  and autorelease pool drain — avoids OOM during viewer_load_game_demo_config."
+  "Config-time init (title state + early audio warmup). Remaining startup work
+  runs in start-runtime! after config load/autorelease-pool drain."
   []
-  (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
-  (reset! tiny-breakout.runtime/overlay-animation* tiny-breakout.runtime/idle-overlay-animation)
-  (cancel-timer tiny-breakout.runtime/segment-fallback-timer-id)
-  (cancel-timer tiny-breakout.runtime/timeline-kick-timer-id)
-  (reset! tiny-breakout.runtime/segment-watch-segment-id* nil)
-  (reset! tiny-breakout.runtime/segment-watch-field* nil)
-  (when @tiny-breakout.runtime/segment-watch-active*
-    (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
-    (reset! tiny-breakout.runtime/segment-watch-active* false))
-  (let [state (scene/with-expanded-collision-rules (core/init-state))
-        state-without-events (assoc state :events [])]
-    (reset! tiny-breakout.runtime/overlay-animation*
-            (tiny-breakout.runtime/overlay-animation-for-state state-without-events))
-    (reset! tiny-breakout.runtime/state* state-without-events)
-    (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events)))
+  (reset-to-initial-state! false)
+  (ensure-audio-prewarmed!)
   nil)
 
 (defn start-runtime!
+  "Starts breakout runtime watchers, startup audio, and overlay animation."
   [& _args]
-  (event/preload-timeline-runtime!)
-  (tiny-breakout.runtime/configure-input-watchers!)
-  (tiny-breakout.runtime/restart-overlay-animation!)
+  (ensure-audio-prewarmed!)
+  (sound-demos/play-startup-entertainer!)
+  (configure-input-watchers!)
+  (restart-overlay-animation!)
   nil)

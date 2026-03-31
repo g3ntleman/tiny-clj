@@ -52,3 +52,7 @@ Do not add this trailer to commits:
 - Document C APIs in the corresponding `.c` files.
 - Use Doxygen-style C comments (`/** ... */`) with `@brief`, `@param`, and `@return` for API/function docs.
 - Keep headers focused on declarations/contracts, with only minimal inline commentary when needed.
+
+## Research Preference (project-specific)
+
+- For programming topics, proactive web research is explicitly allowed without a separate user prompt.

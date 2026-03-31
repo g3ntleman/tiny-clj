@@ -13,7 +13,8 @@
 #include "symbol.h"  // For SYM_AMP
 
 /** Create interpreted function closure; rc=1, caller releases. */
-CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
+CljFunction* make_function_ex(ID *params, int param_count, ID body, CljPersistentVector *env_stack,
+                              CljPersistentVector *captured_frames, CljSymbol *name_sym, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     if (param_count > 0 && !params) return NULL;
 
@@ -36,6 +37,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
     func->env_stack = env_stack ? (CljPersistentVector*)RETAIN(env_stack) : NULL;
+    func->captured_frames = captured_frames ? (CljPersistentVector*)RETAIN(captured_frames) : NULL;
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
     func->name_sym = name_sym;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
@@ -44,6 +46,12 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
     }
 
     return func;
+}
+
+/** Backward-compatible constructor without captured frame snapshots. */
+CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack,
+                           CljSymbol *name_sym, struct CljNamespace *ns) {
+    return make_function_ex(params, param_count, body, env_stack, NULL, name_sym, ns);
 }
 
 // -----------------------------------------------------------------------------
