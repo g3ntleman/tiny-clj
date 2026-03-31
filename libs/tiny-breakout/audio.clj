@@ -55,10 +55,10 @@
    {:track-id :tiny-breakout/wall-hit
     :track-bytes wall-hit-track-bytes}})
 
-(defn events->cues
-  "Filters cue ids and drops unknown entries."
-  [events]
-  (loop [remaining (seq events)
+(defn keep-known-cues
+  "Keeps only known breakout SFX cue ids from a cue list."
+  [cues]
+  (loop [remaining (seq cues)
          out []]
     (if (seq remaining)
       (let [cue-id (first remaining)
@@ -91,10 +91,10 @@
     (catch Exception _ nil))
   nil)
 
-(defn play-events!
-  "Plays all known breakout cue ids as one-shot SFX."
-  [events]
-  (loop [remaining (seq events)]
+(defn play-cues!
+  "Plays known breakout SFX cue ids as one-shot sounds."
+  [cues]
+  (loop [remaining (seq cues)]
     (when (seq remaining)
       (let [cue-id (first remaining)
             cue (if (contains? cue-specs cue-id) cue-id nil)]

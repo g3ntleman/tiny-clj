@@ -32,7 +32,7 @@ TEST(test_breakout_contract_audio_namespace_loads_tiny_fx_sound_runtime) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.audio :reload) "
-        "  (tiny-breakout.audio/play-events! [:sfx/brick-hit :sfx/victory]) "
+        "  (tiny-breakout.audio/play-cues! [:sfx/brick-hit :sfx/victory]) "
         "  true)",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
@@ -446,8 +446,8 @@ TEST(test_breakout_contract_audio_events_resolve_to_playable_sfx) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.audio) "
-        "  (let [cues (tiny-breakout.audio/events->cues [:sfx/brick-hit :sfx/level-clear :sfx/victory]) "
-        "        played (tiny-breakout.audio/play-events! [:sfx/brick-hit :sfx/victory])] "
+        "  (let [cues (tiny-breakout.audio/keep-known-cues [:sfx/brick-hit :sfx/level-clear :sfx/victory]) "
+        "        played (tiny-breakout.audio/play-cues! [:sfx/brick-hit :sfx/victory])] "
         "    (and (= [:sfx/brick-hit :sfx/level-clear :sfx/victory] cues) "
         "         (nil? played))))",
         g_test_eval_state);
@@ -463,7 +463,7 @@ TEST(test_breakout_contract_audio_events_play_from_deferred_event_loop_task) {
         "  (require 'tiny-breakout.audio :reload) "
         "  (def breakout-audio-deferred-result (atom :pending)) "
         "  (schedule 0 (fn [] "
-        "    (tiny-breakout.audio/play-events! [:sfx/brick-hit]) "
+        "    (tiny-breakout.audio/play-cues! [:sfx/brick-hit]) "
         "    (reset! breakout-audio-deferred-result :ok))) "
         "  true)",
         g_test_eval_state);
@@ -669,6 +669,7 @@ TEST(test_breakout_contract_core_step_segment_end_returns_effects_outside_state)
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.audio) "
         "  (let [brick {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
         "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
@@ -689,7 +690,11 @@ TEST(test_breakout_contract_core_step_segment_end_returns_effects_outside_state)
         "        tx (tiny-breakout.core/step s0 {:type :game/segment-ended :segment-id 1} 40) "
         "        s1 (:state tx) "
         "        fx (:effects tx)] "
-        "    [(:score s1) (count (:bricks s1)) (:phase s1) (first fx)]))",
+        "    [(:score s1) "
+        "     (count (:bricks s1)) "
+        "     (:phase s1) "
+        "     (= fx (tiny-breakout.audio/keep-known-cues fx)) "
+        "     (= 2 (count fx))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -697,7 +702,8 @@ TEST(test_breakout_contract_core_step_segment_end_returns_effects_outside_state)
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":victory"), vector_nth(v, 2));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global("sfx/:brick-hit"), vector_nth(v, 3));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 3));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 4));
 }
 
 TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
@@ -705,6 +711,7 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.audio) "
         "  (let [brick {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
         "        s0 (-> (tiny-breakout.core/init-state) "
         "               (assoc :phase :play) "
@@ -725,7 +732,11 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
         "        tx (tiny-breakout.core/step s0 {:type :game/segment-ended :segment-id 1} 40) "
         "        s1 (:state tx) "
         "        fx (:effects tx)] "
-        "    [(:score s1) (count (:bricks s1)) (:phase s1) (first fx)]))",
+        "    [(:score s1) "
+        "     (count (:bricks s1)) "
+        "     (:phase s1) "
+        "     (= fx (tiny-breakout.audio/keep-known-cues fx)) "
+        "     (= 2 (count fx))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -733,7 +744,8 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":victory"), vector_nth(v, 2));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global("sfx/:brick-hit"), vector_nth(v, 3));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 3));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 4));
 }
 
 TEST(test_breakout_contract_same_snapshot_brick_hits_only_count_first_hit) {

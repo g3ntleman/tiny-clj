@@ -368,8 +368,8 @@
                   (assoc state :ball-vx (- (:ball-vx state))))]
     (assoc bounced :effects (conj (state-effects bounced) :sfx/wall-hit))))
 
-(defn- apply-ball-hit-paddle-state
-  "Applies one domain paddle-hit event while in play phase."
+(defn- resolve-paddle-hit
+  "Resolves one paddle hit into the next in-play ball state."
   [state event now-ms]
   (if (not= (:phase state) :play)
     (clear-effects state)
@@ -390,8 +390,8 @@
           (plan-next-segment next-state now-ms))
         (clear-effects state)))))
 
-(defn- apply-segment-end-state
-  "Applies segment-end domain logic and returns next state."
+(defn- resolve-segment-end
+  "Resolves what happens when the active ball travel segment finishes."
   [state segment-id now-ms]
   (let [segment (:ball-segment state)
         result
@@ -437,8 +437,8 @@
                   anchored)))))]
     result))
 
-(defn- apply-input-state
-  "Applies normalized input intent to state and returns next state."
+(defn- apply-player-input
+  "Applies player intent (move/launch/pause) to the current game phase."
   [state input now-ms rendered-ball]
   (let [dx (let [v (get input :dx)] (if (number? v) v 0))
         launch? (or (= true (get input :launch))
@@ -499,16 +499,16 @@
   (let [event-type (:type event)
         next-state (case event-type
                      :game/input
-                     (apply-input-state state
-                                        (:input event)
-                                        now-ms
-                                        (:rendered-ball event))
+                     (apply-player-input state
+                                         (:input event)
+                                         now-ms
+                                         (:rendered-ball event))
 
                      :game/segment-ended
-                     (apply-segment-end-state state (:segment-id event) now-ms)
+                     (resolve-segment-end state (:segment-id event) now-ms)
 
                      :game/ball-hit-paddle
-                     (apply-ball-hit-paddle-state state event now-ms)
+                     (resolve-paddle-hit state event now-ms)
 
                      (clear-effects state))
         effects (state-effects next-state)

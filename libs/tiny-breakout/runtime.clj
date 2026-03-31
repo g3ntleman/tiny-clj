@@ -17,9 +17,6 @@
 ;; flows can stay explicit and data-driven.
 
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
-(def ^:private segment-progress-source {:slot :game
-                                        :entity-id :ball
-                                        :field :x})
 (def ^:private segment-watch-active* (atom false))
 (def ^:private segment-watch-segment-id* (atom nil))
 (def ^:private segment-end-timer-id* (atom nil))
@@ -451,8 +448,7 @@
             (reset! overlay-animation* overlay-animation)
             (when install-segment-watch?
               (event/on {:source :timeline :id segment-watch-id}
-                        on-segment-timeline-event!
-                        segment-progress-source)
+                        on-segment-timeline-event!)
               (reset! segment-watch-active* true))
             (when rearm-segment-watch?
               (event/rearm-timeline-watch-edge! segment-watch-id))
@@ -475,7 +471,7 @@
             (reset! scene* (scene-record state-without-effects)))
           nil)
         (when (seq effects)
-          (audio/play-events! effects)))))
+          (audio/play-cues! effects)))))
   nil)
 
 (defn publish-state!
@@ -580,7 +576,7 @@
     (reset! state* state-without-events)
     (reset! scene* (scene-record-for-animation state-without-events animation))
     (when (and play-events? (seq events))
-      (audio/play-events! events)))
+      (audio/play-cues! events)))
   nil)
 
 (defn- reset-to-initial-state!
