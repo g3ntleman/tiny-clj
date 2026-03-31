@@ -5,6 +5,12 @@
 - Unterstütze effiziente, blockweise Updates ohne das gesamte File neu zu schreiben.
 - API: `(fs/read-block path offset length)` und `(fs/write-block path offset bytes)`
 
+## Stand 31.03.2026
+- `tiny-clj.fs/read-block` und `tiny-clj.fs/write-block` sind in `libs/tiny-clj/fs.clj` bereits als oeffentliche API vorhanden.
+- Die nativen Handler existieren in `src/builtins_tiny_db.c`.
+- Die aktuelle Implementierung ist funktional, aber noch nicht blockorientiert optimiert: sie materialisiert die komplette Datei via `fs_read_bytes(...)`, patcht/schneidet im Speicher und schreibt anschliessend wieder vollstaendig zurueck.
+- In diesem Audit blieb `./build/unit-tests --test 'test_file_io/*' --quiet` gruen (`38 Tests, 0 Failures`), direkte Regressionstests fuer `read-block` und `write-block` wurden im aktuellen Baum aber nicht gefunden.
+
 ## Anforderungen
 - **Lesen:**
   - Lese einen Block ab `offset` mit maximaler Länge `length` aus einer Datei.
@@ -47,7 +53,9 @@
 - Wie werden sehr große Dateien (>1MB) behandelt? (Chunk-Handling)
 
 ---
-**Nächste Schritte:**
-- [ ] API-Entwurf und Clojure-Bindings
-- [ ] Native Implementierung in fs_layer.c
-- [ ] Tests und Doku
+**Naechste Schritte:**
+- [x] API-Entwurf und Clojure-Bindings
+- [x] Native Implementierung fuer `read-block` und `write-block`
+- [ ] Direkte Regressionstests fuer `read-block`, `write-block` und Randfaelle ergaenzen
+- [ ] Whole-file-Read/Modify/Write auf echte chunk-orientierte Blockpfade umstellen
+- [ ] Doku um aktuelle Performance- und Speichercharakteristik ergaenzen

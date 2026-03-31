@@ -1,14 +1,17 @@
 # Plan: Directory-Listing liefert immer gemergte Metadaten-Map
 
-**Stand: 21.01.2026**
+**Stand: 31.03.2026**
 
 ## Ziel
 
 Das Directory-Listing (`list-batch`) soll für jeden Eintrag immer eine Map mit formalen Metadaten (z. B. Länge, Änderungsdatum) und – falls vorhanden – benutzerdefinierten Metadaten liefern. Fehlen Metadaten, wird eine leere Map (Singleton) zurückgegeben. Die Clojure-API gibt dann eine Sequenz von Maps `{ :path ... :meta ... }` zurück.
 
 ## Aktueller Stand
-- `list-batch` liefert aktuell nur Pfade/Keys, keine Metadaten.
-- Metadaten müssen für jeden Eintrag separat per `stat` geholt werden (ineffizient).
+- `tiny-clj.fs/list` liefert bereits `{:path ... :meta ...}`-Eintraege ueber das native `list-batch`.
+- `meta-set!` ist in `libs/tiny-clj/fs.clj` implementiert und speichert benutzerdefinierte EDN-Metadaten unter `<path>.meta`.
+- Wenn `meta-set!` einen `:size`-Eintrag sieht, ruft die Funktion aktuell explizit `set-size!` auf.
+- `(spit-bytes path nil)` loescht bereits ueber die oeffentliche Clojure-API.
+- `libs/tiny-clj/fs_test.clj` deckt `meta-set!`/Listing-Basisfaelle ab; in diesem Audit blieb ausserdem `./build/unit-tests --test 'test_file_io/*' --quiet` gruen (`38 Tests, 0 Failures`).
 
 ## Ziel-API
 - `list-batch` gibt zurück:
@@ -22,6 +25,9 @@ Das Directory-Listing (`list-batch`) soll für jeden Eintrag immer eine Map mit 
 
 
 ## Erweiterung: meta-set! Funktion
+
+### Ist-Stand
+`meta-set!` ist bereits vorhanden. Die aktuelle Implementierung serialisiert die Map per `pr-str`, schreibt sie via `tiny-db.kv/put-bytes` nach `<path>.meta` und delegiert `:size`-Aenderungen an `set-size!`.
 
 ### Ziel
 Eine Clojure-Funktion `meta-set!` soll es ermöglichen, benutzerdefinierte Metadaten für einen Pfad zu setzen. Diese werden beim nächsten Listing automatisch mit ausgegeben und mit den formalen Metadaten gemerged.
@@ -48,11 +54,11 @@ Setzt die Metadaten-Map für den angegebenen Pfad. Überschreibt nur die benutze
 ## Änderung: Dateilängen-Korrektur via `meta-set!`
 
 ### Ziel
-Dateilängen-Anpassungen erfolgen durch Aktualisierung der benutzerdefinierten Metadaten mit `meta-set!` und dem Schlüssel `:size`. Wenn `meta-set!` einen `:size`-Eintrag schreibt, sorgt die native Schicht dafür, dass fehlende Blöcke angelegt und überzählige Blöcke entfernt werden. Eine separate `fs-set-size!`-API wird nicht benötigt.
+Dateilaengen-Anpassungen erfolgen aktuell ueber die separate API `set-size!`; `meta-set!` ruft sie optional auf, wenn ein `:size`-Eintrag vorhanden ist. Das weicht vom urspruenglichen Plan ab, `:size` ausschliesslich implizit ueber Metadaten anzuwenden.
 
 ### Implementierung (Konzept)
 - `meta-set!` serialisiert die Map als EDN und speichert sie in `<path>.meta` mittels `tiny-db.kv/put-bytes`.
-- Zusätzlich ruft `meta-set!` (oder der native Binding) eine native Helfer-Funktion `fs_apply_meta(path)` oder `fs_apply_meta_bytes(path, bytes, len)` auf, die die neue Metadaten-Map liest und `:size` extrahiert.
+- Aktuell ruft `meta-set!` direkt `set-size!` auf; eine separate `fs_apply_meta(...)`-Hilfsfunktion existiert im aktuellen Baum nicht.
 - Verhalten bei `:size`:
   - Wenn `:size` > aktuelle Größe: reserviere zusätzliche Chunks (mit Nullbytes initialisieren) und aktualisiere die `FsFileMeta`-Einträge.
   - Wenn `:size` < aktuelle Größe: lösche überzählige Chunks und aktualisiere `FsFileMeta`.
@@ -72,6 +78,9 @@ Dateilängen-Anpassungen erfolgen durch Aktualisierung der benutzerdefinierten M
 ## Änderung: Löschen über spit-bytes
 
 ## API- und Implementierungsplan: Löschvorgang über spit-bytes
+
+### Ist-Stand
+Die oeffentliche Clojure-API nutzt bereits `(spit-bytes path nil)` zum Loeschen, und `libs/tiny-clj/fs.clj` weist explizit darauf hin. Ein legacy-nativer Entry-Point `tiny-clj.fs/delete!` existiert in `src/builtins_tiny_db.c` allerdings noch.
 
 ### Ziel
 Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-bytes path nil)`. Die Funktion `delete!` wird entfernt. Die API bleibt dadurch minimal und konsistent.
@@ -102,19 +111,20 @@ Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-byt
 - Alle Beispiele und Doku werden auf `(spit-bytes path nil)` umgestellt.
 
 ### Nächste Schritte
-- [ ] delete! aus API und Doku entfernen
-- [ ] Native Implementierung von spit-bytes anpassen
-- [ ] Tests aktualisieren
+- [x] `delete!` aus der oeffentlichen `tiny-clj.fs`-API entfernen und Doku auf `(spit-bytes path nil)` umstellen
+- [x] Native Implementierung von `spit-bytes` auf `nil`-Delete umstellen
+- [ ] Legacy-native Funktion `tiny-clj.fs/delete!` entfernen oder explizit als Kompatibilitaets-API dokumentieren
+- [ ] Tests fuer direktes `spit-bytes nil` aktualisieren/ergaenzen
 
 ## Nächste Schritte
-1. C-Implementierung von `list-batch` anpassen, sodass sie Metadaten mitliest und merged. **[fertig]**
-2. Clojure-Wrapper anpassen, sodass die neue Struktur genutzt wird. **[offen]**
-3. Funktion `meta-set!` in Clojure implementieren. **[offen]**
-4. Tests für Listing und meta-set! ergänzen. **[offen]**
-5. Performance und Speicherbedarf auf Embedded-Zielen prüfen.
-6. Native Funktion in fs_layer.c implementieren
-7. Clojure-Binding in fs.clj ergänzen
-8. Tests für alle Fälle
+1. C-Implementierung von `list-batch` mit gemergten Metadaten ist vorhanden. **[fertig]**
+2. Clojure-Wrapper `tiny-clj.fs/list` nutzt die neue Struktur bereits. **[fertig]**
+3. `meta-set!` ist in Clojure implementiert. **[fertig]**
+4. Basis-Tests fuer Listing und `meta-set!` sind vorhanden (`libs/tiny-clj/fs_test.clj`). **[teilweise]**
+5. Legacy-native `tiny-clj.fs/delete!` entfernen oder als Kompatibilitaets-API markieren.
+6. Entscheiden, ob `set-size!` langfristig oeffentlich bleibt oder wieder hinter `meta-set!` verschwindet.
+7. Edge-Case-Tests fuer `spit-bytes nil`, `:size` und Merge-Konflikte ergaenzen.
+8. Performance und Speicherbedarf auf Embedded-Zielen pruefen.
 
 ## Offene Fragen
 - Merge-Strategie: Optionale Metadaten überschreiben keine formalen Felder.
@@ -122,9 +132,7 @@ Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-byt
 
 ## Fortschritt
 - [21.01.2026] Plan angelegt und Anforderungen dokumentiert.
-- [offen] C-Implementierung anpassen
-- [offen] Clojure-API anpassen
-- [offen] Tests ergänzen
+- [31.03.2026] Codeabgleich: `list-batch`, `meta-set!`, `set-size!` und `spit-bytes nil` sind im aktuellen Baum implementiert; offene Punkte auf Legacy-API, Edge-Case-Tests und Embedded-Validierung reduziert.
 
 ---
 Diese Datei wird bei jedem Fortschritt aktualisiert.

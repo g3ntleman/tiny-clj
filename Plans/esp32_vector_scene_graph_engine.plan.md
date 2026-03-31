@@ -1313,7 +1313,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - `src/scene.c`
     - `src/rendered_state_snapshot.c`
     - `src/tiny-clj.runtime.clj`
-    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+    - `Plans/esp32_vector_scene_graph_engine.plan.md`
     - optional docs updates under `docs/` if needed
   - Scope:
     - Remove dead compatibility code paths and duplicate runtime paths.
@@ -1400,7 +1400,7 @@ Checklist:
 
 ### 9o: Encapsulated hash-backed entity lookup for flat scene maps (NEW)
 
-Status: IN PROGRESS (2026-03-09; renderer-private subjective-c `CljHashMap` scratch lookup is wired into `scene.c` for flat-scene root/child resolution; borrowed-key/value population path avoids `RETAIN` / `RELEASE` / `AUTORELEASE` in the lookup build/use path; regression tests are green, benchmark capture still pending)
+Status: IN PROGRESS (2026-03-31; renderer-private subjective-c `CljHashMap` scratch lookup is wired into `scene.c` for flat-scene root/child resolution; borrowed-key/value population path avoids `RETAIN` / `RELEASE` / `AUTORELEASE` in the lookup build/use path; host regression tests are green; a current macOS smoke capture via `(tiny-fx.gfx-bench/vector-scene-bench 120 8)` reports `:deco-us-per-frame 41`, `:score-us-per-frame 25`, `:game-us-per-frame 108`, `:total-ms 21`; before/after delta write-up and ESP32 capture remain pending)
 
 Goal:
 
@@ -1517,19 +1517,23 @@ Checklist:
   - Files:
     - `src/tests/test_vector_scene_graph.c`
     - `src/builtins_tiny_fx_gfx.c`
-    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+    - `Plans/esp32_vector_scene_graph_engine.plan.md`
   - Scope:
     - Add regression tests for lookup semantics and unchanged render output.
     - Record host benchmark deltas and note ESP32 capture/memory results.
   - Acceptance:
     - Tests isolate the lookup mechanism, not just end-to-end demo behavior.
     - Plan notes contain before/after host data and recorded ESP32 follow-up status.
+  - Status (2026-03-31):
+    - `./build/unit-tests --test 'test_vector_scene_graph/*' --quiet` is green in this audit pass.
+    - Current host smoke capture from the public REPL API is: `{:platform "macOS", :iterations 120, :warmup 8, :slot-count 3, :deco-total-ms 5, :score-total-ms 3, :game-total-ms 13, :deco-us-per-frame 41, :score-us-per-frame 25, :game-us-per-frame 108, :total-ms 21}`.
+    - Still open: a before/after comparison tied specifically to PR-1 and ESP32 memory/perf capture.
 - **PR-3: Optional rendered-state follow-up decision**
   - Files:
     - `src/rendered_state_snapshot.c`
     - `src/rendered_state_snapshot.h`
     - `src/tests/test_vector_scene_graph.c`
-    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+    - `Plans/esp32_vector_scene_graph_engine.plan.md`
   - Scope:
     - Evaluate whether entity/timeline query tables need the same encapsulated hash/index pattern.
     - Only proceed if measured lookup cost remains relevant after PR-1/PR-2.
