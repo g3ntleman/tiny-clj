@@ -16,6 +16,8 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "./build/tiny-fx.app/Contents/MacOS/tiny-fx": true
+    "./build/tiny-fx.app/Contents/MacOS/tiny-fx": true,
+    "command": true,
+    "xcrun": true
   }
 }
