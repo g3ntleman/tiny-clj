@@ -20,6 +20,32 @@
 #include <stdint.h>
 #include <string.h>
 
+#define TINYCLJ_FS_META_KV_PREFIX "fs.meta:"
+
+static void tinyclj_fs_delete_sidecars(FsKvStore *st, const char *path)
+{
+    if (!st || !path) {
+        return;
+    }
+
+    size_t path_len = strlen(path);
+
+    if (path_len + sizeof(".meta") <= FS_KEY_MAX) {
+        char meta_path[FS_KEY_MAX];
+        memcpy(meta_path, path, path_len);
+        memcpy(meta_path + path_len, ".meta", sizeof(".meta"));
+        (void)fs_delete(st, meta_path);
+    }
+
+    uint8_t meta_key[FS_KEY_MAX + sizeof(TINYCLJ_FS_META_KV_PREFIX)];
+    size_t prefix_len = sizeof(TINYCLJ_FS_META_KV_PREFIX) - 1u;
+    if (prefix_len + path_len <= sizeof(meta_key)) {
+        memcpy(meta_key, TINYCLJ_FS_META_KV_PREFIX, prefix_len);
+        memcpy(meta_key + prefix_len, path, path_len);
+        (void)fs_kv_del_key_bytes_status(st, meta_key, prefix_len + path_len);
+    }
+}
+
 // Helper to get string argument
 static const char *require_c_string_arg(ID arg, const char *fn_name, const char *arg_desc)
 {
@@ -78,6 +104,7 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
     if (!args[1]) {
         /* delete file */
         (void)fs_delete(st, path);
+        tinyclj_fs_delete_sidecars(st, path);
         return NULL;
     }
     if (TAG(args[1]) != CLJ_BYTE_ARRAY) {
@@ -154,16 +181,6 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
         ASSIGN(m, map_assoc(m, (ID)SYM_KW_LAST_KEY, NULL));
     }
     return AUTORELEASE(m);
-}
-
-ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tiny-clj.fs/delete!");
-    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/delete!", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
 }
 
 ID native_tinyclj_fs_read_block(ID *args, unsigned int argc)

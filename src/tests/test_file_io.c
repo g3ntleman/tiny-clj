@@ -1137,6 +1137,209 @@ TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(8, kba->data[1]);
 }
 
+  TEST(test_tiny_clj_fs_spit_bytes_nil_deletes_and_recreates_file)
+  {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    fs_global_store_reset();
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
+
+    FsKvStore *st = fs_global_store();
+    TEST_ASSERT_NOT_NULL(st);
+
+    (void)eval_string(
+      "(let [a (byte-array 3)]"
+      "  (aset a 0 1) (aset a 1 2) (aset a 2 3)"
+      "  (tiny-clj.fs/spit-bytes \"/data/delete.bin\" a))",
+      g_test_eval_state);
+
+    TEST_ASSERT_TRUE(fs_exists(st, "/data/delete.bin"));
+
+    const uint8_t legacy_meta_bytes[3] = {7, 7, 7};
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR,
+                fs_write_bytes(st,
+                       "/data/delete.bin.meta",
+                       legacy_meta_bytes,
+                       sizeof(legacy_meta_bytes)));
+
+    const uint8_t kv_meta_bytes[4] = {4, 3, 2, 1};
+    const uint8_t kv_meta_key[] = "fs.meta:/data/delete.bin";
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_kv_put_key_bytes_status(st,
+                             kv_meta_key,
+                             sizeof(kv_meta_key) - 1u,
+                             kv_meta_bytes,
+                             sizeof(kv_meta_bytes)));
+
+    TEST_ASSERT_TRUE(fs_exists(st, "/data/delete.bin.meta"));
+
+    size_t saved = 0;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_kv_get_key_bytes_status(st,
+                             kv_meta_key,
+                             sizeof(kv_meta_key) - 1u,
+                             NULL,
+                             0,
+                             &saved));
+    TEST_ASSERT_EQUAL_UINT32(sizeof(kv_meta_bytes), (uint32_t)saved);
+
+    (void)eval_string("(tiny-clj.fs/spit-bytes \"/data/delete.bin\" nil)", g_test_eval_state);
+
+    TEST_ASSERT_FALSE(fs_exists(st, "/data/delete.bin"));
+    TEST_ASSERT_FALSE(fs_exists(st, "/data/delete.bin.meta"));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND,
+                fs_kv_get_key_bytes_status(st,
+                             kv_meta_key,
+                             sizeof(kv_meta_key) - 1u,
+                             NULL,
+                             0,
+                             &saved));
+
+    CljObject *entries = eval_string("(vec (tiny-clj.fs/list \"/data/\"))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(entries);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entries));
+    TEST_ASSERT_EQUAL_INT(0, vector_count(as_persistent_vector((ID)entries)));
+
+    (void)eval_string(
+      "(let [a (byte-array 2)]"
+      "  (aset a 0 9) (aset a 1 7)"
+      "  (tiny-clj.fs/spit-bytes \"/data/delete.bin\" a))",
+      g_test_eval_state);
+
+    CljObject *rb = eval_string("(tiny-clj.fs/slurp-bytes \"/data/delete.bin\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rb);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(rb));
+    CljByteArray *ba = as_byte_array(rb);
+    TEST_ASSERT_EQUAL_INT(2, ba->length);
+    TEST_ASSERT_EQUAL_UINT8(9, ba->data[0]);
+    TEST_ASSERT_EQUAL_UINT8(7, ba->data[1]);
+  }
+
+  TEST(test_tiny_clj_fs_read_write_block_patch_and_extend)
+  {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    fs_global_store_reset();
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
+
+    (void)eval_string(
+      "(let [a (byte-array 6)]"
+      "  (aset a 0 1) (aset a 1 2) (aset a 2 3)"
+      "  (aset a 3 4) (aset a 4 5) (aset a 5 6)"
+      "  (tiny-clj.fs/spit-bytes \"/data/block.bin\" a))",
+      g_test_eval_state);
+
+    CljObject *mid = eval_string("(tiny-clj.fs/read-block \"/data/block.bin\" 2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(mid);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(mid));
+    CljByteArray *mid_ba = as_byte_array(mid);
+    TEST_ASSERT_EQUAL_INT(3, mid_ba->length);
+    TEST_ASSERT_EQUAL_UINT8(3, mid_ba->data[0]);
+    TEST_ASSERT_EQUAL_UINT8(4, mid_ba->data[1]);
+    TEST_ASSERT_EQUAL_UINT8(5, mid_ba->data[2]);
+
+    CljObject *patch_stat = eval_string(
+      "(let [a (byte-array 3)]"
+      "  (aset a 0 9) (aset a 1 8) (aset a 2 7)"
+      "  (tiny-clj.fs/write-block \"/data/block.bin\" 2 a))",
+      g_test_eval_state);
+    assert_map((CljObject *)patch_stat);
+    ID patch_size = map_get((CljPersistentMap *)patch_stat, (ID)intern_symbol_global(":size"));
+    assert_fixnum((CljObject *)patch_size, 6);
+
+    CljObject *patched = eval_string("(tiny-clj.fs/slurp-bytes \"/data/block.bin\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(patched);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(patched));
+    CljByteArray *patched_ba = as_byte_array(patched);
+    const uint8_t expected_patch[6] = {1, 2, 9, 8, 7, 6};
+    TEST_ASSERT_EQUAL_INT(6, patched_ba->length);
+    TEST_ASSERT_EQUAL_MEMORY(expected_patch, patched_ba->data, sizeof(expected_patch));
+
+    CljObject *extend_stat = eval_string(
+      "(let [a (byte-array 2)]"
+      "  (aset a 0 4) (aset a 1 5)"
+      "  (tiny-clj.fs/write-block \"/data/block.bin\" 8 a))",
+      g_test_eval_state);
+    assert_map((CljObject *)extend_stat);
+    ID extend_size = map_get((CljPersistentMap *)extend_stat, (ID)intern_symbol_global(":size"));
+    assert_fixnum((CljObject *)extend_size, 10);
+
+    CljObject *extended = eval_string("(tiny-clj.fs/slurp-bytes \"/data/block.bin\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(extended);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(extended));
+    CljByteArray *extended_ba = as_byte_array(extended);
+    const uint8_t expected_extended[10] = {1, 2, 9, 8, 7, 6, 0, 0, 4, 5};
+    TEST_ASSERT_EQUAL_INT(10, extended_ba->length);
+    TEST_ASSERT_EQUAL_MEMORY(expected_extended, extended_ba->data, sizeof(expected_extended));
+
+    CljObject *tail = eval_string("(tiny-clj.fs/read-block \"/data/block.bin\" 9 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(tail);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(tail));
+    CljByteArray *tail_ba = as_byte_array(tail);
+    TEST_ASSERT_EQUAL_INT(1, tail_ba->length);
+    TEST_ASSERT_EQUAL_UINT8(5, tail_ba->data[0]);
+
+    CljObject *empty = eval_string("(tiny-clj.fs/read-block \"/data/block.bin\" 99 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(empty));
+    TEST_ASSERT_EQUAL_INT(0, as_byte_array(empty)->length);
+  }
+
+  TEST(test_tiny_clj_fs_set_size_creates_zero_filled_file_and_rejects_negative_inputs)
+  {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    fs_global_store_reset();
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
+
+    CljObject *stat = eval_string("(tiny-clj.fs/set-size! \"/data/sized.bin\" 5)", g_test_eval_state);
+    assert_map((CljObject *)stat);
+    ID size = map_get((CljPersistentMap *)stat, (ID)intern_symbol_global(":size"));
+    assert_fixnum((CljObject *)size, 5);
+
+    CljObject *bytes = eval_string("(tiny-clj.fs/slurp-bytes \"/data/sized.bin\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_EQUAL_INT(5, ba->length);
+    for (int i = 0; i < ba->length; i++) {
+      TEST_ASSERT_EQUAL_UINT8(0, ba->data[i]);
+    }
+
+    bool caught_read = false;
+    bool caught_write = false;
+    bool caught_size = false;
+
+    TRY {
+      (void)eval_string("(tiny-clj.fs/read-block \"/data/sized.bin\" -1 1)", g_test_eval_state);
+    } CATCH(ex) {
+      (void)ex;
+      caught_read = true;
+    } END_TRY
+
+    TRY {
+      (void)eval_string(
+        "(let [a (byte-array 1)]"
+        "  (aset a 0 1)"
+        "  (tiny-clj.fs/write-block \"/data/sized.bin\" -1 a))",
+        g_test_eval_state);
+    } CATCH(ex) {
+      (void)ex;
+      caught_write = true;
+    } END_TRY
+
+    TRY {
+      (void)eval_string("(tiny-clj.fs/set-size! \"/data/sized.bin\" -1)", g_test_eval_state);
+    } CATCH(ex) {
+      (void)ex;
+      caught_size = true;
+    } END_TRY
+
+    TEST_ASSERT_TRUE(caught_read);
+    TEST_ASSERT_TRUE(caught_write);
+    TEST_ASSERT_TRUE(caught_size);
+  }
+
 TEST(test_tiny_clj_kv_supports_large_values)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

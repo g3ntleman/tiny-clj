@@ -136,7 +136,6 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
-ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
 ID native_tinyclj_fs_read_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_write_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
@@ -4346,11 +4345,6 @@ static StaticSymbolData sym_tinyclj_fs_write_block_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.fs/write-block"}};
-static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "tiny-clj.fs/delete!"}};
 static StaticSymbolData sym_tinyclj_fs_set_size_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4557,7 +4551,6 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_tinyclj_fs_read_block_qualified_data.sym, native_tinyclj_fs_read_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_write_block_qualified_data.sym, native_tinyclj_fs_write_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_set_size_qualified_data.sym, native_tinyclj_fs_set_size),
-    NATIVE_ENTRY(&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete),
     NATIVE_ENTRY(&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete),
