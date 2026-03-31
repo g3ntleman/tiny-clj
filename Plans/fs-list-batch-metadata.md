@@ -8,10 +8,14 @@ Das Directory-Listing (`list-batch`) soll für jeden Eintrag immer eine Map mit 
 
 ## Aktueller Stand
 - `tiny-clj.fs/list` liefert bereits `{:path ... :meta ...}`-Eintraege ueber das native `list-batch`.
-- `meta-set!` ist in `libs/tiny-clj/fs.clj` implementiert und speichert benutzerdefinierte EDN-Metadaten unter `<path>.meta`.
+- Der FS-Layer reserviert inzwischen Control-Bytes in oeffentlichen Pfaden; `0x01` ist fuer interne Metadaten-Sidecars vorgesehen.
+- `list-batch` filtert interne Sidecar-Keys mit reserviertem `0x01` nativ aus dem Directory-Listing, inklusive der zugehoerigen blob-key/chunk-Suffixe.
+- `list-batch` liefert nativ weiterhin nur formale Metadaten (`:size`, `:chunks`); der oeffentliche Clojure-Wrapper `tiny-clj.fs/list` merged darauf jetzt benutzerdefinierte Metadaten aus dem internen Sidecar.
+- `meta-set!` ist jetzt release-fertig: die Funktion serialisiert Metadaten ueber den nativen FS-Pfad in einen internen `0x01`-Sidecar statt ueber `tiny-db.kv/put-bytes` auf einem Slash-Key.
 - Wenn `meta-set!` einen `:size`-Eintrag sieht, ruft die Funktion aktuell explizit `set-size!` auf.
 - `(spit-bytes path nil)` loescht bereits ueber die oeffentliche Clojure-API.
-- `libs/tiny-clj/fs_test.clj` deckt `meta-set!`/Listing-Basisfaelle ab; in diesem Audit blieb ausserdem `./build/unit-tests --test 'test_file_io/*' --quiet` gruen (`38 Tests, 0 Failures`).
+- `libs/tiny-clj/fs_test.clj` beschreibt das gewuenschte Verhalten, ist aber kein belastbarer Nachweis fuer das aktuelle C-Gate.
+- In dieser Release-Runde liefen direkte FS-Gate-Tests erneut gruen: `./build/unit-tests --test 'test_file_io/*' --quiet` (`45 Tests, 0 Failures`). Dabei wurden `spit-bytes nil`, `read-block`, `write-block`, `set-size!`, die reservierte Control-Byte-Validierung, das native Sidecar-Listing-Filter, der User-Metadaten-Merge und der robuste Umgang mit kaputten Sidecars direkt abgedeckt.
 
 ## Ziel-API
 - `list-batch` gibt zurück:
@@ -27,7 +31,7 @@ Das Directory-Listing (`list-batch`) soll für jeden Eintrag immer eine Map mit 
 ## Erweiterung: meta-set! Funktion
 
 ### Ist-Stand
-`meta-set!` ist bereits vorhanden. Die aktuelle Implementierung serialisiert die Map per `pr-str`, schreibt sie via `tiny-db.kv/put-bytes` nach `<path>.meta` und delegiert `:size`-Aenderungen an `set-size!`.
+`meta-set!` ist jetzt vorhanden und funktionsfaehig. Die aktuelle Implementierung serialisiert die Map nativ in eine lesbare EDN-Darstellung, schreibt sie ueber den internen `0x01`-Sidecar-Key und delegiert `:size`-Aenderungen weiterhin an `set-size!`.
 
 ### Ziel
 Eine Clojure-Funktion `meta-set!` soll es ermöglichen, benutzerdefinierte Metadaten für einen Pfad zu setzen. Diese werden beim nächsten Listing automatisch mit ausgegeben und mit den formalen Metadaten gemerged.
@@ -41,10 +45,10 @@ Setzt die Metadaten-Map für den angegebenen Pfad. Überschreibt nur die benutze
 ### Implementierung (Clojure)
 ```clojure
 (defn meta-set! [path meta-map]
-  ;; serialisiert meta-map und speichert sie als speziellen KV-Eintrag hinter dem Pfad
-  (tiny-db.kv/put-bytes (str path ".meta") (serialize-meta meta-map)))
+  ;; serialisiert meta-map ueber den nativen FS-Metadatenpfad
+  (meta-put! path meta-map))
 ```
-`serialize-meta` serialisiert die Map als Byte-Array (EDN oder eigenes Format).
+Der Wrapper `tiny-clj.fs/list` liest den Sidecar ueber `meta-get` und merged die gelesene Map auf die formalen nativen Metadaten.
 
 ### Tests
 - Test: Setze Metadaten für einen Pfad, prüfe, dass sie beim Listing erscheinen und korrekt gemerged werden.
@@ -57,7 +61,7 @@ Setzt die Metadaten-Map für den angegebenen Pfad. Überschreibt nur die benutze
 Dateilaengen-Anpassungen erfolgen aktuell ueber die separate API `set-size!`; `meta-set!` ruft sie optional auf, wenn ein `:size`-Eintrag vorhanden ist. Das weicht vom urspruenglichen Plan ab, `:size` ausschliesslich implizit ueber Metadaten anzuwenden.
 
 ### Implementierung (Konzept)
-- `meta-set!` serialisiert die Map als EDN und speichert sie in `<path>.meta` mittels `tiny-db.kv/put-bytes`.
+- `meta-set!` serialisiert die Map nativ in eine lesbare Darstellung und speichert sie in einem internen `0x01`-Sidecar-Key zum Datei-Pfad.
 - Aktuell ruft `meta-set!` direkt `set-size!` auf; eine separate `fs_apply_meta(...)`-Hilfsfunktion existiert im aktuellen Baum nicht.
 - Verhalten bei `:size`:
   - Wenn `:size` > aktuelle Größe: reserviere zusätzliche Chunks (mit Nullbytes initialisieren) und aktualisiere die `FsFileMeta`-Einträge.
@@ -80,7 +84,11 @@ Dateilaengen-Anpassungen erfolgen aktuell ueber die separate API `set-size!`; `m
 ## API- und Implementierungsplan: Löschvorgang über spit-bytes
 
 ### Ist-Stand
-Die oeffentliche Clojure-API nutzt bereits `(spit-bytes path nil)` zum Loeschen, und `libs/tiny-clj/fs.clj` weist explizit darauf hin. Ein legacy-nativer Entry-Point `tiny-clj.fs/delete!` existiert in `src/builtins_tiny_db.c` allerdings noch.
+Die oeffentliche Clojure-API nutzt bereits `(spit-bytes path nil)` zum Loeschen, und `libs/tiny-clj/fs.clj` weist explizit darauf hin. Der zuvor noch registrierte legacy-native Entry-Point `tiny-clj.fs/delete!` wurde in dieser Release-Runde aus dem Native-Lookup entfernt.
+
+Zusatzstand 31.03.2026:
+- Der Loeschpfad raeumt nun neben legacy `.meta`-Dateien auch den internen blob-key-Sidecar mit reserviertem `0x01`-Suffix weg.
+- Blob-key-Delete loescht dafuer inzwischen auch die zugehoerigen Chunk-Keys statt nur den Basis-Key.
 
 ### Ziel
 Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-bytes path nil)`. Die Funktion `delete!` wird entfernt. Die API bleibt dadurch minimal und konsistent.
@@ -113,17 +121,17 @@ Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-byt
 ### Nächste Schritte
 - [x] `delete!` aus der oeffentlichen `tiny-clj.fs`-API entfernen und Doku auf `(spit-bytes path nil)` umstellen
 - [x] Native Implementierung von `spit-bytes` auf `nil`-Delete umstellen
-- [ ] Legacy-native Funktion `tiny-clj.fs/delete!` entfernen oder explizit als Kompatibilitaets-API dokumentieren
-- [ ] Tests fuer direktes `spit-bytes nil` aktualisieren/ergaenzen
+- [x] Legacy-native Funktion `tiny-clj.fs/delete!` entfernen oder explizit als Kompatibilitaets-API dokumentieren
+- [x] Tests fuer direktes `spit-bytes nil` aktualisieren/ergaenzen
 
 ## Nächste Schritte
-1. C-Implementierung von `list-batch` mit gemergten Metadaten ist vorhanden. **[fertig]**
+1. Optionale C-Implementierung eines direkten Merge-Pfads in `list-batch` nur dann angehen, wenn Wrapper-Merge auf Embedded-Zielen messbar zu teuer ist. **[optional]**
 2. Clojure-Wrapper `tiny-clj.fs/list` nutzt die neue Struktur bereits. **[fertig]**
-3. `meta-set!` ist in Clojure implementiert. **[fertig]**
-4. Basis-Tests fuer Listing und `meta-set!` sind vorhanden (`libs/tiny-clj/fs_test.clj`). **[teilweise]**
-5. Legacy-native `tiny-clj.fs/delete!` entfernen oder als Kompatibilitaets-API markieren.
-6. Entscheiden, ob `set-size!` langfristig oeffentlich bleibt oder wieder hinter `meta-set!` verschwindet.
-7. Edge-Case-Tests fuer `spit-bytes nil`, `:size` und Merge-Konflikte ergaenzen.
+3. `meta-set!` ist ueber den nativen Sidecar-Pfad release-fertig. **[fertig]**
+4. Basis-Tests fuer Listing und `meta-set!` sind jetzt auch im C-Gate abgedeckt. **[fertig]**
+5. Entscheiden, ob `set-size!` langfristig oeffentlich bleibt oder wieder hinter `meta-set!` verschwindet.
+6. Defekte oder absichtlich unlesbare Metadaten-Sidecars werden jetzt ignoriert; offen bleiben nur weitergehende Entscheidungen zu Monitoring/Diagnostik solcher Faelle.
+7. Zusätzliche Edge-Case-Tests fuer `:size`-Semantik und spaetere Merge-Konflikte ergaenzen.
 8. Performance und Speicherbedarf auf Embedded-Zielen pruefen.
 
 ## Offene Fragen
@@ -132,7 +140,8 @@ Das Löschen von Dateien/Verzeichnissen erfolgt ausschließlich über `(spit-byt
 
 ## Fortschritt
 - [21.01.2026] Plan angelegt und Anforderungen dokumentiert.
-- [31.03.2026] Codeabgleich: `list-batch`, `meta-set!`, `set-size!` und `spit-bytes nil` sind im aktuellen Baum implementiert; offene Punkte auf Legacy-API, Edge-Case-Tests und Embedded-Validierung reduziert.
+- [31.03.2026] Codeabgleich: `list-batch` liefert `{:path :meta}`-Eintraege; benutzerdefinierte Metadaten werden jetzt im oeffentlichen Wrapper `tiny-clj.fs/list` aus dem internen Sidecar dazu gemerged.
+- [31.03.2026] Release-Runde: native Legacy-Registrierung fuer `tiny-clj.fs/delete!` entfernt; direkte Gate-Tests fuer `spit-bytes nil`, `read-block`, `write-block`, `set-size!`, `0x01`-Sidecar-Filterung, Control-Byte-Pfadvalidierung, `meta-set!`-/Listing-Merge und kaputte Sidecars in `src/tests/test_file_io.c` ergaenzt (`45 Tests, 0 Failures`).
 
 ---
 Diese Datei wird bei jedem Fortschritt aktualisiert.

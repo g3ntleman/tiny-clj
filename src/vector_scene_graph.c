@@ -11,6 +11,21 @@ _Static_assert(VG_SCALE_ONE == CLJ_FIXED_SCALE, "VG_SCALE_ONE must match CLJ_FIX
 
 static GfxClip g_active_clip = {false, 0, 0, 0, 0};
 
+typedef uint32_t VgAliasU32 __attribute__((__may_alias__));
+
+static inline bool vg_transform_fixed_is_identity_matrix(VgTransformFixed t) {
+    return t.m00 == CLJ_FIXED_SCALE && t.m01 == 0 && t.m02 == 0 &&
+           t.m10 == 0 && t.m11 == CLJ_FIXED_SCALE && t.m12 == 0;
+}
+
+static inline bool vg_transform_fixed_is_axis_aligned_matrix(VgTransformFixed t) {
+    return t.m01 == 0 && t.m10 == 0;
+}
+
+static inline bool vg_transform_fixed_is_quadrant_swap_matrix(VgTransformFixed t) {
+    return t.m00 == 0 && t.m11 == 0;
+}
+
 static bool clip_rect_intersect_fb(VgClipRect in, const VgFrameBuffer *fb, VgClipRect *out) {
     if (!fb || !out) return false;
     VgClipRect fb_rect = {0, 0, (int16_t)fb->width, (int16_t)fb->height};
@@ -53,30 +68,37 @@ bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pix
     return true;
 }
 
+static void vg_fill_u16_span(uint16_t *pixels, size_t count, uint16_t color) {
+    if (!pixels || count == 0u) {
+        return;
+    }
+
+    uint16_t *cursor = pixels;
+    size_t remaining = count;
+    const uint32_t packed = (uint32_t)color | ((uint32_t)color << 16);
+
+    if ((((uintptr_t)cursor) & (sizeof(uint32_t) - 1u)) != 0u) {
+        *cursor++ = color;
+        remaining--;
+    }
+
+    VgAliasU32 *word_cursor = (VgAliasU32 *)(void *)cursor;
+    size_t word_count = remaining / 2u;
+    for (size_t i = 0; i < word_count; i++) {
+        word_cursor[i] = packed;
+    }
+
+    if ((remaining & 1u) != 0u) {
+        cursor[word_count * 2u] = color;
+    }
+}
+
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color) {
     if (!fb || !fb->pixels) {
         return;
     }
     size_t count = (size_t)fb->width * (size_t)fb->height;
-    for (size_t i = 0; i < count; i++) {
-        fb->pixels[i] = color;
-    }
-}
-
-uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb) {
-    if (!fb || !fb->pixels) {
-        return 0u;
-    }
-    uint32_t h = 2166136261u;
-    size_t count = (size_t)fb->width * (size_t)fb->height;
-    for (size_t i = 0; i < count; i++) {
-        uint16_t p = fb->pixels[i];
-        h ^= (uint8_t)(p & 0xffu);
-        h *= 16777619u;
-        h ^= (uint8_t)((p >> 8) & 0xffu);
-        h *= 16777619u;
-    }
-    return h;
+    vg_fill_u16_span(fb->pixels, count, color);
 }
 
 static uint32_t clip_rect_area_px(VgClipRect r) {
@@ -291,6 +313,21 @@ static int fp_to_int_round(int32_t v) {
 }
 
 static int32_t fp_mul_fixed(int32_t a, int32_t b) {
+    if (a == 0 || b == 0) {
+        return 0;
+    }
+    if (a == VG_FP_ONE) {
+        return b;
+    }
+    if (b == VG_FP_ONE) {
+        return a;
+    }
+    if (a == -VG_FP_ONE) {
+        return -b;
+    }
+    if (b == -VG_FP_ONE) {
+        return -a;
+    }
     return (int32_t)(((int64_t)a * (int64_t)b) >> VG_FP_SHIFT);
 }
 
@@ -304,6 +341,9 @@ int32_t vg_anim_progress_q13(uint32_t elapsed_ms, uint32_t duration_ms) {
     if (duration_ms == 0u) return VG_FP_ONE;
     if (elapsed_ms == 0u) return 0;
     if (elapsed_ms >= duration_ms) return VG_FP_ONE;
+    if (elapsed_ms <= (UINT32_MAX >> VG_FP_SHIFT)) {
+        return (int32_t)((elapsed_ms << VG_FP_SHIFT) / duration_ms);
+    }
     return (int32_t)(((uint64_t)elapsed_ms << VG_FP_SHIFT) / (uint64_t)duration_ms);
 }
 
@@ -341,26 +381,36 @@ int32_t vg_anim_ease_q13(VgAnimEase ease, int32_t t_q13) {
 
 int32_t vg_anim_lerp_q13(int32_t from_q13, int32_t to_q13, int32_t t_q13) {
     int32_t t = fp_clamp_unit(t_q13);
+    if (t == 0) {
+        return from_q13;
+    }
+    if (t >= VG_FP_ONE) {
+        return to_q13;
+    }
+    if (from_q13 == to_q13) {
+        return from_q13;
+    }
     int64_t delta = (int64_t)to_q13 - (int64_t)from_q13;
     int64_t scaled = (delta * (int64_t)t) >> VG_FP_SHIFT;
     return (int32_t)((int64_t)from_q13 + scaled);
 }
 
 static int16_t anim_q13_to_i16_round_sat(int32_t value_q13) {
-    int32_t value = 0;
-    if (value_q13 >= 0) {
-        value = (int32_t)(((int64_t)value_q13 + (VG_FP_ONE / 2)) / VG_FP_ONE);
-    } else {
-        int64_t abs_q13 = -(int64_t)value_q13;
-        value = (int32_t)-((abs_q13 + (VG_FP_ONE / 2)) / VG_FP_ONE);
-    }
-    if (value < INT16_MIN) {
-        return INT16_MIN;
-    }
-    if (value > INT16_MAX) {
+    const int32_t half = VG_FP_ONE / 2;
+    const int32_t positive_saturate = (((int32_t)INT16_MAX) << VG_FP_SHIFT) + half;
+    const int32_t negative_saturate = -((((int32_t)INT16_MAX) + 1) << VG_FP_SHIFT) - half;
+
+    if (value_q13 >= positive_saturate) {
         return INT16_MAX;
     }
-    return (int16_t)value;
+    if (value_q13 <= negative_saturate) {
+        return INT16_MIN;
+    }
+
+    if (value_q13 >= 0) {
+        return (int16_t)((value_q13 + half) >> VG_FP_SHIFT);
+    }
+    return (int16_t)(-(((-value_q13) + half) >> VG_FP_SHIFT));
 }
 
 static int32_t anim_i16_to_q13(int16_t value) {
@@ -496,6 +546,23 @@ VgTransformFixed vg_transform_fixed_identity(void) {
 }
 
 VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransformFixed local) {
+    if (vg_transform_fixed_is_identity_matrix(parent)) {
+        return local;
+    }
+    if (vg_transform_fixed_is_identity_matrix(local)) {
+        return parent;
+    }
+    if (vg_transform_fixed_is_axis_aligned_matrix(parent) && vg_transform_fixed_is_axis_aligned_matrix(local)) {
+        VgTransformFixed m;
+        m.m00 = fp_mul_fixed(parent.m00, local.m00);
+        m.m01 = 0;
+        m.m02 = fp_mul_fixed(parent.m00, local.m02) + parent.m02;
+        m.m10 = 0;
+        m.m11 = fp_mul_fixed(parent.m11, local.m11);
+        m.m12 = fp_mul_fixed(parent.m11, local.m12) + parent.m12;
+        return m;
+    }
+
     VgTransformFixed m;
     m.m00 = fp_mul_fixed(parent.m00, local.m00) + fp_mul_fixed(parent.m01, local.m10);
     m.m01 = fp_mul_fixed(parent.m00, local.m01) + fp_mul_fixed(parent.m01, local.m11);
@@ -570,8 +637,20 @@ VgTransformFixed vg_transform_fixed_from_transform(VgTransform t) {
 static void apply_xy_half_fixed(const VgTransformFixed *m, int x_half, int y_half, int *out_x, int *out_y) {
     int32_t x_fp = ((int32_t)x_half) << (VG_FP_SHIFT - 1);
     int32_t y_fp = ((int32_t)y_half) << (VG_FP_SHIFT - 1);
-    int32_t ox = fp_mul_fixed(m->m00, x_fp) + fp_mul_fixed(m->m01, y_fp) + m->m02;
-    int32_t oy = fp_mul_fixed(m->m10, x_fp) + fp_mul_fixed(m->m11, y_fp) + m->m12;
+    int32_t ox = 0;
+    int32_t oy = 0;
+
+    if (vg_transform_fixed_is_axis_aligned_matrix(*m)) {
+        ox = fp_mul_fixed(m->m00, x_fp) + m->m02;
+        oy = fp_mul_fixed(m->m11, y_fp) + m->m12;
+    } else if (vg_transform_fixed_is_quadrant_swap_matrix(*m)) {
+        ox = fp_mul_fixed(m->m01, y_fp) + m->m02;
+        oy = fp_mul_fixed(m->m10, x_fp) + m->m12;
+    } else {
+        ox = fp_mul_fixed(m->m00, x_fp) + fp_mul_fixed(m->m01, y_fp) + m->m02;
+        oy = fp_mul_fixed(m->m10, x_fp) + fp_mul_fixed(m->m11, y_fp) + m->m12;
+    }
+
     *out_x = fp_to_int_round(ox);
     *out_y = fp_to_int_round(oy);
 }
@@ -579,8 +658,20 @@ static void apply_xy_half_fixed(const VgTransformFixed *m, int x_half, int y_hal
 void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *out_x, int *out_y) {
     int32_t x_fp = ((int32_t)x) << VG_FP_SHIFT;
     int32_t y_fp = ((int32_t)y) << VG_FP_SHIFT;
-    int32_t ox = fp_mul_fixed(t.m00, x_fp) + fp_mul_fixed(t.m01, y_fp) + t.m02;
-    int32_t oy = fp_mul_fixed(t.m10, x_fp) + fp_mul_fixed(t.m11, y_fp) + t.m12;
+    int32_t ox = 0;
+    int32_t oy = 0;
+
+    if (vg_transform_fixed_is_axis_aligned_matrix(t)) {
+        ox = fp_mul_fixed(t.m00, x_fp) + t.m02;
+        oy = fp_mul_fixed(t.m11, y_fp) + t.m12;
+    } else if (vg_transform_fixed_is_quadrant_swap_matrix(t)) {
+        ox = fp_mul_fixed(t.m01, y_fp) + t.m02;
+        oy = fp_mul_fixed(t.m10, x_fp) + t.m12;
+    } else {
+        ox = fp_mul_fixed(t.m00, x_fp) + fp_mul_fixed(t.m01, y_fp) + t.m02;
+        oy = fp_mul_fixed(t.m10, x_fp) + fp_mul_fixed(t.m11, y_fp) + t.m12;
+    }
+
     if (out_x) {
         *out_x = fp_to_int_round(ox);
     }
@@ -601,10 +692,15 @@ void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t colo
     int y0 = clipped.y;
     int x1 = clipped.x + clipped.w;
     int y1 = clipped.y + clipped.h;
+    if (x0 == 0 && x1 == fb->width) {
+        size_t row_offset = (size_t)y0 * (size_t)fb->width;
+        size_t count = (size_t)(y1 - y0) * (size_t)fb->width;
+        vg_fill_u16_span(&fb->pixels[row_offset], count, color);
+        return;
+    }
     for (int y = y0; y < y1; y++) {
-        for (int x = x0; x < x1; x++) {
-            fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
-        }
+        size_t row_offset = (size_t)y * (size_t)fb->width + (size_t)x0;
+        vg_fill_u16_span(&fb->pixels[row_offset], (size_t)(x1 - x0), color);
     }
 }
 

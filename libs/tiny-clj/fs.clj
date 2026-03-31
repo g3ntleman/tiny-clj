@@ -2,22 +2,26 @@
 (ns tiny-clj.fs
   (:require [tiny-db.kv :as kv]))
 
-;; Set user metadata for a path (merged into listing). Stored as EDN under <path>.meta.
+;; Set user metadata for a path (merged into listing). Stored as EDN in an internal sidecar.
 ;; You may include date fields like :modified or :created; these are merged into the
 ;; reported :meta for the path and take precedence over optional/formal fields.
 ^#^{:doc "Stores user metadata for a filesystem path.
 
-Writes the EDN-encoded metadata map to `<path>.meta` in the underlying KV store.
+Writes the EDN-encoded metadata map to an internal sidecar in the underlying KV store.
 The metadata is merged into `tiny-clj.fs/list` results.
 
 If the map includes `:size`, the file size is applied immediately via `set-size!`."}
+(defn- meta-put! [path meta-value] :native)
+
+(defn- meta-get [path] :native)
+
 (defn meta-set! [path meta-map]
-  (let [edn-str (pr-str meta-map)
-        bytes (.getBytes edn-str "UTF-8")]
-    (kv/put-bytes (str path ".meta") bytes)
+  (let [_ (meta-put! path meta-map)]
     ;; If user provided a :size field, apply it immediately via native helper.
-    (when-let [s (:size meta-map)]
-      (set-size! path s))
+    (let [s (:size meta-map)]
+      (if s
+        (set-size! path s)
+        nil))
     nil))
 
 ;; Native-backed, flash-friendly filesystem API. These are thin stubs whose
@@ -48,6 +52,18 @@ Returns a map with at least:
 ;; Returns {:entries [ {:path <string> :meta <map>} ... ] :last-key <string-or-nil>}
 (defn- list-batch [dir-path after-key batch-size] :native)
 
+(defn- merge-entry-meta [entry]
+  (let [formal-meta (or (:meta entry) {})
+        edn-str (meta-get (:path entry))
+        user-meta (if edn-str
+                    (try
+                      (read-string edn-str)
+                      (catch Exception _ nil))
+                    nil)]
+    (assoc entry :meta (if (map? user-meta)
+                         (merge formal-meta user-meta)
+                         formal-meta))))
+
 ^#^{:doc "Lists direct children under `dir-path`.
 
 Returns a lazy sequence of entry maps:
@@ -60,7 +76,7 @@ user-provided metadata stored via `meta-set!`."}
     ((fn fetch [after-key]
        (lazy-seq
          (let [res (list-batch dir-path after-key batch-size)
-               entries (seq (get res :entries))
+             entries (seq (map merge-entry-meta (get res :entries)))
                last-key (get res :last-key)
                emit (fn emit [es]
                       (lazy-seq

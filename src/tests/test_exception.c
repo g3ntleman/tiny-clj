@@ -75,6 +75,71 @@ static char *capture_print_exception_output(CLJException *ex) {
     return buffer;
 }
 
+static char *capture_native_backtrace_output(void (*emit_backtrace)(void), bool use_finite_heap_budget) {
+    if (!emit_backtrace) {
+        return NULL;
+    }
+
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+
+    int stderr_fd = fileno(stderr);
+    int saved_stderr = dup(stderr_fd);
+    if (saved_stderr < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    if (use_finite_heap_budget) {
+        memory_set_heap_limit_bytes(memory_current_usage_bytes());
+    }
+
+    fflush(stderr);
+    if (dup2(fileno(tmp), stderr_fd) < 0) {
+        memory_set_heap_limit_bytes(previous_limit);
+        close(saved_stderr);
+        fclose(tmp);
+        return NULL;
+    }
+
+    emit_backtrace();
+
+    fflush(stderr);
+    (void)dup2(saved_stderr, stderr_fd);
+    close(saved_stderr);
+    memory_set_heap_limit_bytes(previous_limit);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    long len = ftell(tmp);
+    if (len < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    char *buffer = CLJ_HOST_MALLOC((size_t)len + 1u);
+    if (!buffer) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    size_t nread = fread(buffer, 1, (size_t)len, tmp);
+    buffer[nread] = '\0';
+    fclose(tmp);
+    return buffer;
+}
+
 typedef struct {
     bool returned;
 } ThrowOomWorkerArgs;
@@ -483,6 +548,18 @@ TEST(test_print_exception_oom_includes_native_stacktrace_marker) {
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
     TEST_ASSERT_TRUE_MESSAGE(marker_found, "OOM output should include native stacktrace marker");
 }
+
+#if defined(DEBUG) && defined(__APPLE__) && !defined(ESP_PLATFORM)
+TEST(test_exception_symbolized_native_backtrace_works_under_finite_heap_budget_on_macos_host) {
+    char *output = capture_native_backtrace_output(exception_print_native_backtrace_symbolized, true);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(output, "Failed to capture symbolized native backtrace output");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(output, " + 0x"),
+                                 "budgeted host OOM output should include symbolized native frames");
+
+    CLJ_HOST_FREE(output);
+}
+#endif
 
 TEST(test_throw_oom_on_background_thread_does_not_cross_thread_longjmp) {
     pthread_t worker;

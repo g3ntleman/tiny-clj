@@ -437,13 +437,38 @@ ID eval_special_while(CljPersistentVector *args, CljPersistentMap *env, EvalStat
   }
 }
 
+static inline ID eval_expr_with_local_autorelease_pool(ID expr,
+                                                       CljPersistentMap *env,
+                                                       EvalState *st,
+                                                       const EvalContext *ctx,
+                                                       bool preserve_result) {
+  if (!expr) {
+    return NULL;
+  }
+
+  uint32_t restore = autorelease_pool_mark();
+  ID result = eval_body(expr, env, st, ctx);
+  if (preserve_result && result && !IS_IMMEDIATE(result)) {
+    RETAIN(result);
+  }
+  autorelease_pool_drain_to_depth(restore);
+  if (preserve_result && result && !IS_IMMEDIATE(result)) {
+    AUTORELEASE(result);
+  }
+  return result;
+}
+
 ID eval_special_do(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   unsigned int argc = args_count(args);
   ID result = NULL;
   for (unsigned int i = 0; i < argc; i++) {
     ID expr = args_nth(args, i);
     if (expr) {
-      result = eval_body(expr, env, st, ctx);
+      result = eval_expr_with_local_autorelease_pool(expr,
+                                                     env,
+                                                     st,
+                                                     ctx,
+                                                     i + 1u == argc);
     }
   }
   return result;
@@ -694,11 +719,19 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
       ID body_expr = args_nth(args, i);
       if (!body_expr)
         continue;
+      bool preserve_result = (i + 1u == argc);
       if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
         result = body_expr;
-        RETAIN(result);
       } else {
+        uint32_t restore = autorelease_pool_mark();
         result = eval_body(body_expr, env, st, &loop_ctx);
+        if (preserve_result && recur_arg_count <= 0 && result && !IS_IMMEDIATE(result)) {
+          RETAIN(result);
+        }
+        autorelease_pool_drain_to_depth(restore);
+        if (preserve_result && recur_arg_count <= 0 && result && !IS_IMMEDIATE(result)) {
+          AUTORELEASE(result);
+        }
       }
     }
 

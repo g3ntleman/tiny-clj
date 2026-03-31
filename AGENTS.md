@@ -43,7 +43,7 @@ Capture bug hypotheses as regression unit tests first, before (or alongside) the
 
 ## Commit Messages
 
-Do not add this trailer to commits:
+Do not add any attribution to commits like
 
 `Co-authored-by: Cursor <cursoragent@cursor.com>`
 

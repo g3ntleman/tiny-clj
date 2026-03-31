@@ -30,6 +30,20 @@ static struct ns_search_ctx *g_ns_search_ctx = NULL;
 
 // Known approximate size of clojure.core mappings (defs/defns) to avoid resize during load
 #define CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY 256
+#define CLOJURE_CORE_CONSTRAINED_MAPPINGS_CAPACITY 64
+
+static int namespace_initial_mappings_capacity(CljSymbol *name_symbol) {
+    if (!(SYM_CLOJURE_CORE && name_symbol == SYM_CLOJURE_CORE)) {
+        return 4;
+    }
+
+    size_t heap_limit = memory_get_heap_limit_bytes();
+    if (heap_limit != SIZE_MAX && heap_limit <= (size_t)(1024u * 1024u)) {
+        return CLOJURE_CORE_CONSTRAINED_MAPPINGS_CAPACITY;
+    }
+
+    return CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY;
+}
 
 static bool namespace_is_clojure_core(const CljNamespace *ns) {
     if (!ns || !ns->name) {
@@ -199,8 +213,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
 
     ns->name = name_symbol; // Use the interned symbol
     // clojure.core: pre-allocate known size to reduce fragmentation and startup cost
-    const int mappings_cap = (SYM_CLOJURE_CORE && name_symbol == SYM_CLOJURE_CORE)
-        ? CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY : 4;
+    const int mappings_cap = namespace_initial_mappings_capacity(name_symbol);
     ns->mappings = make_map(mappings_cap);
     ns->private_mappings = NULL;
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro

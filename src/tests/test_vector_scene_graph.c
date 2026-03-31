@@ -1,6 +1,7 @@
 #include "tests_common.h"
 #include "../atom.h"
 #include "../builtins_tiny_fx_gfx.h"
+#include "../gfx.h"
 #include "../vector_scene_graph.h"
 #include "../scene.h"
 #include "../tiny_fx_gfx.h"
@@ -79,6 +80,115 @@ static uint64_t monotonic_now_ns(void) {
         return 0u;
     }
     return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+static uint32_t framebuffer_checksum(const VgFrameBuffer *fb) {
+    if (!fb || !fb->pixels) {
+        return 0u;
+    }
+    uint32_t h = 2166136261u;
+    size_t count = (size_t)fb->width * (size_t)fb->height;
+    for (size_t i = 0; i < count; i++) {
+        uint16_t pixel = fb->pixels[i];
+        h ^= (uint8_t)(pixel & 0xffu);
+        h *= 16777619u;
+        h ^= (uint8_t)((pixel >> 8) & 0xffu);
+        h *= 16777619u;
+    }
+    return h;
+}
+
+TEST(test_vector_scene_graph_framebuffer_clear_fills_odd_pixel_count) {
+    uint16_t pixels[15];
+    VgFrameBuffer fb;
+    for (size_t i = 0; i < 15u; i++) {
+        pixels[i] = (uint16_t)(0x1000u + (uint16_t)i);
+    }
+
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 5, 3, pixels, 15));
+    vg_framebuffer_clear(&fb, 0x4a35u);
+
+    for (size_t i = 0; i < 15u; i++) {
+        TEST_ASSERT_EQUAL_HEX16(0x4a35u, pixels[i]);
+    }
+}
+
+TEST(test_vector_scene_graph_framebuffer_clear_rect_fills_odd_unaligned_rows) {
+    uint16_t pixels[21];
+    VgFrameBuffer fb;
+    for (size_t i = 0; i < 21u; i++) {
+        pixels[i] = 0x1111u;
+    }
+
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 7, 3, pixels, 21));
+    vg_framebuffer_clear_rect(&fb, (VgClipRect){1, 0, 5, 2}, 0xbeefu);
+
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 7; x++) {
+            uint16_t expected = (y < 2 && x >= 1 && x < 6) ? 0xbeefu : 0x1111u;
+            TEST_ASSERT_EQUAL_HEX16(expected, pixels[(size_t)y * 7u + (size_t)x]);
+        }
+    }
+}
+
+TEST(test_vector_scene_graph_framebuffer_clear_rect_full_width_uses_contiguous_fill) {
+    uint16_t pixels[24];
+    VgFrameBuffer fb;
+    for (size_t i = 0; i < 24u; i++) {
+        pixels[i] = 0x2222u;
+    }
+
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 6, 4, pixels, 24));
+    vg_framebuffer_clear_rect(&fb, (VgClipRect){0, 1, 6, 2}, 0xa55au);
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 6; x++) {
+            uint16_t expected = (y >= 1 && y < 3) ? 0xa55au : 0x2222u;
+            TEST_ASSERT_EQUAL_HEX16(expected, pixels[(size_t)y * 6u + (size_t)x]);
+        }
+    }
+}
+
+TEST(test_vector_scene_graph_gfx_draw_fill_rect_respects_clip) {
+    uint16_t pixels[32];
+    VgFrameBuffer fb;
+    GfxClip clip = {.enabled = true, .x0 = 2, .y0 = 1, .x1 = 6, .y1 = 3};
+
+    for (size_t i = 0; i < 32u; i++) {
+        pixels[i] = 0x0000u;
+    }
+
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 8, 4, pixels, 32));
+    gfx_draw_fill_rect(&fb, 0, 0, 8, 4, 0x07e0u, &clip);
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 8; x++) {
+            uint16_t expected = (y >= 1 && y < 3 && x >= 2 && x < 6) ? 0x07e0u : 0x0000u;
+            TEST_ASSERT_EQUAL_HEX16(expected, pixels[(size_t)y * 8u + (size_t)x]);
+        }
+    }
+}
+
+TEST(test_vector_scene_graph_gfx_fill_polygon_scanline_respects_clip) {
+    uint16_t pixels[48];
+    VgFrameBuffer fb;
+    GfxClip clip = {.enabled = true, .x0 = 3, .y0 = 2, .x1 = 6, .y1 = 4};
+    int vx[4] = {1, 6, 6, 1};
+    int vy[4] = {1, 1, 4, 4};
+
+    for (size_t i = 0; i < 48u; i++) {
+        pixels[i] = 0x0000u;
+    }
+
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 8, 6, pixels, 48));
+    gfx_fill_polygon_scanline(&fb, vx, vy, 4u, 0xf800u, &clip);
+
+    for (int y = 0; y < 6; y++) {
+        for (int x = 0; x < 8; x++) {
+            uint16_t expected = (y >= 2 && y < 4 && x >= 3 && x < 6) ? 0xf800u : 0x0000u;
+            TEST_ASSERT_EQUAL_HEX16(expected, pixels[(size_t)y * 8u + (size_t)x]);
+        }
+    }
 }
 
 static uint64_t benchmark_scene_record_render_ns(ID scene,
@@ -2149,8 +2259,8 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     vg_render_scene(&root, &fb_a);
     vg_render_scene(&root, &fb_b);
 
-    uint32_t checksum_a = vg_framebuffer_checksum(&fb_a);
-    uint32_t checksum_b = vg_framebuffer_checksum(&fb_b);
+    uint32_t checksum_a = framebuffer_checksum(&fb_a);
+    uint32_t checksum_b = framebuffer_checksum(&fb_b);
     TEST_ASSERT_EQUAL_HEX32(checksum_a, checksum_b);
 }
 
@@ -2213,10 +2323,10 @@ TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_m
 
     TEST_ASSERT_TRUE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)2 * TEST_W + 4]);
-    uint32_t after_first = vg_framebuffer_checksum(&fb);
+    uint32_t after_first = framebuffer_checksum(&fb);
 
     TEST_ASSERT_FALSE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
-    uint32_t after_second = vg_framebuffer_checksum(&fb);
+    uint32_t after_second = framebuffer_checksum(&fb);
     TEST_ASSERT_EQUAL_HEX32(after_first, after_second);
 
     line.has_transform = true;
@@ -2313,7 +2423,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
     };
 
     vg_render_scene(&root, &fb_before);
-    uint32_t before = vg_framebuffer_checksum(&fb_before);
+    uint32_t before = framebuffer_checksum(&fb_before);
 
     VgPatch tpatch = {.id = 42, .type = VG_PATCH_TRANSFORM};
     tpatch.value.transform = vg_transform_identity();
@@ -2336,7 +2446,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
     TEST_ASSERT_TRUE(vg_scene_apply_patch(&root, &txpatch));
 
     vg_render_scene(&root, &fb_after);
-    uint32_t after = vg_framebuffer_checksum(&fb_after);
+    uint32_t after = framebuffer_checksum(&fb_after);
     TEST_ASSERT_NOT_EQUAL(before, after);
 }
 
@@ -3160,7 +3270,7 @@ TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
     vg_render_scene(&rect, &fb_a);
     vg_render_scene(&rect, &fb_b);
 
-    TEST_ASSERT_EQUAL_HEX32(vg_framebuffer_checksum(&fb_a), vg_framebuffer_checksum(&fb_b));
+    TEST_ASSERT_EQUAL_HEX32(framebuffer_checksum(&fb_a), framebuffer_checksum(&fb_b));
 }
 
 TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {

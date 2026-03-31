@@ -1,10 +1,14 @@
 {
   "version": "2.0.0",
+  "presentation": {
+    "panel": "shared",
+    "showReuseMessage": false
+  },
   "tasks": [
     {
       "label": "build-repl",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl",
+      "command": "[ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -13,44 +17,32 @@
         "$gcc"
       ],
       "presentation": {
-        "reveal": "silent",
-        "panel": "shared",
-        "showReuseMessage": false
+        "reveal": "silent"
       }
     },
     {
       "label": "build-all",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build",
+      "command": "[ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build",
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": [
         "$gcc"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "showReuseMessage": false
-      }
+      ]
     },
     {
       "label": "build-tests",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target unit-tests",
+      "command": "[ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target unit-tests",
       "group": {
         "kind": "test",
         "isDefault": true
       },
       "problemMatcher": [
         "$gcc"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "showReuseMessage": false
-      }
+      ]
     },
     {
       "label": "build-image",
@@ -60,12 +52,7 @@
         "kind": "build",
         "isDefault": false
       },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "showReuseMessage": false
-      }
+      "problemMatcher": []
     },
     {
       "label": "flash image",
@@ -75,12 +62,7 @@
         "kind": "build",
         "isDefault": false
       },
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "showReuseMessage": false
-      }
+      "problemMatcher": []
     },
     {
       "label": "ESP32: flash and monitor",
@@ -90,12 +72,7 @@
       "detail": "Incremental IDF build (tiny + all components), no clean; then flash and monitor. Kills existing monitor so re-run needs no Restart prompt.",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -109,10 +86,8 @@
       "group": "none",
       "problemMatcher": [],
       "presentation": {
-        "reveal": "always",
         "focus": true,
         "panel": "dedicated",
-        "showReuseMessage": false,
         "clear": true
       },
       "runOptions": {
@@ -123,16 +98,11 @@
     {
       "label": "build&run: tiny-clj (macos)",
       "type": "shell",
-      "command": "pkill -f '/build/tiny-clj' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj && ./build/tiny-clj",
+      "command": "pkill -f '/build/tiny-clj' || true; ([ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build) && cmake --build build --target tiny-clj && ./build/tiny-clj",
       "group": "none",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -142,17 +112,11 @@
     {
       "label": "build&run: tiny-fx.app",
       "type": "shell",
-      "command": "pkill -f 'tiny-fx.app/Contents/MacOS/tiny-fx' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-fx && ./build/tiny-fx.app/Contents/MacOS/tiny-fx </dev/null",
+      "command": "pkill -f 'tiny-fx.app/Contents/MacOS/tiny-fx' || true; ([ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build) && cmake --build build --target tiny-fx && ./build/tiny-fx.app/Contents/MacOS/tiny-fx </dev/null",
       "group": "none",
-      "detail": "Build the generic tiny-fx app bundle incrementally, then run the bundle executable in the task terminal (no open).",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -167,12 +131,7 @@
       "detail": "Incremental ESP32 build for the tiny-clj product, then flash and monitor.",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -187,12 +146,7 @@
       "detail": "Incremental ESP32 build for the tiny-fx product, then flash and monitor.",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -202,16 +156,11 @@
     {
       "label": "run-repl",
       "type": "shell",
-      "command": "pkill -f '/build/tiny-clj-repl' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",
+      "command": "pkill -f '/build/tiny-clj-repl' || true; ([ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build) && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",
       "group": "none",
       "problemMatcher": [],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+        "focus": true
       },
       "isBackground": false,
       "runOptions": {
@@ -221,7 +170,7 @@
     {
       "label": "run-tests",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target unit-tests && ./build/unit-tests",
+      "command": "([ -f build/CMakeCache.txt ] || cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build) && cmake --build build --target unit-tests && ./build/unit-tests",
       "group": {
         "kind": "test",
         "isDefault": false
@@ -230,11 +179,8 @@
         "$gcc"
       ],
       "presentation": {
-        "echo": true,
-        "reveal": "always",
         "focus": true,
         "panel": "dedicated",
-        "showReuseMessage": false,
         "clear": true
       },
       "isBackground": false

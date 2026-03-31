@@ -249,7 +249,6 @@ VgTransform vg_anim_transform_state_current(const VgAnimTransformState *state);
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);
 void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color);
-uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
 bool vg_text_local_bounds(const VgTextData *txt, VgRectData *out_bounds);
 
 /*

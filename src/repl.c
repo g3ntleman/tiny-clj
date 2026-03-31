@@ -172,7 +172,7 @@ void repl_print_build_info_with_emitter(void (*emit_line)(const char *line)) {
 #else
   emit_line("    Debug            : Disabled");
 #endif
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   emit_line("    Memory Profiling : Enabled");
 #else
   emit_line("    Memory Profiling : Disabled");
@@ -458,7 +458,7 @@ void repl_process_event_loop(EvalState *st) {
  */
 bool eval_multiform_string(const char *code, EvalState *st) {
   bool result = true; // Start optimistic
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // While profiling, disable callsite cache for reparsed REPL inputs.
   uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
   g_runtime.resolve_cache_epoch = 0;
@@ -517,7 +517,7 @@ bool eval_multiform_string(const char *code, EvalState *st) {
     }
   }
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   g_runtime.resolve_cache_epoch = saved_epoch;
 #endif
   return result;
@@ -1131,11 +1131,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #if !defined(DEBUG)
   CLJ_UNUSED(zombie_mode);
 #endif
-#if !defined(DEBUG) && !(defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED)
+#if !defined(DEBUG) && !MEMORY_PROFILING_ENABLED
   CLJ_UNUSED(memory_debug);
 #endif
   // Initialize memory profiling DIRECTLY before the first prompt
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // Profiling is enabled at process startup when hooks are compiled in.
   // Only adjust verbosity here.
   set_memory_verbose_mode(memory_debug);
@@ -1480,7 +1480,7 @@ int main(int argc, char **argv) {
 #include <time.h>
   clock_t t0 = clock();
 #endif
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // Build-time switch: if memory profiling hooks are compiled in, enable them
   // for the whole process so we can inspect current/peak after core loading.
   // Keep stats cumulative from process start (no reset here).

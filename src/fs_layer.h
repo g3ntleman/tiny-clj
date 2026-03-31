@@ -12,6 +12,9 @@
 /* Max key length for path-based FS keys (including terminator when used as C-string). */
 #define FS_KEY_MAX 64u
 
+/* Reserved internal suffix byte for metadata sidecars stored adjacent to file keys. */
+#define FS_META_SIDECAR_MARKER 0x01u
+
 /* Minimal KV-backed "filesystem-like" layer (Phase 2.2).
  *
  * This is intentionally small and deterministic. The backing store is a KV
@@ -129,6 +132,14 @@ bool fs_exists(FsKvStore *st, const char *path);
 
 /* Delete key. Returns true if deleted. */
 bool fs_delete(FsKvStore *st, const char *path);
+
+/* Build the internal metadata sidecar key for a public path.
+ * Public paths reserve control bytes; the sidecar key appends FS_META_SIDECAR_MARKER.
+ */
+tdb_status_t fs_make_meta_sidecar_key(const char *path,
+                                      uint8_t *out,
+                                      size_t out_cap,
+                                      size_t *out_len);
 
 /*
  * List directory entries in batches.

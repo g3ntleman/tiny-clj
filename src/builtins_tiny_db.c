@@ -14,13 +14,12 @@
 #include "to_string.h"
 #include "value.h"
 #include "source_resolver.h"
+#include "utf8.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-
-#define TINYCLJ_FS_META_KV_PREFIX "fs.meta:"
 
 static void tinyclj_fs_delete_sidecars(FsKvStore *st, const char *path)
 {
@@ -37,14 +36,25 @@ static void tinyclj_fs_delete_sidecars(FsKvStore *st, const char *path)
         (void)fs_delete(st, meta_path);
     }
 
-    uint8_t meta_key[FS_KEY_MAX + sizeof(TINYCLJ_FS_META_KV_PREFIX)];
-    size_t prefix_len = sizeof(TINYCLJ_FS_META_KV_PREFIX) - 1u;
-    if (prefix_len + path_len <= sizeof(meta_key)) {
-        memcpy(meta_key, TINYCLJ_FS_META_KV_PREFIX, prefix_len);
-        memcpy(meta_key + prefix_len, path, path_len);
-        (void)fs_kv_del_key_bytes_status(st, meta_key, prefix_len + path_len);
+    uint8_t meta_key[FS_KEY_MAX];
+    size_t meta_key_len = 0u;
+    if (fs_make_meta_sidecar_key(path, meta_key, sizeof(meta_key), &meta_key_len) == TDB_OK) {
+        (void)fs_kv_del_key_bytes_status(st, meta_key, meta_key_len);
     }
 }
+
+static tdb_status_t tinyclj_fs_meta_key_for_path(const char *path,
+                                                 uint8_t *meta_key,
+                                                 size_t meta_key_cap,
+                                                 size_t *meta_key_len)
+{
+    if (!path || !meta_key || meta_key_cap == 0 || !meta_key_len) {
+        return TDB_ERR_INVALID_ARG;
+    }
+    return fs_make_meta_sidecar_key(path, meta_key, meta_key_cap, meta_key_len);
+}
+
+static ID tinyclj_kv_throw_ft(const char* op, tdb_status_t stc);
 
 // Helper to get string argument
 static const char *require_c_string_arg(ID arg, const char *fn_name, const char *arg_desc)
@@ -181,6 +191,99 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
         ASSIGN(m, map_assoc(m, (ID)SYM_KW_LAST_KEY, NULL));
     }
     return AUTORELEASE(m);
+}
+
+ID native_tinyclj_fs_meta_put(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tiny-clj.fs/meta-put!");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/meta-put!", "a path string");
+    if (!path) return NULL;
+
+    if (!args[1]) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/meta-put! expects a metadata value");
+        return NULL;
+    }
+
+    CljString *meta_str = make_string_description(args[1]);
+    if (!meta_str) {
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/meta-put! could not serialize metadata");
+        return NULL;
+    }
+
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    uint8_t meta_key[FS_KEY_MAX];
+    size_t meta_key_len = 0u;
+    tdb_status_t stc = tinyclj_fs_meta_key_for_path(path, meta_key, sizeof(meta_key), &meta_key_len);
+    if (stc != TDB_OK) {
+        return tinyclj_kv_throw_ft("tiny-clj.fs/meta-put!", stc);
+    }
+
+    const uint8_t *meta_bytes = (const uint8_t *)string_data((ID)meta_str);
+    size_t meta_len = (size_t)string_length((ID)meta_str);
+    stc = fs_kv_put_key_bytes_status(st, meta_key, meta_key_len, meta_bytes, meta_len);
+    if (stc != TDB_OK) {
+        return tinyclj_kv_throw_ft("tiny-clj.fs/meta-put!", stc);
+    }
+    return NULL;
+}
+
+ID native_tinyclj_fs_meta_get(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tiny-clj.fs/meta-get");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/meta-get", "a path string");
+    if (!path) return NULL;
+
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    uint8_t meta_key[FS_KEY_MAX];
+    size_t meta_key_len = 0u;
+    tdb_status_t stc = tinyclj_fs_meta_key_for_path(path, meta_key, sizeof(meta_key), &meta_key_len);
+    if (stc != TDB_OK) {
+        return tinyclj_kv_throw_ft("tiny-clj.fs/meta-get", stc);
+    }
+
+    size_t saved = 0u;
+    stc = fs_kv_get_key_bytes_status(st, meta_key, meta_key_len, NULL, 0, &saved);
+    if (stc == TDB_ERR_NOT_FOUND) {
+        return NULL;
+    }
+    if (stc != TDB_OK) {
+        return tinyclj_kv_throw_ft("tiny-clj.fs/meta-get", stc);
+    }
+    if (saved > UINT16_MAX) {
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/meta-get metadata too large (%zu bytes)", saved);
+        return NULL;
+    }
+
+    CljString *meta = make_string_buffer(saved);
+    if (!meta) {
+        return NULL;
+    }
+
+    if (saved > 0u) {
+        stc = fs_kv_get_key_bytes_status(st,
+                                         meta_key,
+                                         meta_key_len,
+                                         (uint8_t *)meta->data,
+                                         saved,
+                                         &saved);
+        if (stc != TDB_OK) {
+            return tinyclj_kv_throw_ft("tiny-clj.fs/meta-get", stc);
+        }
+    }
+
+    if (saved > 0u && !utf8valid(meta->data)) {
+        RELEASE((ID)meta);
+        return NULL;
+    }
+
+    return AUTORELEASE((ID)meta);
 }
 
 ID native_tinyclj_fs_read_block(ID *args, unsigned int argc)

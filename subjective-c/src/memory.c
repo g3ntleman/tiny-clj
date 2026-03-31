@@ -1165,6 +1165,22 @@ void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
   g_release_dispatch[type] = fn ? fn : release_object_default;
 }
 
+static void print_oom_throw_site_backtrace(void) {
+#if defined(DEBUG) && defined(__APPLE__) && !defined(ESP_PLATFORM)
+  size_t saved_limit = memory_get_heap_limit_bytes();
+  if (saved_limit != SIZE_MAX) {
+    /* Host debug tests often use synthetic tiny-clj heap budgets. Temporarily
+     * lift that budget so dyld/dladdr-backed symbolization is not blocked by
+     * the artificial limit while printing the throw-site frames. */
+    memory_set_heap_limit_bytes(SIZE_MAX);
+    exception_print_native_backtrace_symbolized();
+    memory_set_heap_limit_bytes(saved_limit);
+    return;
+  }
+#endif
+  exception_print_native_backtrace();
+}
+
 void throw_oom(void) {
   extern CLJException *clj_oom_exception;
   strncpy(clj_oom_exception->message, "Out of memory", sizeof(clj_oom_exception->message) - 1);
@@ -1178,10 +1194,10 @@ void throw_oom(void) {
     fprintf(stderr, "OOM on thread '%s'; suppressing exception longjmp.\n",
             subjective_c_get_thread_name());
     fputs("OOM throw-site backtrace:\n", stderr);
-    exception_print_native_backtrace();
+    print_oom_throw_site_backtrace();
     return;
   }
   fputs("OOM throw-site backtrace:\n", stderr);
-  exception_print_native_backtrace();
+  print_oom_throw_site_backtrace();
   throw_exception_object(clj_oom_exception);
 }

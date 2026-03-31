@@ -31,6 +31,7 @@ set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
     "libs/tiny-fx/trk1.clj|tiny-fx.trk1.clj.inc"
     "libs/tiny-fx/sound.clj|tiny-fx.sound.clj.inc"
     "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
+    "libs/tiny-fx/gfx-records.clj|tiny-fx.gfx-records.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
     "libs/tiny-fx/gfx-timeline.clj|tiny-fx.gfx-timeline.clj.inc"
     "libs/tiny-fx/gfx.clj|tiny-gfx.runtime.clj.inc"

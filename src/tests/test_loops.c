@@ -331,7 +331,7 @@ TEST_SHARED(test_for_large_sequence) {
 
   // (count (vec (for [x (range N)] x))) => N
   // Profiling builds run slower; keep N smaller to avoid timeouts.
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   const char *expr = "(count (vec (for [x (range 2000)] x)))";
   const int expected = 2000;
 #else
@@ -348,7 +348,7 @@ TEST_SHARED(test_for_large_sequence) {
 TEST_SHARED(test_for_large_sequence_repeated_realization, 0) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   const char *expr = "(count (vec (for [x (range 2000)] x)))";
   const int expected = 2000;
 #else

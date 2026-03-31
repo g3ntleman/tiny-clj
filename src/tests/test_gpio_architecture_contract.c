@@ -317,6 +317,10 @@ TEST(test_gpio_architecture_sound_backend_uses_shared_pwm_backend) {
                              "sound backend should not drive LEDC frequency directly anymore");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "ledc_channel_config"),
                              "sound backend should not configure LEDC channels directly anymore");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "for (uint32_t i = 0; i < due; i++)"),
+                                 "sound backend callback should advance due ticks one by one");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "sound_engine_advance_ticks"),
+                             "sound backend should not batch-advance ticks anymore");
 
     CLJ_FREE(src);
 }

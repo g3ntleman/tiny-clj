@@ -1071,6 +1071,78 @@ TEST(test_fs_layer_rewrite_increments_version)
     fs_kv_store_free(st);
 }
 
+  TEST(test_fs_list_dir_batch_skips_internal_meta_sidecars_during_pagination)
+  {
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    uint8_t a = 1;
+    uint8_t b = 2;
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/paged/a.bin", &a, 1));
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/paged/b.bin", &b, 1));
+
+    uint8_t meta_key[FS_KEY_MAX];
+    size_t meta_key_len = 0;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_make_meta_sidecar_key("/paged/a.bin",
+                             meta_key,
+                             sizeof(meta_key),
+                             &meta_key_len));
+
+    const uint8_t meta_bytes[2] = {9, 9};
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_kv_put_key_bytes_status(st,
+                             meta_key,
+                             meta_key_len,
+                             meta_bytes,
+                             sizeof(meta_bytes)));
+
+    char last1[FS_KEY_MAX] = {0};
+    ID page1 = fs_list_dir_batch(st, "/paged/", NULL, 1, last1, sizeof(last1));
+    TEST_ASSERT_NOT_NULL(page1);
+    TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector(page1)));
+    ID page1_entry = vector_nth(as_persistent_vector(page1), 0);
+    assert_string((CljObject *)map_get((CljPersistentMap *)page1_entry,
+                       (ID)intern_symbol_global(":path")),
+            "/paged/a.bin");
+    TEST_ASSERT_TRUE(last1[0] != '\0');
+
+    char last2[FS_KEY_MAX] = {0};
+    ID page2 = fs_list_dir_batch(st, "/paged/", last1, 1, last2, sizeof(last2));
+    TEST_ASSERT_NOT_NULL(page2);
+    TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector(page2)));
+    ID page2_entry = vector_nth(as_persistent_vector(page2), 0);
+    assert_string((CljObject *)map_get((CljPersistentMap *)page2_entry,
+                       (ID)intern_symbol_global(":path")),
+            "/paged/b.bin");
+
+    char last3[FS_KEY_MAX] = {0};
+    ID page3 = fs_list_dir_batch(st, "/paged/", last2, 1, last3, sizeof(last3));
+    TEST_ASSERT_NOT_NULL(page3);
+    TEST_ASSERT_EQUAL_INT(0, vector_count(as_persistent_vector(page3)));
+    TEST_ASSERT_TRUE(last3[0] == '\0');
+
+    fs_kv_store_free(st);
+  }
+
+  TEST(test_fs_write_bytes_rejects_reserved_control_bytes_in_public_paths)
+  {
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    char invalid_path[] = {'/', 'b', 'a', 'd', (char)0x01, 'x', '\0'};
+    uint8_t byte = 1;
+
+    TEST_ASSERT_EQUAL_INT(FS_ERR_INVALID_PATH,
+                fs_write_bytes(st, invalid_path, &byte, 1));
+    TEST_ASSERT_EQUAL_INT(FS_ERR_INVALID_PATH,
+                fs_set_size(st, invalid_path, 4));
+    TEST_ASSERT_FALSE(fs_exists(st, invalid_path));
+    TEST_ASSERT_FALSE(fs_delete(st, invalid_path));
+
+    fs_kv_store_free(st);
+  }
+
 // ============================================================================
 // TINY-CLJ FILESYSTEM AND KV BINDINGS TESTS (from test_tiny_clj_bindings_fs_kv.c)
 // ============================================================================
@@ -1137,6 +1209,153 @@ TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(8, kba->data[1]);
 }
 
+TEST(test_tiny_clj_fs_meta_set_merges_listing_via_internal_sidecar)
+{
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    fs_global_store_reset();
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
+
+    FsKvStore *st = fs_global_store();
+    TEST_ASSERT_NOT_NULL(st);
+
+    (void)eval_string(
+      "(let [a (byte-array 3)]"
+      "  (aset a 0 1) (aset a 1 2) (aset a 2 3)"
+      "  (tiny-clj.fs/spit-bytes \"/data/meta.bin\" a))",
+      g_test_eval_state);
+
+    (void)eval_string(
+      "(tiny-clj.fs/meta-set! \"/data/meta.bin\" {:foo \"bar\" :answer 42})",
+      g_test_eval_state);
+
+    TEST_ASSERT_FALSE(fs_exists(st, "/data/meta.bin.meta"));
+
+    uint8_t meta_key[FS_KEY_MAX];
+    size_t meta_key_len = 0u;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                          fs_make_meta_sidecar_key("/data/meta.bin",
+                                                   meta_key,
+                                                   sizeof(meta_key),
+                                                   &meta_key_len));
+
+    size_t saved = 0u;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                          fs_kv_get_key_bytes_status(st,
+                                                     meta_key,
+                                                     meta_key_len,
+                                                     NULL,
+                                                     0,
+                                                     &saved));
+    TEST_ASSERT_TRUE(saved > 0u);
+
+    CljObject *entries = eval_string("(vec (tiny-clj.fs/list \"/data/\"))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(entries);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entries));
+    TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector((ID)entries)));
+
+    ID entry = vector_nth(as_persistent_vector((ID)entries), 0);
+    assert_map((CljObject *)entry);
+    ID meta = map_get((CljPersistentMap *)entry, (ID)intern_symbol_global(":meta"));
+    assert_map((CljObject *)meta);
+
+    assert_string((CljObject *)map_get((CljPersistentMap *)meta,
+                                       (ID)intern_symbol_global(":foo")),
+                  "bar");
+    assert_fixnum((CljObject *)map_get((CljPersistentMap *)meta,
+                                       (ID)intern_symbol_global(":answer")),
+                  42);
+    assert_fixnum((CljObject *)map_get((CljPersistentMap *)meta,
+                                       (ID)intern_symbol_global(":size")),
+                  3);
+}
+
+  TEST(test_tiny_clj_fs_list_ignores_unreadable_or_non_map_meta_sidecars)
+  {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    fs_global_store_reset();
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
+
+    FsKvStore *st = fs_global_store();
+    TEST_ASSERT_NOT_NULL(st);
+
+    (void)eval_string(
+      "(let [a (byte-array 4)]"
+      "  (aset a 0 1) (aset a 1 2) (aset a 2 3) (aset a 3 4)"
+      "  (tiny-clj.fs/spit-bytes \"/data/bad-meta-a.bin\" a)"
+      "  (tiny-clj.fs/spit-bytes \"/data/bad-meta-b.bin\" a))",
+      g_test_eval_state);
+
+    uint8_t meta_key_a[FS_KEY_MAX];
+    uint8_t meta_key_b[FS_KEY_MAX];
+    size_t meta_key_a_len = 0u;
+    size_t meta_key_b_len = 0u;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_make_meta_sidecar_key("/data/bad-meta-a.bin",
+                             meta_key_a,
+                             sizeof(meta_key_a),
+                             &meta_key_a_len));
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_make_meta_sidecar_key("/data/bad-meta-b.bin",
+                             meta_key_b,
+                             sizeof(meta_key_b),
+                             &meta_key_b_len));
+
+    const uint8_t invalid_edn[] = {0xffu, 0xfeu};
+    const uint8_t non_map_edn[] = {'4', '2'};
+
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_kv_put_key_bytes_status(st,
+                             meta_key_a,
+                             meta_key_a_len,
+                             invalid_edn,
+                             sizeof(invalid_edn)));
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                fs_kv_put_key_bytes_status(st,
+                             meta_key_b,
+                             meta_key_b_len,
+                             non_map_edn,
+                             sizeof(non_map_edn)));
+
+    CljObject *entries = eval_string("(vec (tiny-clj.fs/list \"/data/\"))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(entries);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entries));
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector((ID)entries)));
+
+    ID kw_path = (ID)intern_symbol_global(":path");
+    ID kw_meta = (ID)intern_symbol_global(":meta");
+    ID kw_size = (ID)intern_symbol_global(":size");
+    bool saw_a = false;
+    bool saw_b = false;
+
+    int entry_count = vector_count(as_persistent_vector((ID)entries));
+    for (int i = 0; i < entry_count; i++) {
+      ID entry = vector_nth(as_persistent_vector((ID)entries), i);
+      assert_map((CljObject *)entry);
+      CljString *path = as_clj_string(map_get((CljPersistentMap *)entry, kw_path));
+      ID meta = map_get((CljPersistentMap *)entry, kw_meta);
+      assert_map((CljObject *)meta);
+
+      const char *path_str = clj_string_data(path);
+      if (strcmp(path_str, "/data/bad-meta-a.bin") == 0 ||
+        strcmp(path_str, "/data/bad-meta-b.bin") == 0) {
+        ID size = map_get((CljPersistentMap *)meta, kw_size);
+        assert_fixnum((CljObject *)size, 4);
+        TEST_ASSERT_TRUE(map_get((CljPersistentMap *)meta,
+               (ID)intern_symbol_global(":foo")) == NOT_FOUND);
+        if (strcmp(path_str, "/data/bad-meta-a.bin") == 0) {
+          saw_a = true;
+        } else {
+          saw_b = true;
+        }
+      }
+    }
+
+    TEST_ASSERT_TRUE(saw_a);
+    TEST_ASSERT_TRUE(saw_b);
+  }
+
   TEST(test_tiny_clj_fs_spit_bytes_nil_deletes_and_recreates_file)
   {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -1163,11 +1382,17 @@ TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
                        sizeof(legacy_meta_bytes)));
 
     const uint8_t kv_meta_bytes[4] = {4, 3, 2, 1};
-    const uint8_t kv_meta_key[] = "fs.meta:/data/delete.bin";
+    uint8_t kv_meta_key[FS_KEY_MAX];
+    size_t kv_meta_key_len = 0;
+    TEST_ASSERT_EQUAL_INT(TDB_OK,
+                          fs_make_meta_sidecar_key("/data/delete.bin",
+                                                   kv_meta_key,
+                                                   sizeof(kv_meta_key),
+                                                   &kv_meta_key_len));
     TEST_ASSERT_EQUAL_INT(TDB_OK,
                 fs_kv_put_key_bytes_status(st,
                              kv_meta_key,
-                             sizeof(kv_meta_key) - 1u,
+                                                     kv_meta_key_len,
                              kv_meta_bytes,
                              sizeof(kv_meta_bytes)));
 
@@ -1177,7 +1402,7 @@ TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_INT(TDB_OK,
                 fs_kv_get_key_bytes_status(st,
                              kv_meta_key,
-                             sizeof(kv_meta_key) - 1u,
+                                                     kv_meta_key_len,
                              NULL,
                              0,
                              &saved));
@@ -1190,7 +1415,7 @@ TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND,
                 fs_kv_get_key_bytes_status(st,
                              kv_meta_key,
-                             sizeof(kv_meta_key) - 1u,
+                                                     kv_meta_key_len,
                              NULL,
                              0,
                              &saved));

@@ -78,6 +78,12 @@ ID native_require(ID *args, unsigned int argc);
 bool require_namespace_by_name(EvalState *st, const char *ns_name);
 /** Load namespace from already-resolved bytes (path used for source context). Shared by require and load_clojure_core. */
 bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path);
+/** Load namespace directly from a caller-owned source buffer without wrapping it in a byte-array object. */
+bool load_namespace_from_buffer(EvalState *st,
+								const char *ns_name,
+								const char *source_data,
+								size_t source_len,
+								const char *source_path);
 
 /** Optional C-side init function called once after a namespace is first loaded.
  *  Registered via ns_register_init(). Runs after all Clojure forms in the

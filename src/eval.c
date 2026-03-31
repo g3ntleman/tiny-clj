@@ -3636,7 +3636,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
   CljObject *expr = (CljObject *)vector_nth(args, 0);
   CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // During memory profiling, disable callsite cache to avoid cache churn artifacts.
   uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
   g_runtime.resolve_cache_epoch = 0;
@@ -3679,7 +3679,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     peak_extra = 0;
   }
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // Restore callsite cache epoch
   g_runtime.resolve_cache_epoch = saved_epoch;
 #endif
@@ -3807,7 +3807,7 @@ ID eval_string(const char *expr_str, EvalState *eval_state) {
   CLJ_ASSERT(expr_str != NULL);
   CLJ_ASSERT(eval_state != NULL);
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   // While profiling, disable callsite cache for ephemeral ASTs to reduce noise.
   uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
   g_runtime.resolve_cache_epoch = 0;
@@ -3828,7 +3828,7 @@ ID eval_string(const char *expr_str, EvalState *eval_state) {
       RETAIN(result);
     }
   });
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
   g_runtime.resolve_cache_epoch = saved_epoch;
 #endif
   return AUTORELEASE(result);

@@ -205,7 +205,7 @@ TEST(test_atom_swap_multiple_times) {
   // Don't free st - it's the global test evalState
 }
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
 TEST(test_atom_swap_small_extra_arity_does_not_grow_heap_after_warmup) {
   CljAtom *atom = make_atom(fixnum(10));
 

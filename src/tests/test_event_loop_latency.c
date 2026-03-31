@@ -717,7 +717,7 @@ TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
                                   "ingress callback should receive nil payload as one argument");
 }
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
 TEST(test_event_loop_ingress_call_does_not_allocate_task_map_after_warmup) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();

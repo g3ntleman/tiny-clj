@@ -177,7 +177,6 @@ endif()
 # Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats
 # NOTE: This is evaluated at configure-time.
 string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
-add_compile_definitions(BUILD_EPOCH_SECONDS=${BUILD_EPOCH_SECONDS})
 
 # Generate build_info.h from template
 configure_file(

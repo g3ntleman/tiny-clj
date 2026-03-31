@@ -190,7 +190,7 @@ static void breakout_print_fixnum_vector(const char *label, ID value) {
     fputc('\n', stderr);
 }
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 static void breakout_print_memory_type_deltas(const MemoryStats *before,
                                               const MemoryStats *after,
                                               const char *label) {
@@ -294,7 +294,7 @@ TEST(test_breakout_contract_heap_probe_audio_reload_baseline) {
 TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate_persistent_heap) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
     MemoryStats before = memory_profiler_get_stats();
 #endif
 
@@ -369,7 +369,7 @@ TEST(test_breakout_contract_heap_probe_brick_then_wall_cycle_does_not_accumulate
         }
     }
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
     MemoryStats after = memory_profiler_get_stats();
     long long total_diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
     long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;

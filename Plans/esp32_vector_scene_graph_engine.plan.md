@@ -614,7 +614,7 @@ Implementation notes (2026-03-07):
 
 ## Milestone 7b: Bandwidth Optimization (Entity-Level Dirty Tracking)
 
-Status: TODO
+Status: PARTIAL (entity-level dirty rect capture and per-rect transfer planning are implemented; selective per-rect redraw and dirty-overlay UX remain open)
 
 Motivation:
 
@@ -815,6 +815,18 @@ Done when:
 - Visual output is identical to full-erase rendering (no ghost pixels, no missing redraws).
 - Debug overlay (D key) shows green outlines around dirty rects without affecting render state.
 - Host-viewer `bw` metric reflects actual per-rect transfer volume.
+
+Implementation update (2026-03-31):
+
+- Landed in current code:
+  - `scene.c` captures per-entity world AABBs/content signatures during render and exposes slot dirty metadata via `VgRenderFrameSlotResult`.
+  - `rendered_state_snapshot.c` compares previous/current rendered snapshots and computes per-entity dirty rect unions plus leaf dirty-rect collections.
+  - `fx_host_app.c` consumes refined dirty rects for host-side transfer planning, transfer metrics, and dirty-rect-filtered collision work.
+  - Regression coverage exists for dirty-rect computation, leaf collection, slot dirty reporting, and collision filtering.
+- Still open:
+  - `scene.c` still clears and redraws the whole slot clip rect for a rendered slot; static entities are not yet skipped during rasterization.
+  - The `show_dirty_rects` debug overlay described above is not implemented yet.
+  - The plan text below still describes the original end-state design; treat it as target architecture, not as a statement of current status.
 
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 

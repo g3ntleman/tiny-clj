@@ -9,7 +9,8 @@
 - `tiny-clj.fs/read-block` und `tiny-clj.fs/write-block` sind in `libs/tiny-clj/fs.clj` bereits als oeffentliche API vorhanden.
 - Die nativen Handler existieren in `src/builtins_tiny_db.c`.
 - Die aktuelle Implementierung ist funktional, aber noch nicht blockorientiert optimiert: sie materialisiert die komplette Datei via `fs_read_bytes(...)`, patcht/schneidet im Speicher und schreibt anschliessend wieder vollstaendig zurueck.
-- In diesem Audit blieb `./build/unit-tests --test 'test_file_io/*' --quiet` gruen (`38 Tests, 0 Failures`), direkte Regressionstests fuer `read-block` und `write-block` wurden im aktuellen Baum aber nicht gefunden.
+- In dieser Release-Runde wurden direkte Regressionstests fuer `read-block`/`write-block` und Randfaelle in `src/tests/test_file_io.c` ergaenzt.
+- `./build/unit-tests --test 'test_file_io/*' --quiet` lief danach gruen (`41 Tests, 0 Failures`).
 
 ## Anforderungen
 - **Lesen:**
@@ -56,6 +57,18 @@
 **Naechste Schritte:**
 - [x] API-Entwurf und Clojure-Bindings
 - [x] Native Implementierung fuer `read-block` und `write-block`
-- [ ] Direkte Regressionstests fuer `read-block`, `write-block` und Randfaelle ergaenzen
+- [x] Direkte Regressionstests fuer `read-block`, `write-block` und Randfaelle ergaenzen
 - [ ] Whole-file-Read/Modify/Write auf echte chunk-orientierte Blockpfade umstellen
 - [ ] Doku um aktuelle Performance- und Speichercharakteristik ergaenzen
+
+## Release-Audit 31.03.2026
+
+- Abgedeckt im Gate:
+   - Lesen eines Blocks in der Mitte
+   - Patch-Write innerhalb der Datei
+   - Extend-Write mit Null-gefuellter Luecke
+   - Lesen jenseits des Dateiende liefert leeres Byte-Array
+   - Negative Offsets/Laengen werfen weiterhin Exceptions
+- Weiterhin offen:
+   - Die Implementierung ist noch kein echter block-/chunk-orientierter Patchpfad.
+   - Es gibt noch keine Messwerte, die Peak-Heap oder Write-Amplification des aktuellen Whole-file-Pfads dokumentieren.

@@ -8,7 +8,7 @@
 int load_clojure_core(EvalState *st);
 void clojure_core_set_quiet(bool quiet);
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 static void assert_memory_stats_not_increasing(const MemoryStats *before,
                                                const MemoryStats *after,
                                                size_t tolerance,
@@ -111,6 +111,83 @@ TEST(test_heap_special_form_is_available) {
   TEST_ASSERT_TRUE(is_fixnum(v_total));
   TEST_ASSERT_TRUE(is_fixnum(v_peak));
 }
+
+#if DEBUG && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_do_releases_intermediate_temporaries_between_exprs) {
+  const char *expr = "(heap (do (byte-array 70000) (byte-array 70000) nil))";
+
+  runtime_reset(&g_runtime);
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+  });
+  event_loop_init();
+  meta_registry_init();
+  init_special_symbols();
+  register_builtins();
+  g_runtime.builtins_registered = true;
+  evalstate_reset(&g_test_eval_state, true);
+
+  ID k_total = (ID)intern_symbol_global(":total");
+  ID k_peak = (ID)intern_symbol_global(":peak");
+
+  WITH_AUTORELEASE_POOL({
+    ID result = eval_string(expr, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_map(result));
+
+    ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+    ID v_peak = map_get_sentinel((CljPersistentMap *)result, k_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_peak);
+    TEST_ASSERT_TRUE(is_fixnum(v_total));
+    TEST_ASSERT_TRUE(is_fixnum(v_peak));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                  "do should not retain byte-array temporaries after local pool drains");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(100000, as_fixnum(v_peak),
+                                          "do should drain intermediate temporaries before evaluating later expressions");
+  });
+}
+#endif
+
+#if DEBUG && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_loop_releases_temporaries_between_iterations) {
+  const char *expr =
+      "(heap (loop [i 0] "
+      "        (byte-array 50000) "
+      "        (if (= i 3) nil (recur (+ i 1)))))";
+
+  runtime_reset(&g_runtime);
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+  });
+  event_loop_init();
+  meta_registry_init();
+  init_special_symbols();
+  register_builtins();
+  g_runtime.builtins_registered = true;
+  evalstate_reset(&g_test_eval_state, true);
+
+  ID k_total = (ID)intern_symbol_global(":total");
+  ID k_peak = (ID)intern_symbol_global(":peak");
+
+  WITH_AUTORELEASE_POOL({
+    ID result = eval_string(expr, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_map(result));
+
+    ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+    ID v_peak = map_get_sentinel((CljPersistentMap *)result, k_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_peak);
+    TEST_ASSERT_TRUE(is_fixnum(v_total));
+    TEST_ASSERT_TRUE(is_fixnum(v_peak));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                  "loop should not retain discarded temporaries across iterations");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(80000, as_fixnum(v_peak),
+                                          "loop should drain per-iteration temporaries instead of stacking them until exit");
+  });
+}
+#endif
 
 TEST(test_runtime_stats_hardware_gpio_pin_count_when_hardware_present) {
   ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
@@ -810,7 +887,7 @@ TEST(test_runtime_stats_runtime_reset_releases_namespace_closure_cycles) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_contains_memory_stats_map) {
   ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(stats);
@@ -847,7 +924,7 @@ TEST(test_runtime_stats_contains_memory_stats_map) {
 }
 #endif
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_current_ram_under_200kb_after_core_load) {
   // Ensure both clojure.core and tiny-clj.runtime are loaded before measuring.
   ID stats = eval_string("(do (require 'clojure.core) (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
@@ -934,7 +1011,7 @@ TEST(test_runtime_stats_current_ram_under_200kb_after_core_load) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_core_load_memory_delta) {
   // Build a fresh runtime state so the delta reflects core loading, not prior tests.
   runtime_reset(&g_runtime);
@@ -977,7 +1054,7 @@ TEST(test_runtime_stats_core_load_memory_delta) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_core_load_under_100k) {
   // Fresh runtime state for a clean baseline.
   runtime_reset(&g_runtime);
@@ -1006,7 +1083,7 @@ TEST(test_runtime_stats_core_load_under_100k) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_core_load_peak_under_150k) {
   // Fresh runtime state for a clean peak baseline.
   runtime_reset(&g_runtime);
@@ -1035,7 +1112,7 @@ TEST(test_runtime_stats_core_load_peak_under_150k) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_core_load_idempotent_memory) {
   // Fresh runtime state.
   runtime_reset(&g_runtime);
@@ -1063,7 +1140,7 @@ TEST(test_runtime_stats_core_load_idempotent_memory) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_autorelease_loop_does_not_grow_heap) {
   // Use a trivial expression that should not leave persistent objects behind.
   const char *expr = "(+ 1 2)";
@@ -1105,7 +1182,7 @@ TEST(test_runtime_stats_autorelease_loop_does_not_grow_heap) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_memory_stats_stable_in_loop) {
   const char *expr = "(+ 1 2)";
 
@@ -1142,7 +1219,7 @@ TEST(test_runtime_stats_memory_stats_stable_in_loop) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_reduce_range_loop_stable_after_warmup) {
   const char *expr = "(reduce + (range 200))";
 
@@ -1181,7 +1258,7 @@ TEST(test_runtime_stats_reduce_range_loop_stable_after_warmup) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_fn_literal_no_slotref_growth) {
   const char *expr = "(heap (eval (read-string \"(count ((fn [x] (list x)) 1))\")))";
 
@@ -1219,7 +1296,7 @@ TEST(test_runtime_stats_heap_eval_read_string_fn_literal_no_slotref_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_let_binding_alias_no_growth) {
   const char *expr = "(heap (eval (read-string \"(let [v [1 2 3]] v)\")))";
 
@@ -1252,7 +1329,7 @@ TEST(test_runtime_stats_heap_eval_read_string_let_binding_alias_no_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_loop_binding_alias_no_growth) {
   const char *expr = "(heap (eval (read-string \"(loop [v [1 2 3]] v)\")))";
 
@@ -1285,7 +1362,7 @@ TEST(test_runtime_stats_heap_eval_read_string_loop_binding_alias_no_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_builtin_call_no_growth) {
   const char *expr = "(heap (+ 1 2))";
 
@@ -1318,7 +1395,7 @@ TEST(test_runtime_stats_heap_builtin_call_no_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_let_binding_no_growth) {
   const char *expr = "(heap (let [a 1] a))";
 
@@ -1351,7 +1428,7 @@ TEST(test_runtime_stats_heap_let_binding_no_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_first_borrowed_list_alias_no_growth) {
   const char *expr = "(heap (eval (read-string \"(first (quote ((range 3))))\")))";
 
@@ -1389,7 +1466,7 @@ TEST(test_runtime_stats_heap_eval_read_string_first_borrowed_list_alias_no_growt
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_function_recur_no_arg_retain_growth) {
   const char *init_expr = "(def rf (fn [x n] (if (= n 0) x (recur x (dec n)))))";
   const char *expr = "(heap (rf '(1 2) 3))";
@@ -1433,7 +1510,7 @@ TEST(test_runtime_stats_heap_function_recur_no_arg_retain_growth) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_macroexpand_1_thread_first_no_list_growth) {
   const char *expr = "(heap (eval (read-string \"(macroexpand-1 (quote (-> 1 inc inc)))\")))";
 
@@ -1471,7 +1548,7 @@ TEST(test_runtime_stats_heap_eval_read_string_macroexpand_1_thread_first_no_list
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_let_named_fn_if_optimizer_no_ast_growth) {
   const char *expr =
       "(heap (eval (read-string \"(let [f (fn f [x] (if (list? x) x nil))] 1)\")))";
@@ -1518,7 +1595,7 @@ TEST(test_runtime_stats_heap_eval_read_string_let_named_fn_if_optimizer_no_ast_g
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 /* Target: 0 (raised to 64); TODO: find/fix LazySeq leak to lower again. */
 TEST(test_runtime_stats_heap_let_lazy_seq_binding_discard_no_growth, 64) {
   const char *expr = "(heap (let [v (lazy-seq* (fn [] (list 1)))] nil))";
@@ -1564,7 +1641,7 @@ TEST(test_runtime_stats_heap_let_lazy_seq_binding_discard_no_growth, 64) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 /* Target: 0 (raised to 64); TODO: find/fix LazySeq leak to lower again. */
 TEST(test_runtime_stats_heap_let_lazy_seq_binding_alias_no_growth, 64) {
   const char *expr = "(heap (let [v (lazy-seq* (fn [] (list 1)))] v))";
@@ -1610,7 +1687,7 @@ TEST(test_runtime_stats_heap_let_lazy_seq_binding_alias_no_growth, 64) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 /* Target: 0 (raised to 64); TODO: find/fix LazySeq leak to lower again. */
 TEST(test_runtime_stats_heap_for_single_binding_lazy_seq_result_no_growth, 64) {
   const char *expr = "(heap (let [r (for [x (list 1)] x)] nil))";
@@ -1660,7 +1737,7 @@ TEST(test_runtime_stats_heap_for_single_binding_lazy_seq_result_no_growth, 64) {
 }
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if DEBUG && MEMORY_PROFILING_ENABLED
 /*
  * Regression test for (assoc var key val): after warmup, one eval must not grow heap.
  */

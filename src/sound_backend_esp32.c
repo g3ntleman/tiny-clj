@@ -1,8 +1,9 @@
 /*
- * Sound backend for ESP32: LEDC PWM output + esp_timer 1ms tick.
+ * Sound backend for ESP32: LEDC PWM output + on-demand esp_timer scheduling.
  *
  * Each voice gets its own LEDC timer (for independent frequency) and channel.
- * The 1ms tick is driven by esp_timer and runs on-demand (start/stop).
+ * Tick cadence follows VG_SOUND_TICK_MS, but the timer stays one-shot and only
+ * wakes when the engine reports a pending deadline.
  */
 
 #ifdef ESP32_BUILD
@@ -137,12 +138,15 @@ void sound_backend_init(int voice_count) {
     for (int i = 0; i < PWM_VOICE_CAP; i++) {
         sound_backend_reset_voice_cache(&g_pwm_voices[i]);
     }
+    atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
     atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
 }
 
 void sound_backend_shutdown(void) {
     sound_tick_stop();
     sound_backend_silence_pwm_voices();
+    atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
+    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
     if (g_sound_timer) {
         esp_timer_delete(g_sound_timer);
         g_sound_timer = NULL;

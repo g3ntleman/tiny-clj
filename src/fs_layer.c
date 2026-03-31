@@ -45,6 +45,8 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 static bool fs_is_valid_path(const char *path);
 static bool fs_is_dir_path(const char *path);
 static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32_t version, uint32_t chunk_idx);
+static bool fs_is_reserved_public_path_byte(uint8_t byte);
+static bool fs_key_is_internal_meta_sidecar(const void *key, size_t key_len);
 
 // Binary file metadata (16 bytes, no EDN parsing needed)
 #define FS_FILE_META_MAGIC 0x454C4946u /* 'F''I''L''E' */
@@ -288,6 +290,7 @@ static bool fs_list_dir_key_is_direct_child(const char* dir_path,
     if (!dir_path || !key || !out_kstr) return false;
     if (key_len == prefix_len) return false; // skip dir itself
     if (key_len <= prefix_len) return false;
+    if (fs_key_is_internal_meta_sidecar(key, key_len)) return false;
 
     // Keys are path strings; make a temporary NUL-terminated view.
     if (key_len >= FS_KEY_MAX) return false;
@@ -1096,7 +1099,24 @@ tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_
 tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
 {
     if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
-    tdb_status_t stc = tdb_kv_del(st->db, key, key_len);
+
+    FsKvMeta meta = {0};
+    int has_meta = 0;
+    tdb_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
+    if (stc == TDB_OK && has_meta && meta.version != 0u) {
+        uint8_t ckey[FS_KV_KEY_MAX + FS_KV_CHUNK_KEY_SUFFIX_MAX];
+        size_t ckey_len = 0;
+        for (uint32_t i = 0; i < meta.chunks; i++) {
+            stc = fs_kv_make_chunk_key_bytes(key, key_len, meta.version, i, ckey, sizeof(ckey), &ckey_len);
+            if (stc != TDB_OK) return stc;
+            stc = tdb_kv_del(st->db, ckey, ckey_len);
+            if (stc != TDB_OK && stc != TDB_ERR_NOT_FOUND) return stc;
+        }
+    } else if (stc != TDB_OK && stc != TDB_ERR_NOT_FOUND) {
+        return stc;
+    }
+
+    stc = tdb_kv_del(st->db, key, key_len);
     if (stc == TDB_OK) fs_kv_sync_mark_dirty(st);
     return stc;
 }
@@ -1107,7 +1127,15 @@ tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_
 
 static bool fs_is_valid_path(const char *path)
 {
-    return path && path[0] == '/';
+    if (!path || path[0] != '/') return false;
+
+    for (const uint8_t *cursor = (const uint8_t *)path; *cursor != '\0'; cursor++) {
+        if (fs_is_reserved_public_path_byte(*cursor)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static bool fs_is_dir_path(const char *path)
@@ -1115,6 +1143,46 @@ static bool fs_is_dir_path(const char *path)
     if (!path) return false;
     size_t n = strlen(path);
     return n > 0 && path[n - 1] == '/';
+}
+
+static bool fs_is_reserved_public_path_byte(uint8_t byte)
+{
+    return (byte < 0x20u) || (byte == 0x7fu);
+}
+
+static bool fs_key_is_internal_meta_sidecar(const void *key, size_t key_len)
+{
+    if (!key || key_len == 0u) {
+        return false;
+    }
+
+    const uint8_t *bytes = (const uint8_t *)key;
+    for (size_t i = 0; i < key_len; i++) {
+        if (bytes[i] == (uint8_t)FS_META_SIDECAR_MARKER) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+tdb_status_t fs_make_meta_sidecar_key(const char *path,
+                                      uint8_t *out,
+                                      size_t out_cap,
+                                      size_t *out_len)
+{
+    if (out_len) *out_len = 0u;
+    if (!path || !out || !out_len) return TDB_ERR_INVALID_ARG;
+    if (!fs_is_valid_path(path)) return TDB_ERR_INVALID_ARG;
+
+    size_t path_len = strlen(path);
+    if (path_len == 0u || path_len + 1u >= FS_KEY_MAX) return TDB_ERR_INVALID_ARG;
+    if (path_len + 1u > out_cap) return TDB_ERR_INVALID_ARG;
+
+    memcpy(out, path, path_len);
+    out[path_len] = (uint8_t)FS_META_SIDECAR_MARKER;
+    *out_len = path_len + 1u;
+    return TDB_OK;
 }
 
 // Binary metadata functions (no EDN parsing)

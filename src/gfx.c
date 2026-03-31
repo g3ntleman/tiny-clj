@@ -2,6 +2,33 @@
 
 #include <stdlib.h>
 
+typedef uint32_t GfxAliasU32 __attribute__((__may_alias__));
+
+static void gfx_fill_u16_span(uint16_t *pixels, size_t count, uint16_t color) {
+    if (!pixels || count == 0u) {
+        return;
+    }
+
+    uint16_t *cursor = pixels;
+    size_t remaining = count;
+    const uint32_t packed = (uint32_t)color | ((uint32_t)color << 16);
+
+    if ((((uintptr_t)cursor) & (sizeof(uint32_t) - 1u)) != 0u) {
+        *cursor++ = color;
+        remaining--;
+    }
+
+    GfxAliasU32 *word_cursor = (GfxAliasU32 *)(void *)cursor;
+    size_t word_count = remaining / 2u;
+    for (size_t i = 0; i < word_count; i++) {
+        word_cursor[i] = packed;
+    }
+
+    if ((remaining & 1u) != 0u) {
+        cursor[word_count * 2u] = color;
+    }
+}
+
 static bool gfx_clip_reject(const GfxClip *clip, int x, int y) {
     if (!clip || !clip->enabled) {
         return false;
@@ -61,24 +88,39 @@ static void gfx_put_pixel_aa_bg(VgFrameBuffer *fb,
 }
 
 void gfx_draw_fill_rect(VgFrameBuffer *fb, int x, int y, int w, int h, uint16_t color, const GfxClip *clip) {
-    if (w <= 0 || h <= 0) {
+    if (!fb || !fb->pixels || w <= 0 || h <= 0) {
         return;
     }
     int x0 = x;
     int y0 = y;
-    int x1 = x + w - 1;
-    int y1 = y + h - 1;
-    if (x1 < 0 || y1 < 0 || x0 >= fb->width || y0 >= fb->height) {
+    int x1 = x + w;
+    int y1 = y + h;
+    if (x1 <= 0 || y1 <= 0 || x0 >= fb->width || y0 >= fb->height) {
         return;
     }
     if (x0 < 0) x0 = 0;
     if (y0 < 0) y0 = 0;
-    if (x1 >= fb->width) x1 = fb->width - 1;
-    if (y1 >= fb->height) y1 = fb->height - 1;
-    for (int yy = y0; yy <= y1; yy++) {
-        for (int xx = x0; xx <= x1; xx++) {
-            gfx_put_pixel(fb, xx, yy, color, clip);
-        }
+    if (x1 > fb->width) x1 = fb->width;
+    if (y1 > fb->height) y1 = fb->height;
+    if (clip && clip->enabled) {
+        if (x0 < clip->x0) x0 = clip->x0;
+        if (y0 < clip->y0) y0 = clip->y0;
+        if (x1 > clip->x1) x1 = clip->x1;
+        if (y1 > clip->y1) y1 = clip->y1;
+    }
+    if (x0 >= x1 || y0 >= y1) {
+        return;
+    }
+    if (x0 == 0 && x1 == fb->width) {
+        size_t row_offset = (size_t)y0 * (size_t)fb->width;
+        size_t count = (size_t)(y1 - y0) * (size_t)fb->width;
+        gfx_fill_u16_span(&fb->pixels[row_offset], count, color);
+        return;
+    }
+    size_t span_width = (size_t)(x1 - x0);
+    for (int yy = y0; yy < y1; yy++) {
+        size_t row_offset = (size_t)yy * (size_t)fb->width + (size_t)x0;
+        gfx_fill_u16_span(&fb->pixels[row_offset], span_width, color);
     }
 }
 
@@ -102,6 +144,13 @@ void gfx_fill_polygon_scanline(VgFrameBuffer *fb,
     }
     if (min_y < 0) min_y = 0;
     if (max_y >= fb->height) max_y = fb->height - 1;
+    if (clip && clip->enabled) {
+        if (min_y < clip->y0) min_y = clip->y0;
+        if (max_y >= clip->y1) max_y = clip->y1 - 1;
+        if (min_y > max_y) {
+            return;
+        }
+    }
 
     int xints[GFX_FILL_MAX_VERTS];
     for (int y = min_y; y <= max_y; y++) {
@@ -138,21 +187,28 @@ void gfx_fill_polygon_scanline(VgFrameBuffer *fb,
             xints[k] = key;
         }
         for (size_t i = 0; i + 1 < nints; i += 2) {
-            int x0 = xints[i];
-            int x1 = xints[i + 1];
-            if (x1 < x0) {
-                int t = x0;
-                x0 = x1;
-                x1 = t;
+            int span_x0 = xints[i];
+            int span_x1 = xints[i + 1];
+            if (span_x1 < span_x0) {
+                int t = span_x0;
+                span_x0 = span_x1;
+                span_x1 = t;
             }
-            if (x1 < 0 || x0 >= fb->width) {
+            span_x1 += 1;
+            if (span_x1 <= 0 || span_x0 >= fb->width) {
                 continue;
             }
-            if (x0 < 0) x0 = 0;
-            if (x1 >= fb->width) x1 = fb->width - 1;
-            for (int xx = x0; xx <= x1; xx++) {
-                gfx_put_pixel(fb, xx, y, color, clip);
+            if (span_x0 < 0) span_x0 = 0;
+            if (span_x1 > fb->width) span_x1 = fb->width;
+            if (clip && clip->enabled) {
+                if (span_x0 < clip->x0) span_x0 = clip->x0;
+                if (span_x1 > clip->x1) span_x1 = clip->x1;
             }
+            if (span_x0 >= span_x1) {
+                continue;
+            }
+            size_t row_offset = (size_t)y * (size_t)fb->width + (size_t)span_x0;
+            gfx_fill_u16_span(&fb->pixels[row_offset], (size_t)(span_x1 - span_x0), color);
         }
     }
 }

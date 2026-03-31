@@ -33,6 +33,8 @@ void macos_fx_stop_runloop_watchdog(void) { g_macos_runloop_watchdog_stop_calls+
 #define main tinyclj_fx_host_app_test_main
 #include "../fx_host_app.c"
 #undef main
+#include "../builtins.h"
+#include "../meta.h"
 #include "../tiny_clj.h"
 #include "unity/src/unity.h"
 #include "test_registry.h"
@@ -317,6 +319,42 @@ TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
     TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "first breakout launch should not OOM under 640KB total heap budget" : "");
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should initialize before first-launch heap assertion");
     TEST_ASSERT_EQUAL_PTR(clj_true, launched);
+}
+
+TEST(test_breakout_runtime_startup_runtime_init_reuses_existing_builtins_under_tight_headroom) {
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    bool caught = false;
+    ID caught_ex = NULL;
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+
+    size_t baseline_usage = memory_current_usage_bytes();
+
+    TRY {
+        memory_set_heap_limit_bytes(baseline_usage + 4096u);
+        evalstate_ensure_builtins_ready();
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+
+    memory_set_heap_limit_bytes(previous_limit);
+
+    TEST_ASSERT_FALSE_MESSAGE(caught,
+                              caught_ex ? "runtime_init should not force builtin re-registration when bootstrap mappings already exist" : "");
+    TEST_ASSERT_TRUE_MESSAGE(g_runtime.builtins_registered,
+                             "runtime_init should preserve builtin-ready state when bootstrap mappings are already present");
 }
 
 TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {

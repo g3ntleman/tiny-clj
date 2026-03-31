@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <signal.h>
 #include <math.h>
 #include <ctype.h>
 #include "object.h"
@@ -68,6 +69,8 @@
 #endif
 #include "builtins_strings.h"
 #include "builtins_regex.h"
+
+extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
 
 // -----------------------------------------------------------------------------
 // Hot-path helpers
@@ -136,6 +139,8 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
+ID native_tinyclj_fs_meta_put(ID *args, unsigned int argc);
+ID native_tinyclj_fs_meta_get(ID *args, unsigned int argc);
 ID native_tinyclj_fs_read_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_write_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
@@ -4335,6 +4340,16 @@ static StaticSymbolData sym_tinyclj_fs_list_batch_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.fs/list-batch"}};
+static StaticSymbolData sym_tinyclj_fs_meta_put_qualified_data = {
+  .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+      .ns_name = NULL,
+      .unqualified = NULL,
+      .cname = "tiny-clj.fs/meta-put!"}};
+static StaticSymbolData sym_tinyclj_fs_meta_get_qualified_data = {
+  .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+      .ns_name = NULL,
+      .unqualified = NULL,
+      .cname = "tiny-clj.fs/meta-get"}};
 static StaticSymbolData sym_tinyclj_fs_read_block_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4548,6 +4563,8 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
     NATIVE_ENTRY(&sym_tinyclj_fs_list_batch_qualified_data.sym, native_tinyclj_fs_list_batch),
+    NATIVE_ENTRY(&sym_tinyclj_fs_meta_put_qualified_data.sym, native_tinyclj_fs_meta_put),
+    NATIVE_ENTRY(&sym_tinyclj_fs_meta_get_qualified_data.sym, native_tinyclj_fs_meta_get),
     NATIVE_ENTRY(&sym_tinyclj_fs_read_block_qualified_data.sym, native_tinyclj_fs_read_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_write_block_qualified_data.sym, native_tinyclj_fs_write_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_set_size_qualified_data.sym, native_tinyclj_fs_set_size),
@@ -5056,6 +5073,25 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
                                                 const char *src_name, EvalState *st);
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st);
 
+static inline bool eval_source_tracks_clojure_core_form(const char *src_name, const EvalState *st) {
+  if (src_name && strcmp(src_name, "/libs/clojure/core.clj") == 0) {
+    return true;
+  }
+  return st && st->current_ns && st->current_ns->name && st->current_ns->name->cname &&
+         strcmp(st->current_ns->name->cname, "clojure.core") == 0;
+}
+
+static inline void eval_source_update_clojure_core_form(const char *src_name,
+                                                        const EvalState *st,
+                                                        unsigned int form_index) {
+  if (!eval_source_tracks_clojure_core_form(src_name, st)) {
+    return;
+  }
+  if (&g_clojure_core_last_form) {
+    g_clojure_core_last_form = (sig_atomic_t)form_index;
+  }
+}
+
 // load-file: read and evaluate all forms in a file (Clojure standard function)
 // DRY: Uses eval_source_in_current_state for the actual evaluation
 ID native_load_file(ID *args, unsigned int argc) {
@@ -5101,22 +5137,21 @@ ID native_load_file(ID *args, unsigned int argc) {
 // ----------------------------------------------------------------------------
 // REQUIRE IMPLEMENTATION (Clojure-like namespace loader)
 // ----------------------------------------------------------------------------
-static char *namespace_to_relpath(const char *ns_name) {
-  if (!ns_name)
-    return NULL;
+static bool namespace_to_relpath(const char *ns_name, char *buf, size_t buf_size) {
+  if (!ns_name || !buf || buf_size == 0u)
+    return false;
+
   size_t len = strlen(ns_name);
-  // Worst case: all chars + possible slashes + ".clj" + NUL
-  char *buf = (char *)CLJ_MALLOC(len + 5);
+  if (len + 5u > buf_size) {
+    return false;
+  }
+
   for (size_t i = 0; i < len; i++) {
     char c = ns_name[i];
-    if (c == '.')
-      buf[i] = '/';
-    else
-      buf[i] = c; // keep hyphen so tiny-clj.runtime -> tiny-clj/runtime.clj
+    buf[i] = (c == '.') ? '/' : c;
   }
-  buf[len] = '\0';
-  strcat(buf, ".clj");
-  return buf;
+  memcpy(buf + len, ".clj", 5u);
+  return true;
 }
 
 static int require_trace_enabled(void) {
@@ -5195,6 +5230,7 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
     if (reader_is_eof(&reader))
       break;
     form_index++;
+    eval_source_update_clojure_core_form(src_name, st, form_index);
 
     // Save reader position before parsing to detect if we're stuck
     size_t pos_before = reader_offset(&reader);
@@ -5477,32 +5513,24 @@ static inline bool bootstrap_register_cname_allowed(const char *cname) {
   return strchr(cname, '/') == NULL;
 }
 
-bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
-  if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
+bool load_namespace_from_buffer(EvalState *st,
+                                const char *ns_name,
+                                const char *source_data,
+                                size_t source_len,
+                                const char *source_path) {
+  if (!st || !ns_name || !source_path || !source_data)
     return false;
-  ID held_bytes = RETAIN(bytes);
-  CljByteArray *source_bytes = as_byte_array((CljValue)held_bytes);
-  if (!source_bytes || source_bytes->length < 0 || !source_bytes->data) {
-    RELEASE(held_bytes);
-    return false;
-  }
-
-  const char *source_data = (const char *)source_bytes->data;
-  size_t source_len = (size_t)source_bytes->length;
 
   CljNamespace *orig_ns = st->current_ns;
   CljNamespace *orig_resolve_ns = st->resolve_ns;
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
   if (!target_ns) {
-    RELEASE(held_bytes);
     return false;
   }
   if (target_ns->loaded) {
-    RELEASE(held_bytes);
     return true;
   }
   if (target_ns->loading) {
-    RELEASE(held_bytes);
     return true;
   }
   target_ns->loading = true;
@@ -5531,11 +5559,30 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   ns_end_resolve_cache_batch();
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
-  RELEASE(held_bytes);
   pending_ex = AUTORELEASE(pending_ex);
   if (pending_ex) {
     THROW(pending_ex);
   }
+  return ok;
+}
+
+bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
+  if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
+    return false;
+
+  ID held_bytes = RETAIN(bytes);
+  CljByteArray *source_bytes = as_byte_array((CljValue)held_bytes);
+  if (!source_bytes || source_bytes->length < 0 || !source_bytes->data) {
+    RELEASE(held_bytes);
+    return false;
+  }
+
+  bool ok = load_namespace_from_buffer(st,
+                                       ns_name,
+                                       (const char *)source_bytes->data,
+                                       (size_t)source_bytes->length,
+                                       source_path);
+  RELEASE(held_bytes);
   return ok;
 }
 
@@ -5711,8 +5758,8 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   }
 
   // Convert namespace to relative path
-  char *rel = namespace_to_relpath(ns_name);
-  if (!rel) {
+  char rel[256] = {0};
+  if (!namespace_to_relpath(ns_name, rel, sizeof(rel))) {
     return false;
   }
 
@@ -5754,7 +5801,6 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   }
 
   if (TAG(bytes) != CLJ_BYTE_ARRAY) {
-    CLJ_FREE(rel);
     throw_exception(EXCEPTION_FILE_NOT_FOUND,
                     "Require: resolved resource is not a byte array (internal error)",
                     __FILE__, __LINE__, 0);
@@ -5762,7 +5808,6 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   }
   bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
   require_trace_log("load ns=%s ok=%d source=%s", ns_name, ok ? 1 : 0, source_path ? source_path : "<nil>");
-  CLJ_FREE(rel);
   if (!ok) {
     return false;
   }
@@ -7791,7 +7836,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
     MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_CURRENT, fixnum(fc)));
     MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_PEAK, fixnum(fp)));
 
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
 // Extended profiling stats (nested map with per-type breakdown)
 #define CLAMP_FIXNUM(val) ((val) > (size_t)FIXNUM_MAX ? (int32_t)FIXNUM_MAX : (int32_t)(val))
 

@@ -12,7 +12,7 @@
 
 // memory_profiler.h lives in subjective-c. Include when profiling is enabled
 // (and also in DEBUG for raw tracking).
-#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED
 #include "memory_profiler.h"
 // Functions are declared in memory_profiler.h, no need for no-op macros
 #else

@@ -52,6 +52,19 @@ static uint32_t g_resolve_cache_epoch_counter = 1;
 // Lightweight lifecycle generation for runtime_init activation epochs.
 static uint8_t g_resolve_cache_lifecycle_generation = 0;
 
+static bool runtime_bootstrap_builtins_present(void) {
+    if (!SYM_PLUS) {
+        return false;
+    }
+
+    CljNamespace *core_ns = ns_find("clojure.core");
+    if (!core_ns || !core_ns->mappings) {
+        return false;
+    }
+
+    return map_get_sentinel((ID)core_ns->mappings, (ID)SYM_PLUS, NULL) != NULL;
+}
+
 #if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_lifecycle_generation(void) {
     uint8_t next = (uint8_t)(g_resolve_cache_lifecycle_generation + 1u);
@@ -147,7 +160,6 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Timer queue is a static C array in event_loop.c – no heap init needed.
     
     // Reset primitive fields
-    runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
     
     // Register hashmap release function with memory system
@@ -175,6 +187,13 @@ void runtime_init(TinyClJRuntime *runtime) {
 
     // Initialize embedded source registry (static table + on-demand byte-array views).
     embedded_source_map_init();
+
+    // runtime_init() is allowed to run repeatedly on an already bootstrapped host
+    // process (for example inside unit tests that reuse the global runtime without a
+    // preceding runtime_reset()). In that case, keep builtin bootstrap marked ready
+    // so evalstate_ensure_builtins_ready() does not transiently re-register the full
+    // native table under an already-tight heap budget.
+    runtime->builtins_registered = runtime_bootstrap_builtins_present();
 }
 
 void runtime_reset(TinyClJRuntime *runtime) {
