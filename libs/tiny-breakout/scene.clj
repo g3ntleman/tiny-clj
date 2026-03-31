@@ -5,18 +5,22 @@
             [tiny-fx.gfx-scene :refer [->Group ->Rect ->Style ->VText normalize-spatial-rule]]))
 
 (defn paddle-prototype
+  "Returns reusable paddle prototype rectangle entity."
   []
   (->Rect :breakout/paddle nil nil true 0 0 40 4 nil))
 
 (defn ball-prototype
+  "Returns reusable ball prototype rectangle entity."
   []
   (->Rect :breakout/ball nil nil true 0 0 4 4 nil))
 
 (defn brick-prototype
+  "Returns reusable brick prototype rectangle entity."
   []
   (->Rect :breakout/brick nil nil true 0 0 20 10 nil))
 
 (defn concrete-spatial-rule
+  "Builds one normalized SpatialRule record for concrete entity ids."
   [rule-id self-id other-id]
   (record-from-map 'SpatialRule
                    (normalize-spatial-rule {:id rule-id
@@ -26,14 +30,17 @@
                                             :other other-id})))
 
 (defn paddle-rule
+  "Returns the canonical paddle collision rule."
   []
   (concrete-spatial-rule :ball-vs-paddle :ball :paddle))
 
 (defn- visible-brick-ids
+  "Returns brick ids for a visible brick map."
   [bricks]
   (keys bricks))
 
 (defn- number-or
+  "Returns numeric value v or fallback when v is not numeric."
   [v fallback]
   (if (number? v) v fallback))
 
@@ -53,19 +60,20 @@
 (defn overlay-text
   "Returns the shared centered overlay label for one breakout phase."
   [phase]
-  (cond
-    (= phase :game-over) "GAME OVER"
-    (= phase :victory) "YOU WIN!"
-    (= phase :pause) "PAUSED"
-    (= phase :title) "BREAKOUT"
-    (= phase :level-clear) "LEVEL CLEAR"
-    :else ""))
+  (case phase
+    :game-over "GAME OVER"
+    :victory "YOU WIN!"
+    :pause "PAUSED"
+    :title "BREAKOUT"
+    :level-clear "LEVEL CLEAR"
+    ""))
 
 (def ^:private overlay-char-advance
   {\space 5
    \! 4})
 
 (defn- overlay-text-width
+  "Computes overlay label width in breakout font pixels."
   [overlay]
   (reduce (fn [width ch]
             (+ width (get overlay-char-advance ch 10)))
@@ -86,12 +94,14 @@
 (def ^:private segment-end-event-id :tiny-breakout/segment-end)
 
 (defn- ease-in-stop-times
+  "Returns timeline stop offsets for overlay fade-in."
   []
   (mapv (fn [step]
           (quot (* ease-in-duration-ms step) ease-in-stop-count))
         (range 0 (+ ease-in-stop-count 1))))
 
 (defn- ease-in-gray-rgb565
+  "Converts one fade offset to grayscale RGB565 color."
   [offset-ms]
   (let [gray (+ ease-in-dark-gray
                 (quot (* (- ease-in-light-gray ease-in-dark-gray) offset-ms)
@@ -117,6 +127,7 @@
               (rest stops)))))
 
 (defn overlay-style
+  "Builds overlay text style and optional fade timeline."
   [state overlay]
   (if (= overlay "")
     nil
@@ -130,6 +141,7 @@
       (->Style stroke-color nil true false nil false nil))))
 
 (defn brick->entity
+  "Converts one brick map entry into a renderable rectangle entity."
   [brick prototype]
   (->Rect (:id brick)
           nil
@@ -142,6 +154,7 @@
           prototype))
 
 (defn maybe-field-timeline
+  "Wraps a field in a timeline when motion metadata is present."
   [motion from-value axis-key end-event]
   (if (and (map? motion)
            (number? (:start-ms motion))
@@ -158,6 +171,7 @@
     from-value))
 
 (defn attached-ball-motion
+  "Builds attached-ball timeline while paddle moves in serve/title."
   [state]
   (let [phase (get state :phase)
         motion (get state :paddle-motion)
@@ -175,20 +189,21 @@
       nil)))
 
 (defn visible-bricks
+  "Returns the brick map currently visible for rendering."
   [state]
   (let [active-bricks (levels/normalize-bricks (get state :bricks))
         levels (get state :levels)
-        level-index (get state :level-index)
+        level-no (get state :level-no)
         phase (get state :phase)]
     (cond
       (not (empty? active-bricks))
       active-bricks
       (and (vector? levels)
-           (number? level-index)
-           (<= 0 level-index)
-           (< level-index (count levels))
+           (number? level-no)
+           (<= 0 level-no)
+           (< level-no (count levels))
            (not= phase :title))
-      (levels/level-bricks (nth levels level-index))
+      (levels/level-bricks (nth levels level-no))
       :else {})))
 
 (defn build-scene

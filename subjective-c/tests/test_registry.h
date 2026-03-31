@@ -45,7 +45,7 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path);
 bool subjective_c_test_name_matches_pattern(const char *name, const char *pattern);
 
 #ifndef SUBJECTIVE_C_TEST_MAX
-#define SUBJECTIVE_C_TEST_MAX 2048  // Increased for tiny-clj (has many tests)
+#define SUBJECTIVE_C_TEST_MAX 4096  // Allows full tiny-clj + startup/panel test registration.
 #endif
 
 // Always use WITH_AUTORELEASE_POOL for tests (it's defined in memory.h)

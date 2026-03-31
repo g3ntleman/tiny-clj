@@ -665,6 +665,7 @@ add_executable(unit-tests
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     src/tests/test_sweep_aabb.c
     src/tests/test_breakout_contract.c
+    src/tests/test_breakout_runtime_startup.c
     src/tests/test_assets_edn.c
     src/tests/test_breakout_namespace_contract.c
     src/tests/test_double_run.c
@@ -679,17 +680,19 @@ add_executable(unit-tests
     src/tests/test_macro_alias_regression.c
     src/tests/test_macro_ns_asset_regression.c
     src/tests/test_main_entry.c
-    # src/tests/test_panel_api.c  # Requires ESP-LCD symbols
-    # src/tests/test_panel_esp32_architecture_contract.c  # ESP32-specific
+    src/tests/test_panel_api.c
+    src/tests/test_panel_esp32_architecture_contract.c
     src/tests/test_records.c
     src/tests/test_runner_patterns.c
     src/tests/test_vector_scene_graph.c
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)
+    src/panel_esp_lcd.c
     src/repl.c
     src/platform_macos.c
     src/line_editor.c
+    src/tiny_fx_macos_app.m
 )
 target_compile_definitions(unit-tests PRIVATE
     DEBUG
@@ -703,6 +706,8 @@ target_compile_definitions(unit-tests PRIVATE
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
 if(APPLE)
+    tinyclj_ensure_minifb_target()
+    target_link_libraries(unit-tests PRIVATE minifb "-framework AppKit" "-framework ApplicationServices" "-framework CoreGraphics")
     target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
     target_link_libraries(unit-tests PRIVATE "-framework CoreAudio" "-framework AudioUnit")
     target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")

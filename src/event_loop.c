@@ -6,12 +6,12 @@
 #include "exception.h"
 #include "channel.h"
 #include "types.h"
-#include "function.h"
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
 #include "strings.h"
 #include "record.h"
+#include "to_string.h"
 #include "value.h"
 #include "gpio.h"
 #include "mini_format.h"
@@ -44,6 +44,7 @@ static ID KW_EVENT_PHASE;
 static ID KW_EVENT_SELF;
 static ID KW_EVENT_OTHER;
 static ID KW_SOURCE_SPATIAL;
+static ID KW_SOURCE_BUTTON;
 static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
     {&KW_FN, ":fn"},
     {&KW_RESULT_CHAN, ":result-chan"},
@@ -57,6 +58,7 @@ static const IdSymbolCacheEntry g_event_loop_kw_cache[] = {
     {&KW_EVENT_SELF, ":self"},
     {&KW_EVENT_OTHER, ":other"},
     {&KW_SOURCE_SPATIAL, ":spatial"},
+    {&KW_SOURCE_BUTTON, ":button"},
 };
 
 typedef struct {
@@ -260,30 +262,6 @@ static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
     g_runloop_last_warn_ns = end_ns;
 }
 
-static void event_loop_append_symbol_name(char *buffer,
-                                          size_t buffer_size,
-                                          CljSymbol *sym) {
-    if (!buffer || buffer_size == 0u) {
-        return;
-    }
-
-    buffer[0] = '\0';
-    if (!sym || !sym->cname) {
-        (void)format_append(buffer, 0u, buffer_size, "<symbol>");
-        return;
-    }
-
-    size_t pos = 0u;
-    if (sym->ns_name) {
-        const char *ns_name = symbol_get_namespace_name(sym);
-        if (ns_name && ns_name[0] != '\0') {
-            pos = format_append(buffer, pos, buffer_size, ns_name);
-            pos = format_append_char(buffer, pos, buffer_size, '/');
-        }
-    }
-    (void)format_append(buffer, pos, buffer_size, sym->cname);
-}
-
 static void event_loop_log_value_to_buffer(ID value, char *buffer, size_t buffer_size) {
     if (!buffer || buffer_size == 0u) {
         return;
@@ -308,39 +286,13 @@ static void event_loop_log_value_to_buffer(ID value, char *buffer, size_t buffer
         return;
     }
 
-    CljType tag = TAG(value);
-    switch (tag) {
-        case CLJ_SYMBOL: {
-            event_loop_append_symbol_name(buffer, buffer_size, (CljSymbol *)value);
-            return;
-        }
-        case CLJ_STRING:
-            (void)mini_snprintf(buffer, buffer_size, "%s", string_data(value));
-            return;
-        case CLJ_FUNC: {
-            CljCFunc *native = (CljCFunc *)value;
-            char name_buf[96] = {0};
-            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
-                                          native ? native->name_sym : NULL);
-            size_t pos = format_append(buffer, 0u, buffer_size, "#<native-fn ");
-            pos = format_append(buffer, pos, buffer_size, name_buf);
-            (void)format_append_char(buffer, pos, buffer_size, '>');
-            return;
-        }
-        case CLJ_CLOSURE: {
-            CljFunction *closure = (CljFunction *)value;
-            char name_buf[96] = {0};
-            event_loop_append_symbol_name(name_buf, sizeof(name_buf),
-                                          closure ? closure->name_sym : NULL);
-            size_t pos = format_append(buffer, 0u, buffer_size, "#<closure ");
-            pos = format_append(buffer, pos, buffer_size, name_buf);
-            (void)format_append_char(buffer, pos, buffer_size, '>');
-            return;
-        }
-        default:
-            (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(tag));
-            return;
+    CljString *rendered = to_string(value);
+    if (rendered) {
+        (void)mini_snprintf(buffer, buffer_size, "%s", string_data((ID)rendered));
+        return;
     }
+
+    (void)mini_snprintf(buffer, buffer_size, "<%s>", clj_type_name(TAG(value)));
 }
 
 static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
@@ -472,12 +424,40 @@ static bool event_loop_extract_spatial_event_identity(ID payload,
     return true;
 }
 
+static bool event_loop_extract_button_event_identity(ID payload, ID *out_id, ID *out_kind) {
+    if (out_id) *out_id = NULL;
+    if (out_kind) *out_kind = NULL;
+    if (!payload || !KW_EVENT_SOURCE || !KW_SOURCE_BUTTON || !KW_EVENT_ID || !KW_EVENT_KIND) {
+        return false;
+    }
+
+    ID source = event_loop_value_get_sentinel(payload, KW_EVENT_SOURCE, NOT_FOUND);
+    if (source == NOT_FOUND || !source || !event_loop_value_equals(source, KW_SOURCE_BUTTON)) {
+        return false;
+    }
+
+    ID event_id = event_loop_value_get_sentinel(payload, KW_EVENT_ID, NOT_FOUND);
+    ID kind = event_loop_value_get_sentinel(payload, KW_EVENT_KIND, NOT_FOUND);
+    if (event_id == NOT_FOUND || kind == NOT_FOUND || !event_id || !kind) {
+        return false;
+    }
+
+    if (out_id) *out_id = event_id;
+    if (out_kind) *out_kind = kind;
+    return true;
+}
+
 static bool event_loop_payload_supports_coalescing(ID payload) {
     ID event_id = NULL;
     ID phase = NULL;
     ID self = NULL;
     ID other = NULL;
     if (event_loop_extract_spatial_event_identity(payload, &event_id, &phase, &self, &other)) {
+        return true;
+    }
+    ID button_id = NULL;
+    ID button_kind = NULL;
+    if (event_loop_extract_button_event_identity(payload, &button_id, &button_kind)) {
         return true;
     }
     ID kind = NULL;
@@ -509,6 +489,19 @@ static bool event_loop_payload_matches_coalescing_key(ID queued_payload, ID cand
                event_loop_value_equals(queued_phase, candidate_phase) &&
                event_loop_value_equals(queued_self, candidate_self) &&
                event_loop_value_equals(queued_other, candidate_other);
+    }
+
+    ID queued_button_id = NULL;
+    ID queued_button_kind = NULL;
+    ID candidate_button_id = NULL;
+    ID candidate_button_kind = NULL;
+    bool queued_button =
+        event_loop_extract_button_event_identity(queued_payload, &queued_button_id, &queued_button_kind);
+    bool candidate_button =
+        event_loop_extract_button_event_identity(candidate_payload, &candidate_button_id, &candidate_button_kind);
+    if (queued_button && candidate_button) {
+        return event_loop_value_equals(queued_button_id, candidate_button_id) &&
+               event_loop_value_equals(queued_button_kind, candidate_button_kind);
     }
 
     ID queued_kind = NULL;

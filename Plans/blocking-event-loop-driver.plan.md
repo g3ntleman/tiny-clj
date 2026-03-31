@@ -23,6 +23,18 @@ todos:
   - id: breakout-practice-proof
     content: Praxis-Beweis erbringen, dass Breakout im neuen blockierenden Runloop läuft (Renderthread + Interpreterthread), inklusive reproduzierbarem Test-Nachweis
     status: completed
+  - id: esp32-gpio-without-render-thread
+    content: Sicherstellen und nachweisen, dass GPIO-Events auf ESP32 auch ohne Render-Thread und ohne zeitgesteuertes `run_next`-Polling in den Clojure-Event-Loop gelangen
+    status: completed
+  - id: esp32-strict-blocking-driver
+    content: ESP32-Interpreterpfad auf einen strikt blockierenden Event-Loop-Driver umstellen (kein Polling-Fallback)
+    status: completed
+  - id: esp32-isr-wake-bridge
+    content: ISR-zu-Runloop-Wakeup-Brücke ergänzen, damit GPIO-Drain den blockierenden Driver aktiv aufweckt
+    status: completed
+  - id: maximize-shared-host-esp32-code
+    content: Gemeinsamen Runloop-/Wake-Code zwischen macOS-Host und ESP32 maximieren; Plattformcode auf dünne Adapter begrenzen
+    status: completed
   - id: cleanup
     content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
     status: completed
@@ -46,6 +58,33 @@ isProject: false
 - Plan-/Gate-Commit (Planaufbau und Test-Gates): `ba022493`
 - Vollständiger Testnachweis nach Umsetzung: `./build/unit-tests-prof` mit `1974 Tests, 0 Failures, 7 Ignored`.
 - Praxis-Beweis-Testnachweis: `./build/unit-tests-prof --test "test_event_loop_latency/event_loop_run_blocking_thread_processes_breakout_input_ingress"` mit `1 Tests, 0 Failures`.
+- ISR-Wakeup-Brücke umgesetzt: GPIO-ISR signalisiert jetzt zusätzlich `event_loop_wake()`; Event-Loop-Waitpfad verwendet auf ESP32 Task-Notifications (ISR-sicher), auf Host weiterhin pthread condvar.
+- Nachweis nach ISR-Wakeup-Schritt:
+  - `./build/unit-tests-prof --test "test_gpio_architecture_contract/*"` -> `13 Tests, 0 Failures`
+  - `./build/unit-tests-prof --test "test_event_loop_latency/*"` -> `28 Tests, 0 Failures`
+  - `./build/unit-tests-prof` -> `1974 Tests, 0 Failures, 7 Ignored`
+- ESP32-REPL-Wartepfad auf blockierendes `event_loop_run(...)` umgestellt; Polling über `repl_process_event_loop` + `platform_sleep_ms(...)` entfernt.
+- UART-RX-Wakeup-Brücke ergänzt (UART-Event-Queue + Wake-Task), damit eingehende Konsoleingaben einen blockierenden Runloop ohne Polling aufwecken können.
+- Nachweis nach Schritt `esp32-strict-blocking-driver`:
+  - `./build/unit-tests-prof --test "test_gpio_architecture_contract/*"` -> `15 Tests, 0 Failures`
+  - `./build/unit-tests-prof --test "test_event_loop_latency/*"` -> `28 Tests, 0 Failures`
+  - `./build/unit-tests-prof --test "test_timer/run_next_task_breakout_renderer_loop_regression"` -> `1 Tests, 0 Failures`
+  - `./build/unit-tests-prof` -> `1976 Tests, 0 Failures, 7 Ignored`
+- Nachweis nach Schritt `esp32-gpio-without-render-thread`:
+  - Zusätzlicher Architekturtest: `gpio_architecture_esp32_gpio_ingress_path_is_renderer_independent`
+  - `./build/unit-tests-prof --test "test_gpio_architecture_contract/*"` -> `16 Tests, 0 Failures`
+  - `./build/unit-tests-prof --test "test_event_loop_latency/*"` -> `28 Tests, 0 Failures`
+  - `./build/unit-tests-prof` -> `1977 Tests, 0 Failures, 7 Ignored`
+- Nachweis nach Schritt `maximize-shared-host-esp32-code`:
+  - Zusätzliche Architekturtests:
+    - `gpio_architecture_host_and_esp32_share_blocking_runloop_driver_callsite`
+    - `gpio_architecture_esp32_adapter_wakes_shared_runloop_without_private_driver_logic`
+  - `./build/unit-tests-prof --test "test_gpio_architecture_contract/*"` -> `18 Tests, 0 Failures`
+  - `./build/unit-tests-prof --test "test_event_loop_latency/*"` -> `28 Tests, 0 Failures`
+  - `./build/unit-tests-prof` -> `1979 Tests, 0 Failures, 7 Ignored`
+- Nachweis nach Cleanup:
+  - Include-Cleanup im ESP32-Runloop-Pfad (nur benötigte Header, Tiny-FX-Header bedingt eingebunden).
+  - `./build/unit-tests-prof` -> `1979 Tests, 0 Failures, 7 Ignored`
 
 ## Qualitäts-Gate pro Schritt (verpflichtend)
 
@@ -54,11 +93,20 @@ isProject: false
 - Bei roten Tests: erst Fix, dann erneut `./build/unit-tests`, bis alles grün ist.
 - Es gibt kein Teilmengen-Gate: maßgeblich ist immer der vollständige Unit-Test-Lauf.
 
+## Leitprinzip: Shared Code Host/ESP32
+
+- `src/event_loop.c` bleibt der zentrale gemeinsame Event-Loop-Kern (Single Source of Truth).
+- Host und ESP32 sollen denselben blockierenden Driver (`event_loop_run`) und dieselbe Wake-Semantik verwenden.
+- Plattformspezifika (z. B. ISR-Signalquelle, Konsole/Display-I/O) werden in kleine Adapter gekapselt, ohne zweite Driver- oder Wait-Implementierung.
+- Neue ESP32-Änderungen müssen aktiv auf Code-Duplikation gegen Host geprüft werden.
+
 ## Relevante Stellen
 
 - API-Vertrag von `run_next`: [`/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.h`](/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.h)
 - Aktuelle Tick-Logik und Ingress-Drain: [`/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.c`](/Users/theisen/Projects/Work/tiny-clj-feature/src/event_loop.c)
 - Host-Interpreter-Loop (heute mit 1ms Polling): [`/Users/theisen/Projects/Work/tiny-clj-feature/src/fx_host_runloop.c`](/Users/theisen/Projects/Work/tiny-clj-feature/src/fx_host_runloop.c)
+- ESP32-Einstieg/Loop: [`/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/tinyclj_idf_run.c`](/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/tinyclj_idf_run.c)
+- ESP32 Yield-Runloop-Hook: [`/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/tinyclj_idf_main.c`](/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/tinyclj_idf_main.c)
 - Clojure-API-Vertrag `run-next-task`: [`/Users/theisen/Projects/Work/tiny-clj-feature/libs/clojure/core.clj`](/Users/theisen/Projects/Work/tiny-clj-feature/libs/clojure/core.clj)
 - Regression/Vertrags-Tests fuer non-blocking `run-next-task`: [`/Users/theisen/Projects/Work/tiny-clj-feature/src/tests/test_go_blocks.c`](/Users/theisen/Projects/Work/tiny-clj-feature/src/tests/test_go_blocks.c)
 
@@ -112,13 +160,42 @@ isProject: false
    - Debug-Reste, temporäre Workarounds und tote Codepfade entfernen.
    - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` ist grün.
 
+10. **ESP32 GPIO ohne Render-Thread und ohne Polling (neu, Pflicht)**
+   - Verbindlich sicherstellen: GPIO-Watcher auf ESP32 funktionieren ohne aktiven Render-Thread und ohne zeitgesteuertes `run_next`-Polling.
+   - Zielpfad: ISR/Ringbuffer -> `gpio_esp32_poll_drain` -> `event_loop_enqueue_ingress_call` -> Clojure-Callback im Event-Loop.
+   - `esp32-idf/main/tinyclj_idf_run.c`: GPIO-Zustellung darf nicht davon abhängen, dass eine Schleife regelmäßig `repl_process_event_loop` + `platform_sleep_ms(...)` taktet.
+   - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
+
+11. **ESP32 strikt blockierenden Driver einführen (kein Polling-Fallback)**
+   - ESP32-Interpreterpfad auf den bereits gemeinsamen blockierenden Driver `event_loop_run(...)` umstellen (gleicher Kern wie Host).
+   - Keine zweite Event-Loop-Driver-Implementierung in `esp32-idf/` aufbauen.
+   - Kein periodischer Fallback-Poller für `event_loop_run_next` im Idle.
+   - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
+
+12. **ISR-Wakeup-Brücke für den gemeinsamen blockierenden Driver**
+   - ISR-seitig weiterhin keine direkte Clojure-Enqueue-Logik; nur lock-freies Signalisieren.
+   - Zusätzlich muss die ISR-/Drain-Bridge den gemeinsamen blockierenden Event-Loop zuverlässig aufwecken, damit der Drain ohne Poller startet.
+   - Wake-Logik nicht als ESP32-Sonder-Driver duplizieren, sondern über gemeinsame Event-Loop-API + dünnen Plattform-Adapter anbinden.
+   - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
+
+13. **Nachweise für „ohne Polling“**
+   - Architektur-/Contract-Test: Kein direkter Enqueue aus ISR; keine implizite Abhängigkeit von zeitgesteuertem `run_next`-Polling für GPIO-Zustellung.
+   - Architektur-/Contract-Test: ESP32-Pfad nutzt den gemeinsamen Driver (`event_loop_run`) statt eigener Poll-Driver-Logik.
+   - Regressionstest: GPIO-Flanke wird unter blockierendem Driver zugestellt, auch wenn kein Poller aktiv ist.
+   - Code-Duplikations-Check: keine neue parallele Runloop-/Wake-Implementierung zwischen Host und ESP32.
+   - Zusätzlich (wenn Hardware verfügbar) kurzer ESP32-Smoke-Test ohne gestarteten Renderer und ohne Polling-Helfer.
+   - Test-Gate: kompletter Unit-Test-Lauf `./build/unit-tests` muss grün sein.
+
 ## Risiken / Checks
 
 - Keine Breaking-Change fuer `run-next-task`-Call-Sites.
 - Kein Lost-Wakeup zwischen Queue-Update und Wait.
 - Timer-Deadline-Berechnung bleibt korrekt bei parallelen Producer-Aktionen.
+- Keine unkontrollierte Host/ESP32-Runloop-Code-Duplikation.
 
 ## Abschlusskriterium
 
 - Der Plan gilt erst als erfüllt, wenn der Praxis-Beweis zeigt, dass Breakout mit aktivem Renderthread unter dem neuen blockierenden Runloop korrekt läuft und der vollständige Unit-Test-Lauf grün ist.
+- Zusätzlich muss der ESP32-Nachweis erbracht sein, dass GPIO-Ereignisse auch ohne Render-Thread und ohne zeitgesteuertes `run_next`-Polling zuverlässig im Clojure-Event-Loop ankommen.
+- Zusätzlich muss nachgewiesen sein, dass Host und ESP32 dafür denselben Runloop-/Wake-Kern verwenden und Plattformcode nur als Adapter ausgeführt ist.
 

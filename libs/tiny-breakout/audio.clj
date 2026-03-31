@@ -55,30 +55,20 @@
    {:track-id :tiny-breakout/wall-hit
     :track-bytes wall-hit-track-bytes}})
 
-(defn- event->cue
-  [event-id]
-  (cond
-    (= event-id :paddle-hit) :sfx/paddle-hit
-    (= event-id :brick-hit) :sfx/brick-hit
-    (= event-id :life-lost) :sfx/life-lost
-    (= event-id :level-clear) :sfx/level-clear
-    (= event-id :game-over) :sfx/game-over
-    (= event-id :victory) :sfx/victory
-    (= event-id :wall-hit) :sfx/wall-hit
-    :else nil))
-
 (defn events->cues
-  "Maps gameplay event ids to breakout cue ids and drops unknown events."
+  "Filters cue ids and drops unknown entries."
   [events]
   (loop [remaining (seq events)
          out []]
     (if (seq remaining)
-      (let [cue (event->cue (first remaining))]
+      (let [cue-id (first remaining)
+            cue (if (contains? cue-specs cue-id) cue-id nil)]
         (recur (next remaining)
                (if cue (conj out cue) out)))
       out)))
 
 (defn- play-cue!
+  "Best-effort playback of one breakout cue through tiny-fx sound backend."
   [cue-id]
   (let [spec (get tiny-breakout.audio/cue-specs cue-id)]
     (when (map? spec)
@@ -102,11 +92,12 @@
   nil)
 
 (defn play-events!
-  "Plays all known breakout cue events as one-shot SFX."
+  "Plays all known breakout cue ids as one-shot SFX."
   [events]
   (loop [remaining (seq events)]
     (when (seq remaining)
-      (let [cue (event->cue (first remaining))]
+      (let [cue-id (first remaining)
+            cue (if (contains? cue-specs cue-id) cue-id nil)]
         (when cue (play-cue! cue))
         (recur (next remaining)))))
   nil)

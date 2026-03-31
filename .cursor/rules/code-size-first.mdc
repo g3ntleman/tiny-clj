@@ -1,0 +1,12 @@
+# Code Size First
+
+Treat small production code size as a primary project goal.
+
+## Rules
+
+1. Prefer solutions that reduce total production LOC and binary size.
+2. For cleanup/refactor tasks, target net-negative production code changes.
+3. Do not add new subsystems or large helper layers during cleanup unless explicitly requested.
+4. Remove dead code, duplicate modules, wrappers, and compatibility shims before adding new logic.
+5. If a proposed cleanup increases production code size, stop and choose a smaller approach.
+6. Keep hot paths minimal: avoid extra allocations and avoid expensive operations in frequently executed paths.

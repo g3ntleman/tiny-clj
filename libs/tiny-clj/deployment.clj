@@ -11,6 +11,6 @@
      :auto-launch-callback (fn [& _args]
                              (breakout-runtime/apply-input! {:launch true})
                              nil)
-     :spatial-callback breakout-runtime/on-spatial-event!
+     :spatial-callback breakout-runtime/on-game-collision-event!
      :game-scene-atom scene-atom
      :entry :tiny-breakout}))

@@ -7,6 +7,7 @@
 #include "../fx_host_runloop.h"
 #include "../function.h"
 #include <pthread.h>
+#include <stdio.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -53,6 +54,73 @@ static void *event_loop_run_wake_thread(void *arg) {
     usleep(args->delay_us);
     event_loop_wake();
     return NULL;
+}
+
+typedef bool (*EventLoopStdoutCaptureAction)(void *ctx);
+
+static char *event_loop_capture_stdout(EventLoopStdoutCaptureAction action, void *ctx) {
+    if (!action) {
+        return NULL;
+    }
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+    int stdout_fd = fileno(stdout);
+    int saved_stdout = dup(stdout_fd);
+    if (saved_stdout < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    fflush(stdout);
+    if (dup2(fileno(tmp), stdout_fd) < 0) {
+        close(saved_stdout);
+        fclose(tmp);
+        return NULL;
+    }
+
+    (void)action(ctx);
+
+    fflush(stdout);
+    (void)dup2(saved_stdout, stdout_fd);
+    close(saved_stdout);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    long size = ftell(tmp);
+    if (size < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    char *buf = (char *)CLJ_MALLOC((size_t)size + 1u);
+    if (!buf) {
+        fclose(tmp);
+        return NULL;
+    }
+    size_t read_n = fread(buf, 1u, (size_t)size, tmp);
+    buf[read_n] = '\0';
+    fclose(tmp);
+    return buf;
+}
+
+typedef struct {
+    EvalState *st;
+    bool ran;
+} EventLoopDrainCaptureCtx;
+
+static bool event_loop_capture_drain_one(void *ctx) {
+    EventLoopDrainCaptureCtx *capture = (EventLoopDrainCaptureCtx *)ctx;
+    if (!capture || !capture->st) {
+        return false;
+    }
+    capture->ran = event_loop_run_next(NULL, capture->st);
+    return capture->ran;
 }
 
 TEST(test_event_loop_time_until_next_timer_no_timer_returns_minus_one) {
@@ -124,6 +192,38 @@ TEST(test_event_loop_run_next_slow_task_warning_keeps_task_objects_alive_and_bou
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024,
                                           (int)diff,
                                           "slow-task warning path should not retain task objects or rendered log strings");
+}
+
+TEST(test_event_loop_run_next_slow_task_warning_includes_named_closure_symbol) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (defn event-loop-latency-slow-handler [event] "
+        "    (sleep 25) "
+        "    nil) "
+        "  event-loop-latency-slow-handler)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_CLOSURE || TAG(fn) == CLJ_FUNC);
+
+    ID payload = eval_string("{:id :slow-runloop-event}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload),
+                             "enqueue for slow warning test should succeed");
+
+    EventLoopDrainCaptureCtx capture = {.st = g_test_eval_state, .ran = false};
+    char *stdout_output = event_loop_capture_stdout(event_loop_capture_drain_one, &capture);
+    TEST_ASSERT_NOT_NULL_MESSAGE(stdout_output, "failed to capture stdout for runloop warning");
+    TEST_ASSERT_TRUE_MESSAGE(capture.ran, "run_next should execute the queued slow closure");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[viewer-runloop] warning: clojure runloop event took"),
+                                 "expected slow runloop warning on stdout");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "event-loop-latency-slow-handler"),
+                                 "expected warning to include the closure function name");
+    TEST_ASSERT_NULL_MESSAGE(strstr(stdout_output, "<symbol>"),
+                             "expected warning to avoid opaque <symbol> callable names");
+    CLJ_FREE(stdout_output);
 }
 
 TEST(test_event_loop_time_until_next_timer_does_not_consume_timer_entry) {
@@ -827,6 +927,45 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_spatial_events_for_different
     ID marker_ok = eval_string(
         "(= @event-loop-ingress-spatial-other-marker "
         "   [[:ball-vs-brick :enter 1003 2001] [:ball-vs-brick :enter 1003 2002]])",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
+TEST(test_event_loop_ingress_call_coalesces_duplicate_button_identity_without_key) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-button-coalesce-marker (atom [])) "
+        "  (fn event-loop-ingress-button-coalesce-task [event] "
+        "    (swap! event-loop-ingress-button-coalesce-marker "
+        "           conj [(:source event) (:id event) (:kind event)]) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    ID payload_a = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0}",
+                               g_test_eval_state);
+    ID payload_b = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0}",
+                               g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first button ingress should enqueue");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "duplicate button identity should coalesce");
+
+    EventLoopIngressStats stats = {0};
+    TEST_ASSERT_TRUE(event_loop_ingress_stats(&stats));
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.accepted_count);
+    TEST_ASSERT_EQUAL_UINT32(1u, stats.pending_count);
+
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
+
+    ID marker_ok = eval_string(
+        "(= @event-loop-ingress-button-coalesce-marker [[:button :left :button/down]])",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }

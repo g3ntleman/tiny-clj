@@ -7,6 +7,7 @@
 #include <stdatomic.h>
 #include <time.h>
 #include <sched.h>
+#include <errno.h>
 #if defined(__APPLE__)
 #include <pthread/qos.h>
 #include <mach/mach_time.h>
@@ -956,7 +957,22 @@ static void *fx_render_thread_main(void *arg) {
         uint64_t frame_skipped_total = 0u;
         VgClipRect frame_dirty_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
         size_t frame_dirty_rect_count = 0u;
-        if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
+        int publish_lock_rc = pthread_mutex_trylock(&g_render_thread.mutex);
+#ifdef DEBUG
+        if (publish_lock_rc != 0) {
+            /*
+             * Render thread must never block on publish lock. Busy is expected
+             * under contention; other errors indicate a threading bug.
+             */
+            CLJ_ASSERT(publish_lock_rc == EBUSY);
+        }
+#endif
+        if (publish_lock_rc != 0) {
+            /*
+             * Keep render progress independent from interpreter/main-thread
+             * publish work. If the publish lock is busy, skip this cycle.
+             */
+            sched_yield();
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
