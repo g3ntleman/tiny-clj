@@ -3,19 +3,19 @@
   (:require [tiny-fx.sound :as sound]))
 
 ^#^{:doc "DEBUG-only sound host diagnostics map. Not part of the production sound API."}
-(def host-status! (fn host-status! [] :native))
+(defn host-status! [] :native)
 
 ^#^{:doc "DEBUG-only one-shot test tone helper. Not part of the production sound API."}
-(def play-test-tone! (fn play-test-tone! [& args] :native))
+(defn play-test-tone! [& args] :native)
 
 ^#^{:doc "DEBUG-only host pseudo-noise helper. Not part of the production sound API."}
-(def play-test-noise! (fn play-test-noise! [& args] :native))
+(defn play-test-noise! [& args] :native)
 
 ^#^{:doc "DEBUG-only host linear frequency ramp helper. Example: (play-test-ramp! 220 320 3000 220)."}
-(def play-test-ramp! (fn play-test-ramp! [& args] :native))
+(defn play-test-ramp! [& args] :native)
 
 ^#^{:doc "DEBUG-only host ramp-noise helper for thruster-like sweeps. Example: (play-test-ramp-noise! 220 300 3000 3 220)."}
-(def play-test-ramp-noise! (fn play-test-ramp-noise! [& args] :native))
+(defn play-test-ramp-noise! [& args] :native)
 
 ^#^{:doc "DEBUG-only musical portamento reference built on the host ramp helper."}
 (defn play-portamento-reference! []
@@ -36,7 +36,10 @@
 
 ^#^{:doc "DEBUG-only thrust demo using the regular DSL/SFX path instead of host-only play-test-noise!."}
 (defn play-thrust-demo! []
-  (sound/play-sfx! thrust-demo-track-id thrust-demo-steps thrust-demo-opts))
+  (require 'tiny-fx.trk1)
+  (let [prepared ((var tiny-fx.trk1/prepare-track) thrust-demo-steps thrust-demo-opts)]
+    {:status (if (sound/sound-play-sfx! thrust-demo-track-id (:track-bytes prepared)) :playing :dropped)
+     :duration-ms (:duration-ms prepared)}))
 
 ^#^{:doc "DEBUG-only piu demo: short up-ramp then down-ramp ending low (host bending). Not for production."}
 (defn play-piu-demo! []

@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 #include "vector_scene_graph.h"
-#include "viewer_collision.h"
+#include "fx_collision.h"
 
 #if defined(ESP32_BUILD)
 #define VG_RENDERED_STATE_MAX_SLOTS 3u
@@ -47,6 +47,9 @@ typedef struct {
     uint32_t phase_ms;
     uint32_t period_ms;
     bool loop;
+    bool end_event;
+    bool at_end;
+    uintptr_t event_id_bits;
 } VgRenderedTimelineSample;
 
 typedef struct {
@@ -67,6 +70,7 @@ typedef struct {
 void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_generation, uint32_t frame_time_ms);
 void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransformFixed world_t);
 void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAabb world_aabb);
+void vg_rendered_state_capture_record_entity_content_signature(uintptr_t entity_id_bits, uint32_t content_signature);
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
                                                VgRenderedField field,
                                                VgRenderedTimelineSample sample);
@@ -74,6 +78,12 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
                                                   VgClipRect clip_rect,
                                                   uint8_t padding_px,
                                                   VgClipRect *out_dirty_rect);
+bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
+                                                   VgClipRect clip_rect,
+                                                   uint8_t padding_px,
+                                                   VgClipRect *out_rects,
+                                                   size_t out_capacity,
+                                                   size_t *out_count);
 void vg_rendered_state_capture_commit(void);
 void vg_rendered_state_capture_discard(void);
 

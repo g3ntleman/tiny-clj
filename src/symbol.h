@@ -1,9 +1,11 @@
+
 extern struct CljSymbol *SYM_KW_META;
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
 #include "object.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 // Forward declaration for CljSymbol (needed for self-reference)
 typedef struct CljSymbol CljSymbol;
@@ -60,6 +62,7 @@ extern CljSymbol *SYM_TRY;
 extern CljSymbol *SYM_CATCH;
 extern CljSymbol *SYM_IF;
 extern CljSymbol *SYM_COND;
+extern CljSymbol *SYM_CASE;
 extern CljSymbol *SYM_WHEN;
 extern CljSymbol *SYM_WHILE;
 extern CljSymbol *SYM_LET;
@@ -108,6 +111,7 @@ extern CljSymbol *SYM_TRIM;
 extern CljSymbol *SYM_UPPER_CASE;
 extern CljSymbol *SYM_LOWER_CASE;
 extern CljSymbol *SYM_PAD_LEFT;
+extern CljSymbol *SYM_INDEX_OF;
 extern CljSymbol *SYM_LAST_INDEX_OF;
 extern CljSymbol *SYM_STRING_REVERSE;
 extern CljSymbol *SYM_FIRST;
@@ -261,11 +265,84 @@ extern CljSymbol *SYM_LIST_BATCH;
     CljSymbol* intern_symbol_global(const char *cname);
 #endif // CLJ_HOT_PATH
 
+typedef struct {
+    ID *slot;
+    const char *cname;
+} IdSymbolCacheEntry;
+
+static inline bool id_symbol_cache_init_global(const IdSymbolCacheEntry *entries, size_t count) {
+    if (!entries) {
+        return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        ID *slot = entries[i].slot;
+        if (!slot) {
+            return false;
+        }
+        if (*slot) {
+            continue;
+        }
+        *slot = intern_symbol_global(entries[i].cname);
+        if (!*slot) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Helpers
 void symbol_table_add(CljSymbol *symbol);
 CljSymbol* symbol_table_lookup(CljSymbol *ns_name, const char *cname);
 void symbol_table_cleanup(void);
 void symbol_table_fit_startup_reserve(unsigned int reserve_percent);
+
+// Returns the cached unqualified symbol for a qualified symbol when available.
+// On miss, performs a one-time lookup and caches it on the symbol object.
+static inline CljSymbol *symbol_get_cached_unqualified(CljSymbol *sym) {
+    if (!sym || !sym->ns_name || !sym->cname) {
+        return sym;
+    }
+    if (!sym->unqualified) {
+        CljSymbol *resolved = symbol_table_lookup(NULL, sym->cname);
+        if (resolved) {
+            sym->unqualified = resolved;
+        }
+    }
+    return sym->unqualified ? sym->unqualified : sym;
+}
+
+static inline bool symbol_is_ns_star(CljSymbol *sym) {
+    if (!sym) {
+        return false;
+    }
+    if (sym == SYM_NS_STAR) {
+        return true;
+    }
+    return symbol_get_cached_unqualified(sym) == SYM_NS_STAR;
+}
+
+static inline bool symbol_is_core_call_dispatch_symbol(CljSymbol *sym) {
+    if (!sym) {
+        return false;
+    }
+    if (sym == SYM_DOSEQ || sym == SYM_DOTIMES) {
+        return true;
+    }
+    return is_special_symbol(sym);
+}
+
+// Normalize qualified clojure.core operators to their unqualified interned
+// symbols for native call-position dispatch (special forms + native loop forms).
+static inline CljSymbol *symbol_normalize_core_dispatch_symbol(CljSymbol *sym) {
+    if (!sym || sym->ns_name != SYM_CLOJURE_CORE || !sym->cname) {
+        return sym;
+    }
+    CljSymbol *unqualified = symbol_get_cached_unqualified(sym);
+    if (unqualified == sym) {
+        return sym;
+    }
+    return symbol_is_core_call_dispatch_symbol(unqualified) ? unqualified : sym;
+}
 
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);
@@ -282,6 +359,7 @@ extern StaticSymbolData sym_trim_data;
 extern StaticSymbolData sym_upper_case_data;
 extern StaticSymbolData sym_lower_case_data;
 extern StaticSymbolData sym_pad_left_data;
+extern StaticSymbolData sym_index_of_data;
 extern StaticSymbolData sym_last_index_of_data;
 extern StaticSymbolData sym_string_reverse_data;
 extern StaticSymbolData sym_source_data;
@@ -403,6 +481,7 @@ extern StaticSymbolData sym_aset_data;
 extern StaticSymbolData sym_alength_data;
 extern StaticSymbolData sym_aclone_data;
 extern StaticSymbolData sym_run_next_task_data;
+extern StaticSymbolData sym_with_pool_data;
 extern StaticSymbolData sym_schedule_data;
 extern StaticSymbolData sym_schedule_periodic_data;
 extern StaticSymbolData sym_cancel_timer_data;
@@ -411,11 +490,10 @@ extern StaticSymbolData sym_deref_data;
 extern StaticSymbolData sym_reset_bang_data;
 extern StaticSymbolData sym_swap_bang_data;
 extern StaticSymbolData sym_slurp_data;
+extern StaticSymbolData sym_slurp_bytes_data;
 extern StaticSymbolData sym_spit_data;
 
 // Audio symbols
-extern StaticSymbolData sym_sound_load_track_data;
-extern StaticSymbolData sym_sound_unload_track_data;
 extern StaticSymbolData sym_sound_play_music_data;
 extern StaticSymbolData sym_sound_stop_track_data;
 extern StaticSymbolData sym_sound_stop_music_data;

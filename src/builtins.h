@@ -27,6 +27,10 @@ ID native_vector(ID *args, unsigned int argc);
 void register_builtins(void);
 void builtins_reset_cached_funcs(void);
 
+// Gensym scoped counter: push a stack-local counter before macro expansion,
+// restore previous after. Each expansion restarts from 0 → O(1) symbols.
+unsigned long *gensym_use_local(unsigned long *counter);
+
 // Native function lookup for stubs
 // Returns NULL if not found
 BuiltinFn native_function_lookup(CljSymbol *symbol);
@@ -91,6 +95,7 @@ ID native_not_eq(ID *args, unsigned int argc);
 
 // Event-loop builtins
 ID native_run_next_task(ID *args, unsigned int argc);
+ID native_with_pool(ID *args, unsigned int argc);
 ID native_identical(ID *args, unsigned int argc);
 ID native_vector_p(ID *args, unsigned int argc);
 ID native_atom_p(ID *args, unsigned int argc);

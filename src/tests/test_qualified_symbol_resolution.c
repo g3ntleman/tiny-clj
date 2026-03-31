@@ -125,6 +125,109 @@ TEST(test_resolve_clojure_core_reverse_in_function) {
 }
 
 // ============================================================================
+// TESTS FOR QUALIFIED clojure.core MACRO-LIKE FORMS (NATIVE DISPATCH)
+// ============================================================================
+
+// Regression: qualified clojure.core special forms must dispatch identically to unqualified forms.
+TEST(test_eval_clojure_core_if_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string("(clojure.core/if false 1 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+// symbol_is_ns_star() must not rely on pointer equality with SYM_NS_STAR alone: the reader and
+// intern_symbol(SYM_CLOJURE_CORE, "*ns*") produce a distinct qualified CljObject. The fallback
+// (symbol_get_cached_unqualified(sym) == SYM_NS_STAR) is required for correct *ns* semantics.
+TEST(test_qualified_clojure_core_ns_star_requires_symbol_is_ns_star_fallback) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(SYM_NS_STAR);
+    TEST_ASSERT_NOT_NULL(SYM_CLOJURE_CORE);
+
+    CljSymbol *qualified = intern_symbol(SYM_CLOJURE_CORE, "*ns*");
+    TEST_ASSERT_NOT_NULL(qualified);
+    TEST_ASSERT_NOT_NULL(qualified->ns_name);
+    TEST_ASSERT_EQUAL_STRING("clojure.core", qualified->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("*ns*", qualified->cname);
+    TEST_ASSERT_FALSE_MESSAGE(qualified == SYM_NS_STAR,
+                              "qualified *ns* must be a different interned object than SYM_NS_STAR");
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        symbol_is_ns_star(qualified),
+        "symbol_is_ns_star must recognize clojure.core/*ns* (needs unqualified fallback)");
+
+    CljObject *quoted = eval_string("'clojure.core/*ns*", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(quoted);
+    TEST_ASSERT_TRUE(TAG(quoted) == CLJ_SYMBOL);
+    CljSymbol *read_sym = as_symbol(quoted);
+    TEST_ASSERT_NOT_NULL(read_sym);
+    TEST_ASSERT_FALSE_MESSAGE(read_sym == SYM_NS_STAR, "reader must produce qualified symbol object");
+    TEST_ASSERT_TRUE_MESSAGE(symbol_is_ns_star(read_sym),
+                             "reader-qualified clojure.core/*ns* must still be *ns* for predicate");
+
+    load_clojure_core(g_test_eval_state);
+    ID ev = eval_string("clojure.core/*ns*", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(ev);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(ev) == CLJ_NAMESPACE,
+                             "eval of clojure.core/*ns* must yield current namespace (special *ns*)");
+}
+
+// Parser passes the local name as a pointer into a stack buffer; make_symbol() copies it inline
+// (cname not in .rodata), so qualified symbols never share cname address with static SYM_* rodata.
+// Core dispatch therefore cannot rely on (sym->cname == SYM_IF->cname) for reader-produced symbols.
+TEST(test_parser_qualified_core_cname_not_shared_with_sym_if_rodata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(SYM_IF);
+
+    CljObject *parsed = eval_string("'clojure.core/if", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    CljSymbol *q = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(q);
+    TEST_ASSERT_NOT_NULL(q->ns_name);
+    TEST_ASSERT_EQUAL_STRING("if", q->cname);
+    TEST_ASSERT_EQUAL_STRING("if", SYM_IF->cname);
+    TEST_ASSERT_FALSE_MESSAGE(
+        (void *)q->cname == (void *)SYM_IF->cname,
+        "qualified symbol from reader must not reuse SYM_IF cname pointer; inline copy vs rodata");
+}
+
+// Regression: clojure.core/doseq must resolve in call position for Clojure compatibility.
+TEST(test_eval_clojure_core_doseq_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string(
+        "(let [sum (atom 0)] (clojure.core/doseq [x [1 2 3]] (swap! sum + x)) @sum)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// Regression: qualified clojure.core/dotimes must use dotimes lexical scope, not outer frame slots.
+TEST(test_eval_clojure_core_dotimes_expression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.core
+    load_clojure_core(g_test_eval_state);
+
+    ID result = eval_string(
+        "(let [sum (atom 0)] (clojure.core/dotimes [i 4] (swap! sum + i)) @sum)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// ============================================================================
 // TESTS FOR clojure.string QUALIFIED SYMBOLS
 // ============================================================================
 
@@ -269,6 +372,27 @@ TEST(test_resolve_clojure_string_join_in_local_fn) {
     CljObject *call_result = eval_string("((fn [coll] (clojure.string/join \",\" coll)) '(\"a\" \"b\" \"c\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(call_result);
     TEST_ASSERT_TRUE(TAG(call_result) == CLJ_STRING);
+}
+
+// Test: qualified symbol calls must not be mistaken for same-cname self recursion.
+TEST(test_qualified_symbol_does_not_trigger_named_self_recursion) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    load_clojure_string_namespace();
+
+    ID ok = NULL;
+    bool threw = false;
+    TRY {
+        ok = eval_string("(= ((fn reverse [s] (clojure.string/reverse s)) \"ab\") \"ba\")",
+                         g_test_eval_state);
+    } CATCH(ex) {
+        (void)ex;
+        threw = true;
+    } END_TRY
+
+    TEST_ASSERT_FALSE_MESSAGE(threw,
+                              "qualified symbol must not resolve to current function via cname-only recursion shortcut");
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
 // ============================================================================
@@ -449,3 +573,23 @@ TEST(test_nonexistent_namespace_throws) {
     } END_TRY
 }
 
+// Test: Qualified sound symbols must not auto-require during symbol resolution.
+TEST(test_qualified_native_symbol_requires_explicit_require) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    (void)eval_string("(ns-unload 'tiny-fx.sound)", g_test_eval_state);
+
+    bool threw_unresolved = false;
+    TRY {
+        (void)eval_string("tiny-fx.sound/sound-play-sfx!", g_test_eval_state);
+    } CATCH(ex) {
+        threw_unresolved = true;
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(threw_unresolved,
+                             "qualified symbol lookup must not auto-require tiny-fx.sound");
+
+    ID loaded = eval_string("(do (require 'tiny-fx.sound) (fn? tiny-fx.sound/sound-play-sfx!))",
+                            g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, loaded);
+}

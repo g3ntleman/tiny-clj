@@ -131,6 +131,33 @@ RETAIN(obj);    // Reference increment
 RELEASE(obj);   // Reference decrement
 ```
 
+### `(heap ...)` Special Form
+
+Tiny-CLJ also exposes the Clojure special form `(heap expr)` for memory debugging.
+
+```clojure
+(heap
+    (do
+        (def xs [1 2 3])
+        xs))
+```
+
+`(heap expr)` evaluates `expr` once and returns a map describing retained heap growth,
+including total retained bytes and local peak increase during the evaluation. It is the
+preferred high-level tool when you want to debug memory leaks or other cases where a
+Clojure-level operation keeps unexpected objects alive after its local work is done.
+
+Policy-wise, `(heap ...)` does not change ownership contracts:
+
+- Values produced inside `expr` still follow the normal MEMORY_POLICY rules.
+- Heap objects returned from evaluation remain pool-managed / caller-usable exactly like
+    other eval results.
+- `(heap ...)` is a measurement wrapper, not a different ownership mode.
+
+Use it for regressions such as "does this path retain vectors/maps/strings after it should
+have released them?", for debugging memory leaks, and for validating that a fix actually
+removes retained heap growth.
+
 ### Memory Management Macro Rule:
 **ALWAYS use memory management macros instead of direct function calls:**
 - ✅ **Use `RETAIN(obj)`** instead of `retain(obj)`

@@ -34,6 +34,7 @@ CljSymbol *SYM_TRY = NULL;
 CljSymbol *SYM_CATCH = NULL;
 CljSymbol *SYM_IF = NULL;
 CljSymbol *SYM_COND = NULL;
+CljSymbol *SYM_CASE = NULL;
 CljSymbol *SYM_WHEN = NULL;
 CljSymbol *SYM_WHILE = NULL;
 CljSymbol *SYM_LET = NULL;
@@ -85,6 +86,7 @@ CljSymbol *SYM_TRIM = NULL;
 CljSymbol *SYM_UPPER_CASE = NULL;
 CljSymbol *SYM_LOWER_CASE = NULL;
 CljSymbol *SYM_PAD_LEFT = NULL;
+CljSymbol *SYM_INDEX_OF = NULL;
 CljSymbol *SYM_LAST_INDEX_OF = NULL;
 CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
@@ -260,6 +262,7 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "catch" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "if" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "cond" }, .eval_fn = NULL } },
+    { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "case" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "when" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "while" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "let" }, .eval_fn = NULL } },
@@ -308,29 +311,30 @@ static struct {
 #define SYM_CATCH_IDX 1
 #define SYM_IF_IDX 2
 #define SYM_COND_IDX 3
-#define SYM_WHEN_IDX 4
-#define SYM_WHILE_IDX 5
-#define SYM_LET_IDX 6
-#define SYM_FN_IDX 7
-#define SYM_DEF_IDX 8
-#define SYM_DEFMACRO_IDX 9
-#define SYM_DEFRECORD_IDX 10
-#define SYM_QUOTE_IDX 11
-#define SYM_QUASIQUOTE_IDX 12
-#define SYM_UNQUOTE_IDX 13
-#define SYM_UNQUOTE_SPLICE_IDX 14
-#define SYM_LOOP_IDX 15
-#define SYM_RECUR_IDX 16
-#define SYM_THROW_IDX 17
-#define SYM_FINALLY_IDX 18
-#define SYM_VAR_IDX 19
-#define SYM_NS_IDX 20
-#define SYM_BINDING_IDX 21
-#define SYM_TIME_IDX 22
-#define SYM_HEAP_IDX 23
-#define SYM_GO_IDX 24
-#define SYM_AND_IDX 25
-#define SYM_OR_IDX 26
+#define SYM_CASE_IDX 4
+#define SYM_WHEN_IDX 5
+#define SYM_WHILE_IDX 6
+#define SYM_LET_IDX 7
+#define SYM_FN_IDX 8
+#define SYM_DEF_IDX 9
+#define SYM_DEFMACRO_IDX 10
+#define SYM_DEFRECORD_IDX 11
+#define SYM_QUOTE_IDX 12
+#define SYM_QUASIQUOTE_IDX 13
+#define SYM_UNQUOTE_IDX 14
+#define SYM_UNQUOTE_SPLICE_IDX 15
+#define SYM_LOOP_IDX 16
+#define SYM_RECUR_IDX 17
+#define SYM_THROW_IDX 18
+#define SYM_FINALLY_IDX 19
+#define SYM_VAR_IDX 20
+#define SYM_NS_IDX 21
+#define SYM_BINDING_IDX 22
+#define SYM_TIME_IDX 23
+#define SYM_HEAP_IDX 24
+#define SYM_GO_IDX 25
+#define SYM_AND_IDX 26
+#define SYM_OR_IDX 27
 
 #define G_SPECIAL_SYMBOLS_COUNT (sizeof(g_special_symbols) / sizeof(g_special_symbols[0]))
 
@@ -442,6 +446,7 @@ DEFINE_EXTERN_SYMBOL(sym_trim_data, "trim");
 DEFINE_EXTERN_SYMBOL(sym_upper_case_data, "upper-case");
 DEFINE_EXTERN_SYMBOL(sym_lower_case_data, "lower-case");
 DEFINE_EXTERN_SYMBOL(sym_pad_left_data, "pad-left");
+DEFINE_EXTERN_SYMBOL(sym_index_of_data, "index-of");
 DEFINE_EXTERN_SYMBOL(sym_last_index_of_data, "last-index-of");
 DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
 
@@ -519,6 +524,7 @@ DEFINE_EXTERN_SYMBOL(sym_aset_data, "aset");
 DEFINE_EXTERN_SYMBOL(sym_alength_data, "alength");
 DEFINE_EXTERN_SYMBOL(sym_aclone_data, "aclone");
 DEFINE_EXTERN_SYMBOL(sym_run_next_task_data, "run-next-task");
+DEFINE_EXTERN_SYMBOL(sym_with_pool_data, "with-pool");
 DEFINE_EXTERN_SYMBOL(sym_schedule_data, "schedule");
 DEFINE_EXTERN_SYMBOL(sym_schedule_periodic_data, "schedule-periodic");
 DEFINE_EXTERN_SYMBOL(sym_cancel_timer_data, "cancel-timer");
@@ -527,11 +533,10 @@ DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
 DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
+DEFINE_EXTERN_SYMBOL(sym_slurp_bytes_data, "slurp-bytes");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 
 // Audio symbols
-DEFINE_EXTERN_SYMBOL(sym_sound_load_track_data, "sound-load-track!");
-DEFINE_EXTERN_SYMBOL(sym_sound_unload_track_data, "sound-unload-track!");
 DEFINE_EXTERN_SYMBOL(sym_sound_play_music_data, "sound-play-music!");
 DEFINE_EXTERN_SYMBOL(sym_sound_stop_track_data, "sound-stop-track!");
 DEFINE_EXTERN_SYMBOL(sym_sound_stop_music_data, "sound-stop-music!");
@@ -749,6 +754,7 @@ void init_special_symbols() {
     SYM_CATCH = (CljSymbol*)&g_special_symbols[SYM_CATCH_IDX].sym;
     SYM_IF = (CljSymbol*)&g_special_symbols[SYM_IF_IDX].sym;
     SYM_COND = (CljSymbol*)&g_special_symbols[SYM_COND_IDX].sym;
+    SYM_CASE = (CljSymbol*)&g_special_symbols[SYM_CASE_IDX].sym;
     SYM_WHEN = (CljSymbol*)&g_special_symbols[SYM_WHEN_IDX].sym;
     SYM_WHILE = (CljSymbol*)&g_special_symbols[SYM_WHILE_IDX].sym;
     SYM_LET = (CljSymbol*)&g_special_symbols[SYM_LET_IDX].sym;
@@ -859,6 +865,8 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_LOWER_CASE, sym_lower_case_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_PAD_LEFT, sym_pad_left_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_INDEX_OF, sym_index_of_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
 
@@ -1070,80 +1078,48 @@ void init_special_symbols() {
     #undef INIT_SYMBOL_NS
     #undef INIT_SPECIAL_SYMBOL
 
-    // Set function pointers for Special Forms (O(1) dispatch optimization)
-    // Cast to CljSpecialSymbol and set eval_fn pointer (with type cast for compatibility)
-    // Note: Using void* cast to bridge between placeholder type in symbol.h and real type in eval.h
-    if (is_special_symbol(SYM_IF)) {
-        ((CljSpecialSymbol*)SYM_IF)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_if;
+    // Set function pointers for Special Forms (O(1) dispatch optimization).
+    // Compact table-driven setup keeps startup code size smaller on embedded builds.
+    typedef struct {
+        CljSymbol *sym;
+        SpecialFormEvalFn eval_fn;
+    } SpecialEvalBinding;
+    const SpecialEvalBinding bindings[] = {
+        {SYM_IF, eval_special_if},
+        {SYM_TRY, eval_special_try},
+        {SYM_WHEN, eval_special_when},
+        {SYM_WHILE, eval_special_while},
+        {SYM_COND, eval_special_cond},
+        {SYM_CASE, eval_special_case},
+        {SYM_DO, eval_special_do},
+        {SYM_AND, eval_special_and},
+        {SYM_OR, eval_special_or},
+        {SYM_FN, eval_special_fn},
+        {SYM_LET, eval_special_let},
+        {SYM_VAR, eval_special_var},
+        {SYM_QUOTE, eval_special_quote},
+        {SYM_RECUR, eval_special_recur},
+        {SYM_LOOP, eval_special_loop},
+        {SYM_THROW, eval_special_throw},
+        {SYM_GO, eval_special_go},
+        {SYM_TIME, eval_special_time},
+        {SYM_HEAP, eval_special_heap},
+        {SYM_BINDING, eval_special_binding},
+        {SYM_NS, eval_special_ns},
+        {SYM_QUASIQUOTE, eval_special_quasiquote},
+        {SYM_DEFMACRO, eval_special_defmacro},
+        {SYM_DEFRECORD, eval_special_defrecord},
+    };
+
+    for (size_t i = 0; i < (sizeof(bindings) / sizeof(bindings[0])); i++) {
+        CljSymbol *sym = bindings[i].sym;
+        if (!is_special_symbol(sym)) {
+            continue;
+        }
+        ((CljSpecialSymbol*)sym)->eval_fn =
+            (SpecialFormEvalFn_Placeholder)bindings[i].eval_fn;
     }
-    if (is_special_symbol(SYM_TRY)) {
-        ((CljSpecialSymbol*)SYM_TRY)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_try;
-    }
-    if (is_special_symbol(SYM_WHEN)) {
-        ((CljSpecialSymbol*)SYM_WHEN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_when;
-    }
-    if (is_special_symbol(SYM_WHILE)) {
-        ((CljSpecialSymbol*)SYM_WHILE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_while;
-    }
-    if (is_special_symbol(SYM_COND)) {
-        ((CljSpecialSymbol*)SYM_COND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_cond;
-    }
-    if (is_special_symbol(SYM_DO)) {
-        ((CljSpecialSymbol*)SYM_DO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_do;
-    }
-    if (is_special_symbol(SYM_AND)) {
-        ((CljSpecialSymbol*)SYM_AND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_and;
-    }
-    if (is_special_symbol(SYM_OR)) {
-        ((CljSpecialSymbol*)SYM_OR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_or;
-    }
-    if (is_special_symbol(SYM_FN)) {
-        ((CljSpecialSymbol*)SYM_FN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_fn;
-    }
-    if (is_special_symbol(SYM_LET)) {
-        ((CljSpecialSymbol*)SYM_LET)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_let;
-    }
-    if (is_special_symbol(SYM_VAR)) {
-        ((CljSpecialSymbol*)SYM_VAR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_var;
-    }
-    if (is_special_symbol(SYM_QUOTE)) {
-        ((CljSpecialSymbol*)SYM_QUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quote;
-    }
-    if (is_special_symbol(SYM_RECUR)) {
-        ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
-    }
-    if (is_special_symbol(SYM_LOOP)) {
-        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
-    }
-    if (is_special_symbol(SYM_THROW)) {
-        ((CljSpecialSymbol*)SYM_THROW)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_throw;
-    }
-    if (is_special_symbol(SYM_GO)) {
-        ((CljSpecialSymbol*)SYM_GO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_go;
-    }
-    if (is_special_symbol(SYM_TIME)) {
-        ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
-    }
-    if (is_special_symbol(SYM_HEAP)) {
-        ((CljSpecialSymbol*)SYM_HEAP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_heap;
-    }
-    if (is_special_symbol(SYM_BINDING)) {
-        ((CljSpecialSymbol*)SYM_BINDING)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_binding;
-    }
-    // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
-    
-    // Quasiquote Special Form - delegates to Clojure quasiquote-fn after bootstrap
-    if (is_special_symbol(SYM_QUASIQUOTE)) {
-        ((CljSpecialSymbol*)SYM_QUASIQUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quasiquote;
-    }
-    
-    // defmacro Special Form - defines macros in the current namespace
-    if (is_special_symbol(SYM_DEFMACRO)) {
-        ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
-    }
-    if (is_special_symbol(SYM_DEFRECORD)) {
-        ((CljSpecialSymbol*)SYM_DEFRECORD)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defrecord;
-    }
+    // Note: SYM_DOTIMES remains inline-dispatched in eval.c (not a special form).
     
 }
 
@@ -1266,11 +1242,24 @@ CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname) {
 
     CljSymbol *existing = symbol_table_find(ns_name, cname);
     if (existing) {
+        if (ns_name && !existing->unqualified) {
+            CljSymbol *unqualified = symbol_table_find(NULL, cname);
+            if (unqualified) {
+                existing->unqualified = unqualified;
+            }
+        }
         return existing;
     }
 
     CljSymbol *symbol = make_symbol(cname, ns_name);
     if (!symbol) return NULL;
+
+    if (ns_name) {
+        CljSymbol *unqualified = symbol_table_find(NULL, cname);
+        if (unqualified) {
+            symbol->unqualified = unqualified;
+        }
+    }
 
     symbol_table_add(symbol);
 
@@ -1335,12 +1324,21 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
     return ns_sym->cname;
 }
 
-// Clean up symbol table (ONLY for test cleanup, not regular symbols)
-// This function will be eliminated by dead-code-elimination in production builds
-// since it's only called from test files
+// Test-only symbol table cleanup.
+// Interned symbols are singleton-style and intentionally long-lived, so dropping
+// the table outright would force re-interning the same names on the next setup
+// cycle and leak those singleton allocations. Instead we compact the hashset
+// while preserving the existing symbol entries.
 void symbol_table_cleanup() {
-    RELEASE(g_runtime.symbol_table);
-    g_runtime.symbol_table = NULL;
+    if (!g_runtime.symbol_table) return;
+
+    CljHashSet *current = g_runtime.symbol_table;
+    hashset_set_max_load_percent(current, SYMBOL_TABLE_LOAD_POST_STARTUP);
+    CljHashSet *fitted = hashset_fit_count_with_reserve(current, 0u);
+    if (fitted && fitted != current) {
+        RELEASE(current);
+        g_runtime.symbol_table = fitted;
+    }
 }
 
 void symbol_table_fit_startup_reserve(unsigned int reserve_percent) {

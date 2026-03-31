@@ -10,8 +10,6 @@ typedef void (*BuiltinsSoundRegisterFn)(const char *cname, BuiltinFn fn);
 bool builtins_sound_namespace_allowed(const char *cname, size_t ns_len);
 void builtins_sound_register(BuiltinsSoundRegisterFn registrar);
 
-ID native_sound_load_track(ID *args, unsigned int argc);
-ID native_sound_unload_track(ID *args, unsigned int argc);
 ID native_sound_play_music(ID *args, unsigned int argc);
 ID native_sound_stop_track(ID *args, unsigned int argc);
 ID native_sound_stop_music(ID *args, unsigned int argc);

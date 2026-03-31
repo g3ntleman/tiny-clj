@@ -12,7 +12,7 @@
 #include "../atom.h"
 #include "../list.h"
 #include "../map.h"
-#include "../to_string.h"  // for pr_str
+#include "../to_string.h"  // for make_string_description
 #include "strings.h"    // for string_data
 #include "../function.h"   // for as_function, CljFunction
 #include <string.h>        // for strstr
@@ -578,8 +578,8 @@ TEST(test_let_tco_recur_synthesized) {
     TEST_ASSERT_NOT_NULL_MESSAGE(func->body, "function should have a body");
     
     // Convert body to string to check for recur
-    CljString *body_str = pr_str(func->body);
-    TEST_ASSERT_NOT_NULL_MESSAGE(body_str, "pr_str should return a CljString");
+    CljString *body_str = make_string_description(func->body);
+    TEST_ASSERT_NOT_NULL_MESSAGE(body_str, "make_string_description should return a CljString");
     const char *source_str = string_data((CljObject*)body_str);
     TEST_ASSERT_NOT_NULL_MESSAGE(source_str, "string_data should return a C string");
     

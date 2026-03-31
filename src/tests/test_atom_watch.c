@@ -7,10 +7,6 @@
 #include "tests_common.h"
 #include "../atom.h"
 
-static void maybe_ignore_watcher_registry_assoc_autorelease_debug_assert(void) {
-  TEST_IGNORE_MESSAGE("Temporarily ignored: watcher-registry updates hit known native_assoc autorelease assert; production atom_deref API is prioritized");
-}
-
 // ============================================================================
 // STEP 1: Watcher Registry
 // ============================================================================
@@ -73,7 +69,6 @@ static CljObject *require_core_var(const char *name) {
 }
 
 TEST(test_add_watch_adds_watcher) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   // Ensure add-watch exists (prevents false positives if symbol resolution fails)
   CljObject *add_watch_fn = require_core_var("add-watch");
   TEST_ASSERT_TRUE_MESSAGE(
@@ -112,7 +107,6 @@ TEST(test_add_watch_adds_watcher) {
 }
 
 TEST(test_add_watch_returns_atom) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   CljObject *add_watch_fn = require_core_var("add-watch");
   TEST_ASSERT_TRUE(TAG(add_watch_fn) == CLJ_FUNC || TAG(add_watch_fn) == CLJ_CLOSURE);
 
@@ -171,7 +165,6 @@ TEST(test_add_watch_validates_function) {
 // ============================================================================
 
 TEST(test_remove_watch_removes_watcher) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   CljObject *remove_watch_fn = require_core_var("remove-watch");
   TEST_ASSERT_TRUE(TAG(remove_watch_fn) == CLJ_FUNC || TAG(remove_watch_fn) == CLJ_CLOSURE);
 
@@ -190,7 +183,6 @@ TEST(test_remove_watch_removes_watcher) {
 }
 
 TEST(test_remove_watch_returns_atom) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   CljObject *remove_watch_fn = require_core_var("remove-watch");
   TEST_ASSERT_TRUE(TAG(remove_watch_fn) == CLJ_FUNC || TAG(remove_watch_fn) == CLJ_CLOSURE);
 
@@ -215,7 +207,6 @@ TEST(test_remove_watch_returns_atom) {
 }
 
 TEST(test_remove_watch_cleans_up_empty) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   CljObject *remove_watch_fn = require_core_var("remove-watch");
   TEST_ASSERT_TRUE(TAG(remove_watch_fn) == CLJ_FUNC || TAG(remove_watch_fn) == CLJ_CLOSURE);
 
@@ -242,7 +233,6 @@ TEST(test_notify_watchers_function_exists) {
 }
 
 TEST(test_notify_watchers_calls_watcher) {
-  maybe_ignore_watcher_registry_assoc_autorelease_debug_assert();
   CljObject *notify_fn = require_core_var("notify-watchers");
   TEST_ASSERT_TRUE(TAG(notify_fn) == CLJ_FUNC || TAG(notify_fn) == CLJ_CLOSURE);
 

@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#include <stdio.h>
 
 #if defined(__APPLE__)
 #include <AudioUnit/AudioUnit.h>
@@ -47,6 +48,7 @@ static pthread_cond_t g_tick_wait_cond = PTHREAD_COND_INITIALIZER;
 static atomic_bool g_tick_enabled = false;
 static atomic_bool g_sound_running = false;
 static atomic_bool g_sound_available = false;
+static _Atomic uint64_t g_last_sound_kick_time_ns = 0u;
 static int g_host_voice_count = 0;
 static float g_voice_phase[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_SOUND_MAX_VOICES];
@@ -118,9 +120,6 @@ static void host_sound_stop_debug_helpers(void) {
 
 static void host_sound_ensure_output_running(void) {
     atomic_store_explicit(&g_sound_running, true, memory_order_release);
-    if (atomic_load_explicit(&g_sound_available, memory_order_acquire) && g_output_unit) {
-        (void)AudioOutputUnitStart(g_output_unit);
-    }
 }
 
 static float host_sound_amp_from_volume(uint32_t volume) {
@@ -171,40 +170,35 @@ static uint64_t host_sound_monotonic_now_ns(void) {
 }
 
 #ifndef TINY_CLJ_TEST_RUNNER
-static mach_timebase_info_data_t g_host_sound_mach_timebase = {0};
-
-static void host_sound_init_mach_timebase(void) {
-    if (g_host_sound_mach_timebase.denom == 0) {
-        (void)mach_timebase_info(&g_host_sound_mach_timebase);
-    }
-}
-
-static uint64_t ns_to_mach_abs(uint64_t ns) {
-    host_sound_init_mach_timebase();
-    if (g_host_sound_mach_timebase.numer == 0) {
-        return ns;
-    }
-    return (ns * g_host_sound_mach_timebase.denom) / g_host_sound_mach_timebase.numer;
-}
-
 static void host_sound_sleep_until_ns(uint64_t deadline_ns) {
     uint64_t now_ns = host_sound_monotonic_now_ns();
     if (deadline_ns <= now_ns) {
         return;
     }
 
-#if defined(__APPLE__)
-    uint64_t wait_delta_ns = deadline_ns - now_ns;
-    uint64_t deadline_abs = mach_absolute_time() + ns_to_mach_abs(wait_delta_ns);
-    (void)mach_wait_until(deadline_abs);
-#else
     uint64_t wait_ns = deadline_ns - now_ns;
-    struct timespec ts;
-    ts.tv_sec = (time_t)(wait_ns / 1000000000ull);
-    ts.tv_nsec = (long)(wait_ns % 1000000000ull);
-    while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
+    struct timespec realtime_now;
+    if (clock_gettime(CLOCK_REALTIME, &realtime_now) != 0) {
+        struct timespec ts;
+        ts.tv_sec = (time_t)(wait_ns / 1000000000ull);
+        ts.tv_nsec = (long)(wait_ns % 1000000000ull);
+        while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
+        }
+        return;
     }
-#endif
+
+    uint64_t abs_nsec = (uint64_t)realtime_now.tv_nsec + (wait_ns % 1000000000ull);
+    struct timespec deadline_rt = {
+        .tv_sec = realtime_now.tv_sec + (time_t)(wait_ns / 1000000000ull) + (time_t)(abs_nsec / 1000000000ull),
+        .tv_nsec = (long)(abs_nsec % 1000000000ull),
+    };
+
+    pthread_mutex_lock(&g_tick_wait_mutex);
+    if (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire) &&
+        atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
+        (void)pthread_cond_timedwait(&g_tick_wait_cond, &g_tick_wait_mutex, &deadline_rt);
+    }
+    pthread_mutex_unlock(&g_tick_wait_mutex);
 }
 #endif
 
@@ -625,6 +619,12 @@ static bool host_sound_init_unit(void) {
 #ifndef TINY_CLJ_TEST_RUNNER
 static void *host_tick_thread_main(void *arg) {
     (void)arg;
+    /*
+     * Ownership contract:
+     * this helper thread may advance plain-C sound engine state only. It must
+     * not allocate Clj objects or enqueue finished callbacks directly; those
+     * are deferred to the interpreter thread drain path.
+     */
     while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         if (!atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
             pthread_mutex_lock(&g_tick_wait_mutex);
@@ -633,6 +633,7 @@ static void *host_tick_thread_main(void *arg) {
                 pthread_cond_wait(&g_tick_wait_cond, &g_tick_wait_mutex);
             }
             pthread_mutex_unlock(&g_tick_wait_mutex);
+            sound_tick_scheduler_start(&g_tick_scheduler, host_sound_monotonic_now_ns());
             continue;
         }
 
@@ -681,6 +682,7 @@ void sound_backend_init(int voice_count) {
     }
 
     atomic_store_explicit(&g_sound_available, true, memory_order_release);
+    (void)AudioOutputUnitStart(g_output_unit);
 
 #ifndef TINY_CLJ_TEST_RUNNER
     if (host_sound_init_failpoint_enabled("tick-thread")) {
@@ -690,11 +692,12 @@ void sound_backend_init(int voice_count) {
     }
 
     atomic_store_explicit(&g_tick_thread_running, true, memory_order_release);
-    if (pthread_create(&g_tick_thread, NULL, host_tick_thread_main, NULL) != 0) {
+    if (subjective_c_pthread_create_named(&g_tick_thread, NULL, host_tick_thread_main, NULL, "sound-tick") != 0) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
         host_sound_throw_init_failure("tick-thread", -1);
     }
+    sound_tick_start();
 #endif
 }
 
@@ -751,9 +754,6 @@ void sound_tick_start(void) {
     pthread_cond_broadcast(&g_tick_wait_cond);
     pthread_mutex_unlock(&g_tick_wait_mutex);
 #endif
-    if (atomic_load_explicit(&g_sound_available, memory_order_acquire) && g_output_unit) {
-        (void)AudioOutputUnitStart(g_output_unit);
-    }
 }
 
 void sound_tick_stop(void) {
@@ -761,15 +761,28 @@ void sound_tick_stop(void) {
     sound_tick_scheduler_stop(&g_tick_scheduler);
     atomic_store_explicit(&g_tick_enabled, false, memory_order_release);
     atomic_store_explicit(&g_sound_running, false, memory_order_release);
-    if (g_output_unit) {
-        (void)AudioOutputUnitStop(g_output_unit);
-    }
+}
+
+void sound_tick_sleep(void) {
+    atomic_store_explicit(&g_tick_enabled, false, memory_order_release);
+#ifdef TINY_CLJ_TEST_RUNNER
+    sound_engine_tick_mark_stopped();
+#endif
 }
 
 void sound_tick_kick(void) {
     if (!sound_engine_tick_is_running()) {
         sound_tick_start();
+        return;
     }
+    uint64_t now_ns = host_sound_monotonic_now_ns();
+    atomic_store_explicit(&g_last_sound_kick_time_ns, now_ns, memory_order_release);
+    atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
+#ifndef TINY_CLJ_TEST_RUNNER
+    pthread_mutex_lock(&g_tick_wait_mutex);
+    pthread_cond_broadcast(&g_tick_wait_cond);
+    pthread_mutex_unlock(&g_tick_wait_mutex);
+#endif
 }
 
 bool sound_backend_host_get_status(SoundHostStatus *out) {
@@ -909,6 +922,10 @@ void sound_tick_start(void) {
 }
 
 void sound_tick_stop(void) {
+    sound_engine_tick_mark_stopped();
+}
+
+void sound_tick_sleep(void) {
     sound_engine_tick_mark_stopped();
 }
 

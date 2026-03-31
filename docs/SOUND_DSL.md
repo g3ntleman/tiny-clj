@@ -1,17 +1,16 @@
 # Sound DSL
 
-This document describes the public step DSL used by [`tiny-fx.sound`](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound.clj).
+This document describes the public step DSL used by [`tiny-fx.trk1`](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/trk1.clj) and how the compiled TRK1 bytes are played through [`tiny-fx.sound`](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound.clj).
 
 ## Scope
 
 The DSL is the data format accepted by:
 
-- `tiny-fx.sound/compile-track`
-- `tiny-fx.sound/track-duration-ms`
-- `tiny-fx.sound/play-steps!`
-- `tiny-fx.sound/play-sfx!`
+- `tiny-fx.trk1/compile-track`
+- `tiny-fx.trk1/track-duration-ms`
+- `tiny-fx.trk1/prepare-track`
 
-The low-level `trk1` byte format is separate. Most callers should stay at the DSL level.
+The low-level `trk1` byte format is separate. Most callers should author tracks at the DSL level, then explicitly compose `tiny-fx.trk1/prepare-track` with `tiny-fx.sound/sound-play-music!` or `tiny-fx.sound/sound-play-sfx!`.
 
 ## Note Symbols
 
@@ -29,7 +28,7 @@ Rules:
 - octaves are single-digit
 - keywords resolve to MIDI (`0..127`) via the internal table; **integers in steps are Hz**, not MIDI
 
-`tiny-fx.sound/note->midi` is the canonical converter.
+`tiny-fx.trk1/note->midi` is the canonical converter.
 
 ## Duration Symbols
 
@@ -180,63 +179,39 @@ Defaults:
 - `:backing {:channels ...}` is inferred from the widest backing step, defaulting to `1` when backing role options are present
 - `:backing {:volume ...}` / `:backing {:volumes ...}` default to `[160 140 120 110 100]` sliced to the resolved backing width
 
-## Runtime Helpers
+## Runtime Composition
 
-### `play-steps!`
-
-```clojure
-(tiny-fx.sound/play-steps!
-  :intro
-  [{:notes [:G5 :D5] :duration :q}
-   {:rest :e}
-   {:notes [:A5 :E5] :duration :q}]
-  {:channel-count 2 :tempo-bpm 120})
-```
-
-Returns:
+Compile first, then pass the resulting TRK1 bytes into the runtime:
 
 ```clojure
-{:status :playing
- :duration-ms 1250}
+(require 'tiny-fx.trk1)
+(require 'tiny-fx.sound)
+
+(let [prepared (tiny-fx.trk1/prepare-track
+                 [{:notes [:G5 :D5] :duration :q}
+                  {:rest :e}
+                  {:notes [:A5 :E5] :duration :q}]
+                 {:channel-count 2 :tempo-bpm 120})]
+  {:status (if (tiny-fx.sound/sound-play-music! :intro (:track-bytes prepared) 1)
+             :playing
+             :stopped)
+   :duration-ms (:duration-ms prepared)})
 ```
 
-### `play-sfx!`
+Single-channel SFX use the same pattern:
 
 ```clojure
-(tiny-fx.sound/play-sfx!
-  :laser
-  [{:notes [5200] :bend [1200] :duration 160}
-   {:notes [550] :duration 56}]
-  {:tempo-bpm 120})
+(let [prepared (tiny-fx.trk1/prepare-track
+                 [{:notes [5200] :bend [1200] :duration 160}
+                  {:notes [550] :duration 56}]
+                 {:channel-count 1})]
+  {:status (if (tiny-fx.sound/sound-play-sfx! :laser (:track-bytes prepared))
+             :playing
+             :dropped)
+   :duration-ms (:duration-ms prepared)})
 ```
 
-```clojure
-(tiny-fx.sound/play-sfx!
-  :thruster
-  [{:notes [220] :noise true :duration 180}]
-  {:channel-count 1 :volumes [220]})
-```
-
-Melody/backing example:
-
-```clojure
-(tiny-fx.sound/play-steps!
-  :duet
-  [{:melody :G5 :backing [:D4] :duration :q}
-   {:melody :A5 :backing [:E4] :duration :q}]
-  {:melody {:volume 220}
-   :backing {:volume 150}
-   :tempo-bpm 120})
-```
-
-Returns:
-
-```clojure
-{:status :playing
- :duration-ms 125}
-```
-
-`track-id` is an opaque runtime id. Keywords are the normal choice.
+`track-id` is an opaque runtime id used for stop and finished-notification routing. Keywords are the normal choice.
 
 ## Practical Rules
 

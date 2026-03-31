@@ -8,11 +8,14 @@
 
 #include "object.h"
 #include "memory.h"
+#include "thread_local.h"
 #include "common.h"
 #include <setjmp.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
 
 // Forward declaration for CljString
 struct CljString;
@@ -55,6 +58,9 @@ void print_exception(CLJException *ex);
 /** Print native stack trace to stderr (used by CLJ_ASSERT). */
 void exception_print_native_backtrace(void);
 
+/** Print symbolized native stack trace to stderr when platform support exists. */
+void exception_print_native_backtrace_symbolized(void);
+
 // Exception throwing functions
 /** Throw exception via longjmp; transfers ownership to runtime. */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col);
@@ -89,6 +95,9 @@ typedef struct ExceptionHandler {
     struct ExceptionHandler *next;       // Previous handler (stack)
     struct CljPersistentVector *pool;   // Autorelease pool (weak vector) for cleanup after longjmp
     CLJException *exception;             // Exception stored in handler (replaces g_current_exception)
+#ifdef DEBUG
+    int saved_callstack_depth;           // Clojure call stack depth at TRY entry (restored on exception)
+#endif
 } ExceptionHandler;
 
 /**
@@ -100,7 +109,103 @@ typedef struct GlobalExceptionStack {
 } GlobalExceptionStack;
 
 /** @brief Global exception stack instance. */
-extern GlobalExceptionStack global_exception_stack;
+extern THREAD_LOCAL GlobalExceptionStack global_exception_stack;
+
+// ============================================================================
+// CLOJURE CALL STACK (thread-local, push/pop around every function call)
+// Only active in DEBUG builds; compiled away in Release.
+// ============================================================================
+
+#define CLJ_CALLSTACK_MAX 64
+#define CLJ_CALLSTACK_NAME_MAX 96
+
+/** @brief One frame in the Clojure-level call stack. */
+typedef struct {
+    // Stable per-thread storage for frame labels.
+    // We copy names on push so stacktrace formatting never dereferences stale pointers
+    // after function/namespace objects are released during unwind.
+    char names[CLJ_CALLSTACK_MAX][CLJ_CALLSTACK_NAME_MAX];
+    const char *frames[CLJ_CALLSTACK_MAX];
+    int depth;
+} CljCallStack;
+
+#ifdef DEBUG
+/** @brief Clojure call stack for exception stacktraces. */
+extern CljCallStack g_clj_callstack;
+
+/** @brief Push a Clojure function name onto the call stack. */
+static inline void clj_callstack_push(const char *name) {
+    if (g_clj_callstack.depth < CLJ_CALLSTACK_MAX) {
+        int idx = g_clj_callstack.depth;
+        const char *src = (name && name[0] != '\0') ? name : "<anonymous>";
+        strncpy(g_clj_callstack.names[idx], src, CLJ_CALLSTACK_NAME_MAX - 1);
+        g_clj_callstack.names[idx][CLJ_CALLSTACK_NAME_MAX - 1] = '\0';
+        g_clj_callstack.frames[idx] = g_clj_callstack.names[idx];
+        g_clj_callstack.depth++;
+    }
+}
+
+/** @brief Pop the top frame from the Clojure call stack. */
+static inline void clj_callstack_pop(void) {
+    if (g_clj_callstack.depth > 0) g_clj_callstack.depth--;
+}
+
+/** @brief Build a human-readable Clojure stacktrace string from the current call stack.
+ *  @return New CljString (rc=1) or NULL if stack is empty. Caller must RELEASE.
+ */
+struct CljString *clj_stacktrace_build(void);
+
+#define _TRY_SAVE_CALLSTACK(h)     ((h)->saved_callstack_depth = g_clj_callstack.depth)
+#define _CATCH_RESTORE_CALLSTACK(h) (g_clj_callstack.depth = (h)->saved_callstack_depth)
+#else
+static inline void clj_callstack_push(const char *name) { (void)name; }
+static inline void clj_callstack_pop(void) {}
+#define _TRY_SAVE_CALLSTACK(h)     ((void)0)
+#define _CATCH_RESTORE_CALLSTACK(h) ((void)0)
+#endif
+
+/**
+ * @brief Read-only view of a registered process-global thread role.
+ */
+typedef struct SubjectiveCThreadState {
+#if defined(ESP_PLATFORM)
+    /** FreeRTOS task handle (app main is not a pthread; pthread_self() is invalid there). */
+    void *task_handle;
+#else
+    pthread_t value;
+#endif
+    bool initialized;
+} SubjectiveCThreadState;
+
+/** @brief Read-only process-global main thread state. */
+extern const SubjectiveCThreadState *const subjective_c_main_thread;
+/** @brief Read-only process-global interpreter thread state. */
+extern const SubjectiveCThreadState *const subjective_c_interpreter_thread;
+
+/** @brief Register the current thread as the process-global main thread. */
+void subjective_c_register_main_thread(void);
+/** @brief Register or replace the current thread as the process-global interpreter thread. */
+void subjective_c_register_interpreter_thread(void);
+/** @brief Clear the registered process-global interpreter thread. */
+void subjective_c_clear_interpreter_thread(void);
+/** @brief Return true when a process-global main thread has been registered. */
+bool subjective_c_has_main_thread(void);
+/** @brief Return true when a process-global interpreter thread has been registered. */
+bool subjective_c_has_interpreter_thread(void);
+/** @brief Return true when the current thread is the registered main thread. */
+bool subjective_c_is_main_thread(void);
+/** @brief Return true when the current thread is the registered interpreter thread. */
+bool subjective_c_is_interpreter_thread(void);
+/** @brief Set a human-readable name for the current thread (thread-local, max 31 chars). */
+void subjective_c_set_thread_name(const char *name);
+/** @brief Get the current thread's name, or "unknown" if not set. */
+const char *subjective_c_get_thread_name(void);
+/** @brief Create a pthread with a human-readable name set as thread-local on entry. */
+int subjective_c_pthread_create_named(pthread_t *thread,
+                                       const pthread_attr_t *attr,
+                                       void *(*start_routine)(void *),
+                                       void *arg,
+                                       const char *name);
 
 // ============================================================================
 // TRY/CATCH MACROS (Objective-C style, efficient by design)
@@ -122,6 +227,21 @@ extern GlobalExceptionStack global_exception_stack;
 // - Simple, debuggable macro expansion
 //
 // Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
+
+static inline void exception_handler_unlink(ExceptionHandler *h) {
+    if (!h) return;
+    if (global_exception_stack.top == h) {
+        global_exception_stack.top = h->next;
+        return;
+    }
+    ExceptionHandler *prev = global_exception_stack.top;
+    while (prev && prev->next != h) {
+        prev = prev->next;
+    }
+    if (prev) {
+        prev->next = h->next;
+    }
+}
 
 #if MEMORY_PROFILING_ENABLED
 // -----------------------------------------------------------------------------
@@ -146,20 +266,20 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     ExceptionHandler *_h = exception_handler_alloc_or_abort(); \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
+    _TRY_SAVE_CALLSTACK(_h); \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
 #define CATCH(ex) \
         /* Success path: pop stack only */ \
-        ExceptionHandler *_success_handler = global_exception_stack.top; \
-        global_exception_stack.top = _success_handler->next; \
-        exception_handler_free(_success_handler); \
+        exception_handler_unlink(_h); \
+        exception_handler_free(_h); \
     } else { \
-        /* Exception path: get exception from handler */ \
-        ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
-        global_exception_stack.top = _caught_h->next; \
-        exception_handler_free(_caught_h); \
+        /* Exception path: restore Clojure call stack then get exception */ \
+        _CATCH_RESTORE_CALLSTACK(_h); \
+        CLJException *ex = _h->exception; \
+        exception_handler_unlink(_h); \
+        exception_handler_free(_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 
@@ -176,20 +296,20 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     } \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
+    _TRY_SAVE_CALLSTACK(_h); \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
 #define CATCH(ex) \
         /* Success path: pop stack only */ \
-        ExceptionHandler *_success_handler = global_exception_stack.top; \
-        global_exception_stack.top = _success_handler->next; \
-        CLJ_FREE(_success_handler); \
+        exception_handler_unlink(_h); \
+        CLJ_FREE(_h); \
     } else { \
-        /* Exception path: get exception from handler */ \
-        ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
-        global_exception_stack.top = _caught_h->next; \
-        CLJ_FREE(_caught_h); \
+        /* Exception path: restore Clojure call stack then get exception */ \
+        _CATCH_RESTORE_CALLSTACK(_h); \
+        CLJException *ex = _h->exception; \
+        exception_handler_unlink(_h); \
+        CLJ_FREE(_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 

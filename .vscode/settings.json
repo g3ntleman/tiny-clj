@@ -1,9 +1,21 @@
 {
+  // Use compile_commands.json for accurate IntelliSense and navigation
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "C_Cpp.default.cStandard": "c99",
-  "C_Cpp.default.compilerPath": "/usr/bin/clang",
-  "C_Cpp.intelliSenseEngine": "default",
+  // Enable Go to Definition with Cmd+Click
   "editor.gotoLocation.multipleDefinitions": "goto",
   "editor.gotoLocation.multipleReferences": "goto",
-  "editor.gotoLocation.multipleImplementations": "goto"
+  "editor.gotoLocation.multipleImplementations": "goto",
+  "C_Cpp.default.compilerPath": "/usr/bin/clang",
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /Users/theisen/Projects/tiny-clj && python - <<'PY'\nimport json\nwith open\\('build/compile_commands\\.json'\\) as f:\n    data=json\\.load\\(f\\)\nfor entry in data:\n    if entry\\['file'\\]\\.endswith\\('/src/eval\\.c'\\):\n        print\\(entry\\['command'\\]\\)\n        break\nPY$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^pushd /Users/theisen/Projects/tiny-clj >/dev/null && /usr/bin/cc -DBUILD_EPOCH_SECONDS=1774442767 -DDEBUG -DLINE_EDITING_ENABLED=1 -DMEMORY_PROFILING_ENABLED=0 -DMETA_ENABLED=1 -DUNITY_INCLUDE_EXEC_TIME -DUNITY_TESTS -DUNITY_USE_FLUSH_STDOUT -I/Users/theisen/Projects/tiny-clj -I/Users/theisen/Projects/tiny-clj/include -I/Users/theisen/Projects/tiny-clj/src -I/Users/theisen/Projects/tiny-clj/subjective-c/src/subjective-c -I/Users/theisen/Projects/tiny-clj/external/tiny-db/inc -I/Users/theisen/Projects/tiny-clj/external/tiny-db/src -I/Users/theisen/Projects/tiny-clj/build -I/Users/theisen/Projects/tiny-clj/subjective-c/tests -I/Users/theisen/Projects/tiny-clj/subjective-c/src -I/Users/theisen/Projects/tiny-clj/subjective-c/src/subjective-c/include_anchor -I/Users/theisen/Projects/tiny-clj/external -I/Users/theisen/Projects/tiny-clj/external/unity/src -Wall -Wextra -DUNITY_USE_FLUSH_STDOUT -g -g -O0 -DDEBUG -std=gnu99 -arch arm64 -g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fmacro-prefix-map=/Users/theisen/Projects/tiny-clj/= -DTINY_CLJ_TEST_RUNNER -E /Users/theisen/Projects/tiny-clj/src/eval\\.c \\| rg -n \"meta_get\\|meta_set\\|typedef \\.\\*CljString\\|struct CljString\\|make_string\\\\\\(\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "./build/tiny-fx.app/Contents/MacOS/tiny-fx": true
+  }
 }

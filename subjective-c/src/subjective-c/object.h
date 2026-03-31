@@ -163,6 +163,7 @@ static inline bool is_singleton(CljObject *obj)
 }
 
 bool clj_equal(ID a, ID b);
+
 static inline bool clj_is_truthy(ID v)
 {
     if (v)

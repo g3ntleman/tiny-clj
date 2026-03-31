@@ -3,6 +3,12 @@
 #include <string.h>
 #include <stddef.h>
 
+#if defined(__has_include)
+#  if !__has_include("clojure.core.clj.inc")
+#    error "Missing generated embedded Clojure includes (clojure.core.clj.inc). Run CMake configure/build to generate build/generated/embedded_clojure/*.inc."
+#  endif
+#endif
+
 #define EMBEDDED_SOURCE_ENTRY(path_literal, source_array) \
   {                                                       \
       (path_literal),                                     \
@@ -57,10 +63,6 @@ static const char tiny_clj_fs_code[] =
 #if TINYCLJ_WITH_TINY_FX
 static const char tiny_fx_sound_code[] =
 #include "tiny-fx.sound.clj.inc"
-    ;
-
-static const char tiny_fx_sound_native_code[] =
-#include "tiny-fx.sound-native.clj.inc"
     ;
 
 static const char tiny_fx_assets_code[] =
@@ -119,6 +121,10 @@ static const char tiny_fx_gfx_scene_code[] =
 #include "tiny-gfx.scene.clj.inc"
     ;
 
+static const char tiny_fx_gfx_timeline_code[] =
+#include "tiny-fx.gfx-timeline.clj.inc"
+    ;
+
 #ifdef DEBUG
 static const char tiny_fx_gfx_collision_code[] =
 #include "tiny-gfx.collision.clj.inc"
@@ -155,6 +161,10 @@ static const char tiny_breakout_audio_code[] =
 #include "tiny-breakout.audio.clj.inc"
     ;
 
+static const char tiny_breakout_audio_compiler_code[] =
+#include "tiny-breakout.audio-compiler.clj.inc"
+    ;
+
 static const char tiny_breakout_levels_code[] =
 #include "tiny-breakout.levels.clj.inc"
     ;
@@ -179,6 +189,15 @@ typedef struct {
   int len;
 } EmbeddedSourceEntry;
 
+#define EMBEDDED_ASSET_BYTES(path_literal, arr) \
+  { (path_literal), (uint16_t)(sizeof(path_literal) - 1u), (const uint8_t *)(arr), (int)sizeof(arr) }
+
+#if TINYCLJ_WITH_TINY_FX
+static const uint8_t tiny_fx_the_entertainer_trk1[] = {
+#include "the_entertainer_trk1.inc"
+};
+#endif
+
 static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core/async.clj", clojure_core_async_code),
@@ -195,10 +214,10 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/deployment.clj", tiny_clj_deployment_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
+    EMBEDDED_ASSET_BYTES("/assets/tiny-fx/sound-demos/the-entertainer.trk1", tiny_fx_the_entertainer_trk1),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif
@@ -208,6 +227,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-timeline.clj", tiny_fx_gfx_timeline_code),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-collision.clj", tiny_fx_gfx_collision_code),
 #endif
@@ -220,6 +240,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/core.clj", tiny_breakout_core_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/scene.clj", tiny_breakout_scene_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/audio.clj", tiny_breakout_audio_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/audio-compiler.clj", tiny_breakout_audio_compiler_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/levels.clj", tiny_breakout_levels_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
@@ -284,3 +305,4 @@ bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out
 }
 
 #undef EMBEDDED_SOURCE_ENTRY
+#undef EMBEDDED_ASSET_BYTES

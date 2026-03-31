@@ -1,4 +1,3 @@
-
 (ns clojure.core)
 
 ; ============================================================================
@@ -58,6 +57,10 @@
 
 ^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
 (defn not [x] :native)
+
+^#^{:doc "Evaluates body when test is logically false; returns nil when test is truthy."}
+(defmacro when-not [test & body]
+  (list 'if test nil (cons 'do body)))
 
 ^#^{:doc "Internal helper. Creates a LazySeq from a 0-arity thunk."}
 (defn lazy-seq* [f] :native)
@@ -217,6 +220,10 @@
   (list 'if (list 'bound? (list 'quote name))
     nil
     (list 'def name expr)))
+
+^#^{:doc "Declares vars for forward references. Compatibility no-op in tiny-clj for now; code relying on this behavior is not unchanged-compatible with Clojure/JVM declare semantics."}
+(defmacro declare [& names]
+  nil)
 
 ^#^{:doc "Like defn, but marks the resulting var as private to the current namespace."}
 (defmacro defn- [name & args]
@@ -618,8 +625,14 @@
 ; ============================================================================
 ; Event Loop Functions (Native)
 ; ============================================================================
-^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise."}
-(defn run-next-task [] :native)
+^#^{:doc "Low-level native event-loop step used by clojure.core/run-next-task."}
+(defn run-next-task-native [] :native)
+^#^{:doc "Runs at most one non-blocking event-loop step.
+Returns true when one callback/task was executed, false when no work is ready."}
+(defn run-next-task []
+  (run-next-task-native))
+^#^{:doc "Calls f inside a nested autorelease pool. Temporaries created by f are freed on return; the return value is transferred to the outer pool."}
+(defn with-pool [f] :native)
 ^#^{:doc "Schedules work after ms milliseconds. Second arg can be a function f, or options map {:fn f :id k :period-ms p}. With :id, scheduling upserts by equal key. If :period-ms > 0, the timer is periodic."}
 (defn schedule [ms f] :native)
 ^#^{:doc "Schedules periodic work. Third arg can be function f or options map {:fn f :id k}. With :id, scheduling upserts by equal key."}
@@ -645,6 +658,8 @@
 ; Note: slurp resolves embedded sources on ESP32. spit writes via the KV-backed FS layer.
 ^#^{:doc "Reads the entire contents of filename and returns it as a string."}
 (defn slurp [filename] :native)
+^#^{:doc "Reads the entire contents of filename and returns it as a byte-array."}
+(defn slurp-bytes [filename] :native)
 ^#^{:doc "Writes content (and optional more strings) to filename, overwriting existing data."}
 (defn spit [filename content & more] :native)
 
@@ -931,21 +946,9 @@
   (for-build (seq (normalize-for-bindings bindings)) body))
 
 ; ============================================================================
-; Macro Expansion Functions (bootstrap-safe: uses only basic special forms)
+; Macro expansion: macroexpand-1 is native (same path as preprocess/canonicalize).
+; macroexpand loops in Clojure without apply-based macro invocation.
 ; ============================================================================
-
-^#^{:doc "If form represents a macro call, returns its macro expansion, else returns form."}
-(def macroexpand-1
-  (fn [form]
-    (if (list? form)
-      (let [op (first form)]
-        (if (symbol? op)
-          (let [macro-fn (get-macro op)]
-            (if macro-fn
-              (apply macro-fn (rest form))
-              form))
-          form))
-      form)))
 
 ^#^{:doc "Repeatedly calls macroexpand-1 on form until it no longer represents a macro form."}
 (def macroexpand

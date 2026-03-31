@@ -37,7 +37,6 @@ benchmark_history.csv
 benchmark_output.txt
 progress.marks
 *.csv
-!esp32-idf/partitions.csv
 
 # Sample output artifacts
 /sample_*.txt

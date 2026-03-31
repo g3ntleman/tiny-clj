@@ -62,12 +62,34 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
 ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st);
 ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_resolve_slot_ref(const EvalContext *ctx, ID slot_ref_expr);
 
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);
 
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void);
+
+typedef struct {
+  int eval_arg_depth;
+  int eval_ast_call_depth;
+  uintptr_t eval_stack_base;
+#ifdef DEBUG
+  ptrdiff_t eval_stack_peak;
+#endif
+} EvalThreadStateSnapshot;
+
+void eval_capture_thread_state(EvalThreadStateSnapshot *out_snapshot);
+void eval_restore_thread_state(const EvalThreadStateSnapshot *snapshot);
+
+/**
+ * @brief Anchor C-stack depth measurement for eval (see eval_ast_call guard).
+ *
+ * @param anchor Address of a byte in a stack frame that stays alive for the whole
+ *               evaluation span (caller's local). Using a pointer into a callee frame
+ *               that has already returned is undefined behavior and breaks the guard.
+ */
+void eval_bind_task_stack_anchor(char *anchor);
 
 // Control pretreated AST execution (primarily for tests/benchmarks).
 // - enabled = 0: force disabled

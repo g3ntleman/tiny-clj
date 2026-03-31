@@ -3,9 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 #include "platform.h"
+#include "builtins.h"
+#include "event_loop.h"
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#include "tinyclj_idf_display.h"
+#endif
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
-#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>) && __has_include(<soc/soc_caps.h>)
+#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>) && __has_include(<freertos/queue.h>) && __has_include(<soc/soc_caps.h>)
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
@@ -15,6 +20,7 @@
 #include <soc/soc_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 1
 #else
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 0
@@ -29,6 +35,7 @@
 #include <soc/soc_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 1
 #else
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 0
@@ -56,6 +63,29 @@ static inline esp_err_t esp_flash_get_size(void *chip, uint32_t *out_size_bytes)
     return ESP_OK;
 }
 #endif // !TINYCLJ_HAVE_ESP_IDF_HEADERS
+
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+static QueueHandle_t g_tinyclj_uart_event_queue = NULL;
+
+static void tinyclj_uart_wake_task_main(void *arg) {
+    QueueHandle_t queue = (QueueHandle_t)arg;
+    uart_event_t event = {0};
+    for (;;) {
+        if (xQueueReceive(queue, &event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        if (event.type == UART_DATA) {
+            event_loop_wake();
+            continue;
+        }
+        if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL) {
+            (void)uart_flush_input(UART_NUM_0);
+            (void)xQueueReset(queue);
+            event_loop_wake();
+        }
+    }
+}
+#endif
 
 // tiny-clj embedded hooks
 void tinyclj_esp32_sleep_ms(unsigned int ms);
@@ -211,10 +241,62 @@ void app_main(void) {
         .source_clk = UART_SCLK_DEFAULT,
     };
     (void)uart_param_config(UART_NUM_0, &cfg);
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+    (void)uart_driver_install(UART_NUM_0,
+                              1024,
+                              0,
+                              16,
+                              &g_tinyclj_uart_event_queue,
+                              0);
+    if (g_tinyclj_uart_event_queue) {
+        (void)xTaskCreate(tinyclj_uart_wake_task_main,
+                          "tinyclj-uart-wake",
+                          2048,
+                          (void *)g_tinyclj_uart_event_queue,
+                          tskIDLE_PRIORITY + 1,
+                          NULL);
+    }
+#else
     (void)uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
+#endif
+#endif
+
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+    (void)tinyclj_idf_display_bootstrap();
 #endif
 
     tinyclj_idf_start();
+}
+
+static uint32_t tinyclj_esp32_elapsed_ms(uint32_t start_ms, uint32_t end_ms) {
+    if (end_ms >= start_ms) {
+        return end_ms - start_ms;
+    }
+    return (86400000u - start_ms) + end_ms;
+}
+
+/**
+ * @brief ESP32 override for (yield ms): drain one tiny-clj runloop step, then
+ * sleep only for the remaining budget.
+ *
+ * This keeps yield semantics aligned with host behavior (drive runtime work
+ * opportunistically during waits) instead of pure sleep-only waiting.
+ */
+void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
+    uint32_t start_ms = tinyclj_esp32_current_time_ms();
+
+    // Best-effort: run one pending task/timer/native ingress callback.
+    (void)native_run_next_task(NULL, 0);
+
+    if (timeout_ms == 0u) {
+        return;
+    }
+
+    uint32_t elapsed_ms = tinyclj_esp32_elapsed_ms(start_ms, tinyclj_esp32_current_time_ms());
+    if (elapsed_ms >= timeout_ms) {
+        return;
+    }
+    tinyclj_esp32_sleep_ms(timeout_ms - elapsed_ms);
 }
 
 static size_t g_uart_bytes_read = 0;

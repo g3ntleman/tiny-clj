@@ -76,7 +76,7 @@ static inline ID frame_get_slot(CallFrame *frame, uint8_t depth, uint8_t slot) {
 /** Release all values in a frame (for cleanup) */
 void frame_release(CallFrame *frame);
 
-/** Release all values in a frame except \a keep (keep's ref stays with caller). */
+/** Release all values in a frame except one retained result that stays with caller. */
 void frame_release_except(CallFrame *frame, ID keep);
 
 #endif

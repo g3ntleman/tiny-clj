@@ -1,0 +1,14 @@
+---
+description: Polling APIs nur nach expliziter Freigabe
+alwaysApply: true
+---
+
+# Polling nur nach expliziter Freigabe
+
+- Implementiere Polling-APIs oder Polling-Loops nur nach expliziter Freigabe durch den User.
+- Standardweg ist event-getriebene/blockierende Verarbeitung (push/notify), kein periodisches Polling.
+- Wenn Polling technisch unvermeidbar wirkt:
+  - zuerst begruenden, warum push/notify nicht ausreicht,
+  - explizite Freigabe einholen,
+  - den Polling-Pfad minimal halten und klar markieren.
+- Bei Refactors bestehende Polling-Workarounds entfernen, sobald ein event-getriebener Pfad verfuegbar ist.

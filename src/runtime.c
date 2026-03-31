@@ -6,6 +6,7 @@
 #include "meta.h"
 #include "vector.h"
 #include "memory.h"
+#include "exception.h"
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
@@ -15,6 +16,7 @@
 #include "hash.h"           // For clj_hash_full()
 #include "symbol.h"         // For init_special_symbols()
 #include "builtins.h"       // For builtins_reset_cached_funcs()
+#include "ast_canon.h"      // For ast_canon_reset_caches()
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
 #include "embedded_sources.h"
 #ifndef ESP32_BUILD
@@ -22,7 +24,7 @@
 #endif
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
-#include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
+#include "to_string.h"      // For to_string(), make_string_description; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
 #include <stdint.h>
 #include <inttypes.h>
@@ -50,6 +52,7 @@ static uint32_t g_resolve_cache_epoch_counter = 1;
 // Lightweight lifecycle generation for runtime_init activation epochs.
 static uint8_t g_resolve_cache_lifecycle_generation = 0;
 
+#if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_lifecycle_generation(void) {
     uint8_t next = (uint8_t)(g_resolve_cache_lifecycle_generation + 1u);
     // Keep 0 reserved for "disabled".
@@ -57,13 +60,14 @@ static inline uint8_t runtime_next_lifecycle_generation(void) {
     g_resolve_cache_lifecycle_generation = next;
     return next;
 }
+#endif
 
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
 static void zombie_log_fn(CljObject *v, bool is_double_free) {
     WITH_AUTORELEASE_POOL({
-        CljString *s = pr_str((ID)v);
+        CljString *s = make_string_description((ID)v);
         if (s) {
-            fputs(is_double_free ? "DOUBLE-FREE pr_str: " : "ZOMBIE pr_str: ", stderr);
+            fputs(is_double_free ? "DOUBLE-FREE make_string_description: " : "ZOMBIE make_string_description: ", stderr);
             fputs(string_data((CljObject *)s), stderr);
             fputc('\n', stderr);
         }
@@ -98,6 +102,7 @@ uint16_t runtime_next_resolve_epoch(uint8_t *out_generation) {
 
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
+    subjective_c_register_main_thread();
     
     // Initialize autorelease pool first (needed by make_* functions)
     autorelease_pool_init();
@@ -120,8 +125,12 @@ void runtime_init(TinyClJRuntime *runtime) {
     
     // Activate callsite caching for this runtime lifecycle without attributing
     // setup churn to invalidation counters.
+    // When memory profiling is enabled, leave caching disabled so that
+    // CallsiteCache allocations do not distort heap measurements.
+#if !MEMORY_PROFILING_ENABLED
     runtime->resolve_cache_epoch = 1;
     runtime->resolve_cache_generation = runtime_next_lifecycle_generation();
+#endif
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -129,7 +138,10 @@ void runtime_init(TinyClJRuntime *runtime) {
         if (task_vec) {
             CljTransientVector* transient_task = make_vector_transient(task_vec);
             RELEASE(task_vec); // vector_transient() retains the result
+            // make_vector_transient returns owned; ASSIGN retains again.
+            // Drop the local owned ref to avoid leaking one ref per runtime_init().
             ASSIGN(runtime->task_queue, transient_task);
+            RELEASE(transient_task);
         }
     }
     // Timer queue is a static C array in event_loop.c – no heap init needed.
@@ -169,10 +181,11 @@ void runtime_reset(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
     reset_eval_state_current_ns();
-    ns_cleanup();
     meta_registry_cleanup();
+    ns_cleanup();
     macro_cache_reset();
     builtins_reset_cached_funcs();
+    ast_canon_reset_caches();
     eval_special_forms_reset_caches();
     reset_eval_arg_depth();
     

@@ -1,0 +1,38 @@
+---
+description: Public Clojure functions must have docstrings
+alwaysApply: true
+---
+
+# Public Clojure API Docstrings
+
+All public Clojure functions must have a docstring.
+
+Apply this to public definitions such as:
+- `defn`
+- public `defmacro`
+- other public callable vars that form part of a namespace API
+
+Rules:
+- Add or keep a docstring whenever you create or change a public Clojure function.
+- Write docstrings in English.
+- Explain the purpose first, then key arguments/behavior when needed.
+- Mention important side effects, state changes, thread expectations, or ownership constraints when relevant.
+- Do not add placeholder docstrings like "TODO" or repeat the function name without useful information.
+
+Non-rules:
+- Private helpers such as `defn-` do not require docstrings unless they are unusually important or non-obvious.
+
+Examples:
+
+```clojure
+;; Bad
+(defn start-runtime! [opts]
+  ...)
+
+;; Good
+(defn start-runtime!
+  "Starts the breakout runtime and installs the initial timers and watchers.
+  Accepts an optional options map and returns the active runtime state."
+  [opts]
+  ...)
+```

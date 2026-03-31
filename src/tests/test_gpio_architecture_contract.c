@@ -107,6 +107,54 @@ static char *read_sound_backend_esp32_source(size_t *out_len) {
     return NULL;
 }
 
+static char *read_tinyclj_idf_run_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/main/tinyclj_idf_run.c",
+        "../esp32-idf/main/tinyclj_idf_run.c",
+        "../../esp32-idf/main/tinyclj_idf_run.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/main/tinyclj_idf_run.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_tinyclj_idf_main_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/main/tinyclj_idf_main.c",
+        "../esp32-idf/main/tinyclj_idf_main.c",
+        "../../esp32-idf/main/tinyclj_idf_main.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/main/tinyclj_idf_main.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_fx_host_runloop_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/fx_host_runloop.c",
+        "../src/fx_host_runloop.c",
+        "../../src/fx_host_runloop.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/fx_host_runloop.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
 static char *read_builtins_source(size_t *out_len) {
     const char *candidates[] = {
         "src/builtins.c",
@@ -177,6 +225,32 @@ TEST(test_gpio_architecture_isr_section_has_no_direct_enqueue) {
                              "ISR section must not enqueue directly");
 
     CLJ_FREE(isr_slice);
+    CLJ_FREE(src);
+}
+
+TEST(test_gpio_architecture_isr_requests_runloop_wakeup) {
+    size_t len = 0;
+    char *src = read_gpio_esp32_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    const char *helper_start = strstr(src, "static inline void gpio_request_drain_from_isr");
+    TEST_ASSERT_NOT_NULL_MESSAGE(helper_start, "gpio_request_drain_from_isr helper not found");
+
+    const char *helper_end = strstr(helper_start, "void gpio_esp32_poll_drain");
+    TEST_ASSERT_NOT_NULL_MESSAGE(helper_end, "gpio_esp32_poll_drain marker not found");
+
+    size_t helper_len = (size_t)(helper_end - helper_start);
+    TEST_ASSERT_TRUE(helper_len > 0);
+
+    char *helper_slice = (char *)CLJ_MALLOC(helper_len + 1u);
+    TEST_ASSERT_NOT_NULL(helper_slice);
+    memcpy(helper_slice, helper_start, helper_len);
+    helper_slice[helper_len] = '\0';
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(helper_slice, "event_loop_wake("),
+                                 "ISR drain-request helper should wake blocking runloop");
+
+    CLJ_FREE(helper_slice);
     CLJ_FREE(src);
 }
 
@@ -266,6 +340,93 @@ TEST(test_gpio_architecture_runtime_uses_shared_gpio_api_above_backend) {
 
     CLJ_FREE(builtins_src);
     CLJ_FREE(event_loop_src);
+}
+
+TEST(test_gpio_architecture_esp32_repl_wait_uses_blocking_event_loop_driver) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_run_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "event_loop_run(NULL, st)"),
+                                 "ESP32 REPL wait loop should use blocking event_loop_run");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "repl_process_event_loop(st)"),
+                             "ESP32 REPL wait loop should not poll run_next via repl_process_event_loop");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "platform_sleep_ms(esp_repl_idle_sleep_ms())"),
+                             "ESP32 REPL wait loop should not use timed sleep polling");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_gpio_architecture_esp32_gpio_ingress_path_is_renderer_independent) {
+    size_t gpio_len = 0;
+    size_t run_len = 0;
+    size_t loop_len = 0;
+    char *gpio_src = read_gpio_esp32_source(&gpio_len);
+    char *run_src = read_tinyclj_idf_run_source(&run_len);
+    char *loop_src = read_event_loop_source(&loop_len);
+    TEST_ASSERT_TRUE(gpio_len > 0);
+    TEST_ASSERT_TRUE(run_len > 0);
+    TEST_ASSERT_TRUE(loop_len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(gpio_src, "gpio_request_drain_from_isr();"),
+                                 "ESP32 ISR should request deferred GPIO drain");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(gpio_src, "event_loop_wake()"),
+                                 "ESP32 ISR drain request should wake the blocking event loop");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(gpio_src, "gpio_runtime_enqueue_watch_event(ev.pin, ev.value)"),
+                                 "ESP32 drain path should enqueue GPIO watch events into shared ingress");
+    TEST_ASSERT_NULL_MESSAGE(strstr(gpio_src, "renderer"),
+                             "ESP32 GPIO backend should not depend on renderer symbols");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(run_src, "event_loop_run(NULL, st)"),
+                                 "ESP32 interpreter loop should use blocking event-loop driver");
+
+    const char *run_next_start = strstr(loop_src, "bool event_loop_run_next");
+    TEST_ASSERT_NOT_NULL_MESSAGE(run_next_start, "event_loop_run_next should exist in shared event-loop core");
+    const char *drain_call = strstr(run_next_start, "gpio_poll_drain();");
+    TEST_ASSERT_NOT_NULL_MESSAGE(drain_call, "runloop step should always drain pending GPIO input");
+    const char *timer_call = strstr(run_next_start, "timer_process();");
+    TEST_ASSERT_NOT_NULL_MESSAGE(timer_call, "runloop step should process timers");
+    TEST_ASSERT_TRUE_MESSAGE(drain_call < timer_call,
+                             "GPIO drain should happen before timer/task processing in each runloop step");
+
+    CLJ_FREE(gpio_src);
+    CLJ_FREE(run_src);
+    CLJ_FREE(loop_src);
+}
+
+TEST(test_gpio_architecture_host_and_esp32_share_blocking_runloop_driver_callsite) {
+    size_t host_len = 0;
+    size_t esp32_len = 0;
+    char *host_src = read_fx_host_runloop_source(&host_len);
+    char *esp32_src = read_tinyclj_idf_run_source(&esp32_len);
+    TEST_ASSERT_TRUE(host_len > 0);
+    TEST_ASSERT_TRUE(esp32_len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(host_src, "event_loop_run(NULL, st)"),
+                                 "Host runloop thread should call blocking event_loop_run");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(esp32_src, "event_loop_run(NULL, st)"),
+                                 "ESP32 REPL wait loop should call blocking event_loop_run");
+    TEST_ASSERT_NULL_MESSAGE(strstr(esp32_src, "event_loop_run_next("),
+                             "ESP32 REPL loop should not maintain a private run_next polling driver");
+    TEST_ASSERT_NULL_MESSAGE(strstr(esp32_src, "event_loop_time_until_next_timer_ms("),
+                             "ESP32 REPL loop should not maintain private timer polling heuristics");
+
+    CLJ_FREE(host_src);
+    CLJ_FREE(esp32_src);
+}
+
+TEST(test_gpio_architecture_esp32_adapter_wakes_shared_runloop_without_private_driver_logic) {
+    size_t main_len = 0;
+    char *main_src = read_tinyclj_idf_main_source(&main_len);
+    TEST_ASSERT_TRUE(main_len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(main_src, "event_loop_wake();"),
+                                 "ESP32 UART adapter should wake the shared blocking runloop");
+    TEST_ASSERT_NULL_MESSAGE(strstr(main_src, "event_loop_run_next("),
+                             "ESP32 UART adapter should not execute a private run_next polling loop");
+    TEST_ASSERT_NULL_MESSAGE(strstr(main_src, "event_loop_time_until_next_timer_ms("),
+                             "ESP32 UART adapter should not implement private timer polling");
+
+    CLJ_FREE(main_src);
 }
 
 TEST(test_gpio_architecture_watch_events_include_signal_discriminators) {

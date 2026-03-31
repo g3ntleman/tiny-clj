@@ -39,8 +39,7 @@ TEST(test_namespace_lookup_core_functions) {
         TEST_ASSERT_TRUE(TAG(resolved) == CLJ_CLOSURE || TAG(resolved) == CLJ_FUNC);
     }
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: ns_resolve returns a borrowed value.
     RELEASE(map_sym);
 }
 
@@ -64,9 +63,30 @@ TEST(test_namespace_lookup_user_namespace) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved));
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: ns_resolve returns a borrowed value.
     RELEASE(test_sym);
+    RELEASE(value);
+}
+
+// Regression: ns_resolve must return borrowed values (no implicit retain).
+TEST(test_ns_resolve_returns_borrowed_value) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljSymbol *sym = intern_symbol_global("borrowed-value");
+    TEST_ASSERT_NOT_NULL(sym);
+    CljString *value = make_string("ok");
+    TEST_ASSERT_NOT_NULL(value);
+
+    ns_define(g_test_eval_state->current_ns, sym, value);
+
+    int before = retain_count(value);
+    ID resolved = ns_resolve(g_test_eval_state, sym);
+    int after = retain_count(value);
+
+    TEST_ASSERT_EQUAL_PTR(value, resolved);
+    TEST_ASSERT_EQUAL_INT(before, after);
+
+    RELEASE(sym);
     RELEASE(value);
 }
 
@@ -433,8 +453,7 @@ TEST(test_namespace_variable_storage) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)retrieved));
     TEST_ASSERT_EQUAL(123, as_fixnum((CljValue)retrieved));
 
-    // Cleanup
-    RELEASE(retrieved);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(var_sym);
     RELEASE(value);
 }
@@ -468,9 +487,7 @@ TEST(test_namespace_multiple_variables) {
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)retrieved1));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)retrieved2));
 
-    // Cleanup
-    RELEASE(retrieved1);
-    RELEASE(retrieved2);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(var1_sym);
     RELEASE(var2_sym);
     RELEASE(value1);
@@ -488,8 +505,7 @@ TEST(test_symbol_resolution_fallback) {
     TEST_ASSERT_NOT_NULL(resolved);
     TEST_ASSERT_TRUE(TAG(resolved) == CLJ_FUNC); // Should be a native function
 
-    // Cleanup
-    RELEASE(resolved);
+    // Cleanup: eval_symbol result is autoreleased.
     RELEASE(plus_sym);
 }
 
@@ -512,8 +528,7 @@ TEST(test_namespace_special_characters) {
     TEST_ASSERT_NOT_NULL(retrieved);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
 
-    // Cleanup
-    RELEASE(retrieved);
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(special_sym);
     RELEASE(value);
 }
@@ -657,15 +672,18 @@ TEST(test_ns_resolve_symbol_cache) {
     // Cache should make repeated lookups faster
     // This test establishes baseline - cache implementation will improve it further
 
-    // Cleanup
+    // Cleanup: ns_resolve returns borrowed values.
     RELEASE(test_sym);
     RELEASE(test_value);
-    RELEASE(resolved1);
 }
 
 // Global resolve-cache no longer exists; callsite caches handle hot paths.
 // This test verifies function calls still resolve correctly with callsite caching.
+// Callsite caching is disabled when MEMORY_PROFILING_ENABLED to avoid measurement distortion.
 TEST(test_resolve_list_operator_uses_cache) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Ensure clojure.core is loaded
@@ -723,6 +741,9 @@ TEST(test_callsite_cache_epoch_is_16bit) {
 }
 
 TEST(test_resolve_cache_first_definition_does_not_invalidate) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     evalstate_set_ns(g_test_eval_state, "user");
     CljNamespace *ns = g_test_eval_state->current_ns;
@@ -747,6 +768,9 @@ TEST(test_resolve_cache_first_definition_does_not_invalidate) {
 }
 
 TEST(test_resolve_cache_batch_coalesces_invalidations) {
+#if MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("callsite caching disabled under MEMORY_PROFILING_ENABLED");
+#endif
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     evalstate_set_ns(g_test_eval_state, "user");
     CljNamespace *ns = g_test_eval_state->current_ns;
@@ -782,32 +806,8 @@ TEST(test_resolve_cache_batch_coalesces_invalidations) {
     RELEASE(sym_b);
 }
 
-TEST(test_keyword_callsite_cache_populates_after_lookup) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    evalstate_set_ns(g_test_eval_state, "user");
-
-    ID parsed = parse_canonicalized("(:x {:x 1})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE_MESSAGE(is_ast_call(parsed), "expected AST call for keyword invocation");
-    CljASTCall *call = as_ast_call(parsed);
-    TEST_ASSERT_NOT_NULL(call);
-
-    ID cache_before = ast_call_get_callsite_cache(call);
-    TEST_ASSERT_NULL_MESSAGE(cache_before, "callsite cache should be empty before first evaluation");
-
-    ID first = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
-    TEST_ASSERT_NOT_NULL(first);
-    TEST_ASSERT_TRUE(is_fixnum(first));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(first));
-
-    ID cache_after_first = ast_call_get_callsite_cache(call);
-    TEST_ASSERT_NOT_NULL_MESSAGE(cache_after_first, "keyword call should populate callsite cache");
-
-    ID second = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
-    TEST_ASSERT_NOT_NULL(second);
-    TEST_ASSERT_TRUE(is_fixnum(second));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(second));
-}
+// Keyword callsite cache removed — interned pointer equality makes linear scan
+// in small maps/records fast enough; the per-callsite heap object wasn't worth it.
 
 // Ensure redefinition in current namespace is visible to ns_resolve (no stale cache).
 TEST(test_resolve_cache_invalidation_on_redefinition) {
@@ -966,17 +966,39 @@ TEST(test_require_with_refer) {
     CljObject *req_result = eval_string("(require '[test.refer :refer [func]])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify func was copied to current namespace (must use qualified symbol for map_get)
+    // Verify func was copied to current namespace using unqualified binding.
+    // This avoids allocating one target-qualified symbol per referred var.
     CljSymbol *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
-    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
-        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
-    CljSymbol *func_sym_qualified = intern_symbol(ns_name_sym, "func");
-    TEST_ASSERT_NOT_NULL(func_sym_qualified);
-    CljObject *func_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, func_sym_qualified, NULL);
+    CljObject *func_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, func_sym, NULL);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
+
+    // Keep resolution semantics: unqualified lookup in current ns still works.
+    ID resolved = ns_resolve(g_test_eval_state, func_sym);
+    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
+    TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)resolved));
+
+    // Heap optimization contract: refer should not create target-qualified map keys.
+    CljSymbol *current_ns_name = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->name : NULL;
+    bool has_qualified_func_key = false;
+    MAP_FOR_EACH(g_test_eval_state->current_ns->mappings, key, value) {
+        (void)value;
+        if (!key || TAG(key) != CLJ_SYMBOL) {
+            continue;
+        }
+        CljSymbol *k = as_symbol(key);
+        if (!k || !k->cname) {
+            continue;
+        }
+        if (strcmp(k->cname, "func") == 0 && k->ns_name == current_ns_name) {
+            has_qualified_func_key = true;
+            break;
+        }
+    }
+    TEST_ASSERT_FALSE(has_qualified_func_key);
 
 }
 
@@ -987,26 +1009,42 @@ TEST(test_require_with_refer_all) {
     CljObject *req_result = eval_string("(require '[test.referall :refer :all])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify both vars were copied to current namespace (must use qualified symbols for map_get)
+    // Verify both vars were copied to current namespace using unqualified bindings.
     CljSymbol *var1_sym = intern_symbol_global("var1");
     CljSymbol *var2_sym = intern_symbol_global("var2");
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
-    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
-        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
-    CljSymbol *var1_sym_qualified = intern_symbol(ns_name_sym, "var1");
-    CljSymbol *var2_sym_qualified = intern_symbol(ns_name_sym, "var2");
-    TEST_ASSERT_NOT_NULL(var1_sym_qualified);
-    TEST_ASSERT_NOT_NULL(var2_sym_qualified);
 
-    CljObject *var1_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var1_sym_qualified, NULL);
-    CljObject *var2_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var2_sym_qualified, NULL);
+    CljObject *var1_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var1_sym, NULL);
+    CljObject *var2_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var2_sym, NULL);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var2_val));
     TEST_ASSERT_EQUAL(300, as_fixnum((CljValue)var1_val));
     TEST_ASSERT_EQUAL(400, as_fixnum((CljValue)var2_val));
+
+    // Heap optimization contract: :refer :all should not create target-qualified keys.
+    CljSymbol *current_ns_name = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->name : NULL;
+    bool has_qualified_var1_key = false;
+    bool has_qualified_var2_key = false;
+    MAP_FOR_EACH(g_test_eval_state->current_ns->mappings, key, value) {
+        (void)value;
+        if (!key || TAG(key) != CLJ_SYMBOL) {
+            continue;
+        }
+        CljSymbol *k = as_symbol(key);
+        if (!k || !k->cname || k->ns_name != current_ns_name) {
+            continue;
+        }
+        if (strcmp(k->cname, "var1") == 0) {
+            has_qualified_var1_key = true;
+        } else if (strcmp(k->cname, "var2") == 0) {
+            has_qualified_var2_key = true;
+        }
+    }
+    TEST_ASSERT_FALSE(has_qualified_var1_key);
+    TEST_ASSERT_FALSE(has_qualified_var2_key);
 
 }
 
@@ -1200,6 +1238,19 @@ TEST(test_ns_registry_iteration) {
     TEST_ASSERT_EQUAL_PTR(ns2, (CljNamespace*)found2);
 }
 
+// clojure.core is registered under its name and under NULL (see ns_get_or_create); (all-ns) must not duplicate.
+TEST(test_all_ns_lists_each_namespace_once) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljNamespace *core = ns_get_or_create("clojure.core", NULL);
+    TEST_ASSERT_NOT_NULL(core);
+    TEST_ASSERT_EQUAL_PTR(core, ns_find_by_symbol(NULL));
+
+    CljObject *res =
+        eval_string("(= (count (all-ns)) (count (distinct (all-ns))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(res);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(res, (CljObject *)clj_true, "all-ns entries must be unique");
+}
+
 // Test: Verify ns_registry can grow and still resolve entries
 TEST(test_ns_registry_growth_and_lookup) {
 
@@ -1384,6 +1435,23 @@ TEST(test_find_ns_returns_namespace) {
     // Cleanup
 }
 
+// Regression: type should expose namespace objects as clojure.lang/Namespace.
+TEST(test_type_reports_namespace_for_find_ns_result) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *result = eval_string("(type (find-ns 'clojure.core))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_SYMBOL);
+
+    CljSymbol *sym = as_symbol(result);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name->cname);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    TEST_ASSERT_EQUAL_STRING("clojure.lang", sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("Namespace", sym->cname);
+}
+
 // Test: Verify find-ns returns nil for non-existent namespace
 TEST(test_find_ns_returns_nil_for_nonexistent) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -1400,10 +1468,11 @@ TEST(test_find_ns_does_not_create_tiny_fx_namespaces) {
 
     int before_count = map_count(g_runtime.ns_registry);
 
-    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
-    CljObject *sound_ns = eval_string("(find-ns 'tiny-fx.sound-native)", g_test_eval_state);
+    (void)eval_string("(ns-unload 'tiny-fx.sound)", g_test_eval_state);
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound"));
+    CljObject *sound_ns = eval_string("(find-ns 'tiny-fx.sound)", g_test_eval_state);
     TEST_ASSERT_NIL(sound_ns);
-    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound"));
 
 #ifdef DEBUG
     TEST_ASSERT_NULL(ns_find("tiny-fx.sound-debug"));
@@ -1453,7 +1522,7 @@ TEST(test_find_ns_print_repr_full_name) {
     (void)eval_string("(require 'clojure.string)", g_test_eval_state);
 
     // pr-str should return full namespace name
-    CljString *repr = pr_str(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
+    CljString *repr = make_string_description(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
     TEST_ASSERT_NOT_NULL(repr);
     TEST_ASSERT_EQUAL_STRING("clojure.string", string_data(repr));
 }

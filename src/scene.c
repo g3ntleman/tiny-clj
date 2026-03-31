@@ -19,39 +19,34 @@
 #include "value.h"
 #include "vector.h"
 
-#define STATIC_SYMBOL_DATA(name, cname_literal) \
-    static StaticSymbolData name = { \
-        .sym = { \
-            .base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = 0}, \
-            .ns_name = NULL, \
-            .unqualified = NULL, \
-            .cname = cname_literal \
-        } \
-    }
-
-STATIC_SYMBOL_DATA(sym_entity_root_data, "root");
-
-#undef STATIC_SYMBOL_DATA
-
 typedef struct {
     ID entity_map;
     CljHashMap *index;
 } VgFlatSceneLookup;
 
 static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+static CljSymbol *g_ns_tiny_fx_scene = NULL;
+static CljSymbol *g_kw_root = NULL;
 static CljSymbol *g_kw_timeline_ease = NULL;
 static CljSymbol *g_kw_timeline_easing = NULL;
+static VgTimelineProgressObserverFn g_timeline_progress_observer = NULL;
 static const SymbolCacheEntry g_scene_symbol_cache[] = {
     {&g_kw_timeline_ease, ":ease", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&g_kw_timeline_easing, ":easing", SYMBOL_CACHE_SCOPE_GLOBAL},
 };
 
-static inline void scene_ensure_timeline_keyword_cache(void) {
+static inline void scene_ensure_symbol_cache(void) {
     if (!g_kw_timeline_ease || !g_kw_timeline_easing) {
         (void)symbol_cache_init_global(
             g_scene_symbol_cache,
             sizeof(g_scene_symbol_cache) / sizeof(g_scene_symbol_cache[0]));
     }
+    g_ns_tiny_fx_scene = intern_symbol_global("tiny-fx.scene");
+    g_kw_root = g_ns_tiny_fx_scene ? intern_symbol(g_ns_tiny_fx_scene, ":root") : NULL;
+}
+
+void vg_set_timeline_progress_observer(VgTimelineProgressObserverFn observer) {
+    g_timeline_progress_observer = observer;
 }
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
@@ -160,6 +155,11 @@ static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID en
         return hashmap_get_sentinel(lookup->index, key, NULL);
     }
     return map_get_sentinel(entity_map, key, NULL);
+}
+
+static inline bool vg_scene_root_is_canonical(ID root_field) {
+    scene_ensure_symbol_cache();
+    return root_field == (ID)g_kw_root;
 }
 
 static inline uint32_t record_type_hash(ID obj) {
@@ -436,6 +436,38 @@ static void capture_entity_world_aabb_points(ID entity_id,
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)entity_id, world_aabb);
 }
 
+static uint32_t text_content_signature(const char *text) {
+    const uint8_t *p = (const uint8_t *)(text ? text : "");
+    uint32_t hash = 2166136261u;
+    while (*p) {
+        hash ^= (uint32_t)(*p++);
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static uint32_t signature_hash_u32(uint32_t hash, uint32_t value) {
+    hash ^= value;
+    hash *= 16777619u;
+    return hash;
+}
+
+static uint32_t style_content_signature(VgStyle style) {
+    uint32_t hash = 2166136261u;
+    hash = signature_hash_u32(hash, style.stroke_color);
+    hash = signature_hash_u32(hash, style.stroke_width);
+    hash = signature_hash_u32(hash, style.visible ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.has_fill ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.fill_color);
+    hash = signature_hash_u32(hash, style.has_bg_color ? 1u : 0u);
+    hash = signature_hash_u32(hash, style.bg_color);
+    return hash;
+}
+
+static uint32_t combine_content_signatures(uint32_t a, uint32_t b) {
+    return signature_hash_u32(a, b);
+}
+
 /*
  * Collision proxies can be visually hidden, but they still need current world
  * bounds in the rendered-state snapshot.
@@ -627,6 +659,9 @@ typedef struct {
     uint32_t phase_ms;
     uint32_t period_ms;
     bool loop;
+    bool end_event;
+    bool at_end;
+    ID event_id;
 } TimelineResolveInfo;
 
 static void mark_has_animation(bool *out_has_animation) {
@@ -635,11 +670,41 @@ static void mark_has_animation(bool *out_has_animation) {
     }
 }
 
+static bool timeline_info_is_animating(const TimelineResolveInfo *info) {
+    if (!info || !info->is_timeline) {
+        return false;
+    }
+    if (info->keyframe_count <= 1u) {
+        return false;
+    }
+    return info->loop || !info->at_end;
+}
+
+static ID timeline_event_id_compat(ID end_event_obj, ID event_id_obj) {
+    if (event_id_obj && event_id_obj != clj_false && event_id_obj != clj_true) {
+        return event_id_obj;
+    }
+    if (end_event_obj && end_event_obj != clj_false && end_event_obj != clj_true) {
+        return end_event_obj;
+    }
+    return NULL;
+}
+
+static bool timeline_event_enabled(ID end_event_obj, ID event_id_obj) {
+    if (event_id_obj && event_id_obj != clj_false) {
+        return true;
+    }
+    return id_to_bool_default(end_event_obj, false);
+}
+
 static bool timeline_record_fields(ID timeline_obj,
                                    const VgRecordSchema *sc,
                                    ID *out_keyframes,
-                                   ID *out_loop) {
-    if (!timeline_obj || TAG(timeline_obj) != CLJ_RECORD || !sc || !out_keyframes || !out_loop) {
+                                   ID *out_loop,
+                                   ID *out_end_event,
+                                   ID *out_event_id) {
+    if (!timeline_obj || TAG(timeline_obj) != CLJ_RECORD || !sc || !out_keyframes || !out_loop || !out_end_event ||
+        !out_event_id) {
         return false;
     }
 
@@ -647,11 +712,13 @@ static bool timeline_record_fields(ID timeline_obj,
         Timeline *timeline = (Timeline *)timeline_obj;
         *out_keyframes = timeline->keyframes;
         *out_loop = timeline->loop;
+        *out_end_event = timeline->end_event;
+        *out_event_id = timeline_event_id_compat(timeline->end_event, timeline->event_id);
         return true;
     }
 
     const VgRecordKeys *keys = tiny_fx_gfx_record_keys();
-    if (!keys || !keys->k_keyframes || !keys->k_loop) {
+    if (!keys || !keys->k_keyframes || !keys->k_loop || !keys->k_end_event || !keys->k_event_id) {
         return false;
     }
 
@@ -662,6 +729,8 @@ static bool timeline_record_fields(ID timeline_obj,
 
     *out_keyframes = keyframes;
     *out_loop = tiny_fx_gfx_get_field(timeline_obj, keys->k_loop, NULL);
+    *out_end_event = tiny_fx_gfx_get_field(timeline_obj, keys->k_end_event, NULL);
+    *out_event_id = timeline_event_id_compat(*out_end_event, tiny_fx_gfx_get_field(timeline_obj, keys->k_event_id, NULL));
     return true;
 }
 
@@ -675,10 +744,12 @@ static ID resolve_timeline_value_with_info(ID raw_value,
     }
     ID keyframes_obj = NULL;
     ID loop_obj = NULL;
-    if (!raw_value || !sc || !timeline_record_fields(raw_value, sc, &keyframes_obj, &loop_obj)) {
+    ID end_event_obj = NULL;
+    ID event_id_obj = NULL;
+    if (!raw_value || !sc ||
+        !timeline_record_fields(raw_value, sc, &keyframes_obj, &loop_obj, &end_event_obj, &event_id_obj)) {
         return raw_value;
     }
-    mark_has_animation(out_has_animation);
     if (!id_is_vector(keyframes_obj)) {
         return NULL;
     }
@@ -720,11 +791,18 @@ static ID resolve_timeline_value_with_info(ID raw_value,
     }
 
     bool loop = id_to_bool_default(loop_obj, false);
+    bool end_event = timeline_event_enabled(end_event_obj, event_id_obj);
     uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
     if (out_info) {
         out_info->phase_ms = phase_ms;
         out_info->period_ms = last_ms;
         out_info->loop = loop;
+        out_info->end_event = end_event;
+        out_info->at_end = (!loop && phase_ms >= last_ms);
+        out_info->event_id = event_id_obj;
+    }
+    if (count > 1u && (loop || phase_ms < last_ms)) {
+        mark_has_animation(out_has_animation);
     }
     if (!loop && phase_ms >= last_ms) {
         if (out_info) {
@@ -804,7 +882,7 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
 }
 
 static VgAnimEase timeline_ease_kind(ID timeline_obj) {
-    scene_ensure_timeline_keyword_cache();
+    scene_ensure_symbol_cache();
     ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_ease, NULL);
     if (!ease_obj) {
         ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_easing, NULL);
@@ -892,7 +970,9 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
     }
     ID keyframes_obj = NULL;
     ID loop_obj = NULL;
-    if (timeline_record_fields(obj, s, &keyframes_obj, &loop_obj)) {
+    ID end_event_obj = NULL;
+    ID event_id_obj = NULL;
+    if (timeline_record_fields(obj, s, &keyframes_obj, &loop_obj, &end_event_obj, &event_id_obj)) {
         VgAnimEase ease = timeline_ease_kind(obj);
         if (!id_is_vector(keyframes_obj)) {
             return vg_transform_fixed_identity();
@@ -935,11 +1015,15 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
         }
 
         bool loop = id_to_bool_default(loop_obj, false);
+        bool end_event = timeline_event_enabled(end_event_obj, event_id_obj);
         uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
         if (out_info) {
             out_info->phase_ms = phase_ms;
             out_info->period_ms = last_ms;
             out_info->loop = loop;
+            out_info->end_event = end_event;
+            out_info->at_end = (!loop && phase_ms >= last_ms);
+            out_info->event_id = event_id_obj;
         }
         if (!loop && phase_ms >= last_ms) {
             if (out_info) {
@@ -1021,6 +1105,13 @@ static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
     return NULL;
 }
 
+static uintptr_t timeline_event_id_bits(ID event_id) {
+    if (!event_id || TAG(event_id) != CLJ_SYMBOL) {
+        return 0u;
+    }
+    return (uintptr_t)event_id;
+}
+
 static void capture_timeline_for_entity_field(ID entity_id, VgRenderedField field, const TimelineResolveInfo *info) {
     if (!entity_id || !info || !info->is_timeline || field == VG_RENDERED_FIELD_NONE) {
         return;
@@ -1031,7 +1122,22 @@ static void capture_timeline_for_entity_field(ID entity_id, VgRenderedField fiel
     sample.phase_ms = info->phase_ms;
     sample.period_ms = info->period_ms;
     sample.loop = info->loop;
+    sample.end_event = info->end_event;
+    sample.at_end = info->at_end;
+    sample.event_id_bits = timeline_event_id_bits(info->event_id);
     vg_rendered_state_capture_record_timeline((uintptr_t)entity_id, field, sample);
+    if (g_timeline_progress_observer) {
+        VgTimelineProgressSample progress = {
+            .event_id = info->event_id,
+            .step_index = info->step_index,
+            .keyframe_count = info->keyframe_count,
+            .phase_ms = info->phase_ms,
+            .period_ms = info->period_ms,
+            .end_event = info->end_event,
+            .at_end = info->at_end,
+        };
+        g_timeline_progress_observer(entity_id, &progress);
+    }
 }
 
 static ID resolve_entity_field_value(ID entity_id,
@@ -1249,7 +1355,7 @@ static bool render_record_node(ID node_obj,
     if (local_t_obj) {
         TimelineResolveInfo t_info;
         VgTransformFixed local_t = decode_transform_fixed_with_info(local_t_obj, now_ms, sc, &t_info);
-        if (t_info.is_timeline) {
+        if (timeline_info_is_animating(&t_info)) {
             mark_has_animation(out_has_animation);
         }
         capture_timeline_for_entity_field(entity_id, VG_RENDERED_FIELD_T, &t_info);
@@ -1259,6 +1365,11 @@ static bool render_record_node(ID node_obj,
         vg_rendered_state_capture_record_entity((uintptr_t)entity_id, world_t);
     }
     VgStyle style = decode_style(node_obj, entity_id, h, now_ms, sc, out_has_animation);
+    uint32_t style_signature = style_content_signature(style);
+    if (entity_id) {
+        vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
+                                                                  style_signature);
+    }
 
     if (h == sc->h_group) {
         if (!style.visible) {
@@ -1517,6 +1628,46 @@ static bool render_record_node(ID node_obj,
                                                                          now_ms,
                                                                          sc,
                                                                          out_has_animation));
+        vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
+                                                                  combine_content_signatures(style_signature,
+                                                                                             text_content_signature(temp.data.text.text)));
+        {
+            VgRectData local_bounds = {0};
+            if (vg_text_local_bounds(&temp.data.text, &local_bounds)) {
+                VgTransformFixed text_t = vg_transform_fixed_identity();
+                text_t.m02 = ((int32_t)temp.data.text.x) << CLJ_FIXED_FRAC_BITS;
+                text_t.m12 = ((int32_t)temp.data.text.y) << CLJ_FIXED_FRAC_BITS;
+                text_t.m00 = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                text_t.m11 = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                if (temp.data.text.rot_deg != 0) {
+                    VgTransform local_t = vg_transform_identity();
+                    local_t.tx = temp.data.text.x;
+                    local_t.ty = temp.data.text.y;
+                    local_t.sx = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                    local_t.sy = (temp.data.text.scale > 0) ? temp.data.text.scale : CLJ_FIXED_SCALE;
+                    local_t.rot_deg = temp.data.text.rot_deg;
+                    text_t = vg_transform_fixed_from_transform(local_t);
+                }
+                VgTransformFixed text_world_t = vg_transform_fixed_compose(world_t, text_t);
+                int16_t x_max = (local_bounds.w > 0)
+                                    ? (int16_t)(local_bounds.x + local_bounds.w - 1)
+                                    : local_bounds.x;
+                int16_t y_max = (local_bounds.h > 0)
+                                    ? (int16_t)(local_bounds.y + local_bounds.h - 1)
+                                    : local_bounds.y;
+                VgPoint points[4] = {
+                    {.x = local_bounds.x, .y = local_bounds.y},
+                    {.x = x_max, .y = local_bounds.y},
+                    {.x = x_max, .y = y_max},
+                    {.x = local_bounds.x, .y = y_max},
+                };
+                if (!leaf_visible_after_aabb_capture(entity_id, text_world_t, points, 4u, style.visible)) {
+                    return true;
+                }
+            } else if (!style.visible) {
+                return true;
+            }
+        }
         if (!style.visible) {
             return true;
         }
@@ -1551,27 +1702,13 @@ static bool resolve_root_node(ID root_field,
     if (!out_root_node) {
         return false;
     }
-    if (!root_field) {
-        return true;
-    }
-    if (index_field) {
-        if (!is_map(index_field)) {
-            return false;
-        }
-        if (out_entity_map) {
-            *out_entity_map = index_field;
-        }
-        *out_root_node = root_field;
-        return true;
-    }
-    if (!is_map(root_field)) {
-        *out_root_node = root_field;
-        return true;
+    if (!vg_scene_root_is_canonical(root_field) || !index_field || !is_map(index_field)) {
+        return false;
     }
     if (out_entity_map) {
-        *out_entity_map = root_field;
+        *out_entity_map = index_field;
     }
-    *out_root_node = vg_flat_scene_lookup_get(lookup, root_field, (ID)&sym_entity_root_data.sym);
+    *out_root_node = vg_flat_scene_lookup_get(lookup, index_field, root_field);
     return *out_root_node != NULL;
 }
 
@@ -1619,7 +1756,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     ID entity_map = NULL;
     ID root_node = NULL;
     VgFlatSceneLookup lookup = {0};
-    if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
+    if (!is_map(index) || !vg_flat_scene_lookup_build(index, &lookup)) {
         return false;
     }
     if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
@@ -1723,7 +1860,18 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
         return false;
     }
 
-    out_slot->root = scene->root;
+    if (!vg_scene_root_is_canonical(scene->root) || !scene->index || !is_map(scene->index)) {
+        return false;
+    }
+    VgFlatSceneLookup lookup = {0};
+    if (!vg_flat_scene_lookup_build(scene->index, &lookup)) {
+        return false;
+    }
+    ID root_node = vg_flat_scene_lookup_get(&lookup, scene->index, scene->root);
+    if (!root_node) {
+        return false;
+    }
+    out_slot->root = root_node;
     out_slot->clip_rect = clip;
     out_slot->z = id_to_i16_default(scene->z, 0);
     out_slot->visible = id_to_bool_default(scene->visible, true);

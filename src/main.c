@@ -1,7 +1,4 @@
 #include "platform.h"
-#include "object.h"
-#include "exception.h"
-#include "parser.h"
 #include "namespace.h"
 #include "symbol.h"
 #include "runtime.h"
@@ -12,9 +9,6 @@
 
 int main() {
     platform_init();
-#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
-    memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
-#endif
     runtime_init(&g_runtime);
     
     const char *cname = platform_name();
@@ -41,8 +35,6 @@ int main() {
     // Initialize global structures
     meta_registry_init(); // Enable meta functionality
     init_special_symbols();
-    extern void init_fs_keywords(void);
-    init_fs_keywords();
     // Singletons are automatically initialized on first call
     
     // Demo output removed; everything should be covered by unit tests
@@ -52,7 +44,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup(); // Cleanup meta functionality
-    autorelease_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
+    autorelease_pool_free(); // Cleanup all autorelease pools
     
     return 0;
 }

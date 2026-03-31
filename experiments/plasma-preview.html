@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Background Effects – Integer Only</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Instrument+Serif&display=swap');
+  :root {
+    --bg: #0c0c14; --surface: #14141f; --accent: #ff6b35;
+    --text: #d8d0c0; --muted: #706858; --border: #2a2a35;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Mono', monospace; background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 14px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-family: 'Instrument Serif', serif; font-size: 28px; font-weight: 400;
+    letter-spacing: 4px; text-transform: uppercase; color: var(--accent);
+  }
+  .subtitle { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+  .preview-wrap {
+    border: 2px solid var(--border); border-radius: 2px; overflow: hidden;
+    image-rendering: pixelated; background: #000; position: relative;
+  }
+  .preview-wrap .label {
+    position: absolute; bottom: 4px; right: 6px; font-size: 9px;
+    color: rgba(255,255,255,0.3); pointer-events: none; letter-spacing: 1px;
+  }
+  canvas { display: block; image-rendering: pixelated; }
+  .controls {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 20px;
+    background: var(--surface); padding: 14px 18px; border-radius: 6px;
+    border: 1px solid var(--border); width: 644px;
+  }
+  .control-group { display: flex; flex-direction: column; gap: 3px; }
+  label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  input[type=color] {
+    width: 100%; height: 28px; border: 1px solid var(--border);
+    border-radius: 3px; background: var(--surface); cursor: pointer;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .val { font-size: 10px; color: var(--accent); float: right; }
+  select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 3px; padding: 3px 6px; font-family: 'Space Mono', monospace; font-size: 11px;
+  }
+  .stats {
+    font-size: 10px; color: var(--muted);
+    grid-column: 1 / -1; text-align: center; padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .full-width { grid-column: 1 / -1; }
+  .pal-row { display: flex; gap: 1px; height: 16px; border-radius: 3px; overflow: hidden; }
+  .pal-row div { flex: 1; }
+  .mem-info {
+    font-size: 9px; color: var(--muted); grid-column: 1 / -1;
+    text-align: center; font-style: italic;
+  }
+  .effect-select {
+    width: 644px;
+  }
+  .effect-select select {
+    width: 100%; padding: 8px 12px; font-size: 13px;
+    background: var(--surface); color: var(--text); border: 2px solid var(--accent);
+    border-radius: 4px; font-family: 'Space Mono', monospace; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>Background Effects</h1>
+<div class="subtitle">Integer-only &middot; small LUTs (&le;2 KB) &middot; RGB565 &middot; 320&times;240</div>
+
+<div class="effect-select">
+  <select id="mode">
+    <option value="plasma" selected>Plasma (4x sinLUT + int dist)</option>
+    <option value="nova">Nova (radial sinLUT + int atan2)</option>
+    <option value="marble">Marble (sinLUT turbulence veins)</option>
+    <option value="moire">Moir&eacute; (XOR of 2 int distances)</option>
+    <option value="interference">Interference (3-source wave sum)</option>
+    <option value="xorwarp">XOR Warp (XOR + sin distortion)</option>
+    <option value="wood">Wood (radial rings + turbulence)</option>
+      <option value="fire">Fire (frozen pixel-sum automaton)</option>
+      <option value="voronoi">Voronoi (Manhattan distance cells)</option>
+      <option value="lava">Lava (plasma + abs distortion)</option>
+      <option value="clouds">Clouds (multi-octave sin hash)</option>
+      <option value="diamonds">Diamonds (rotated grid + sin)</option>
+      <option value="spiral">Spiral (angle + dist rings)</option>
+      <option value="metaballs">Metaballs (3 blobs, 1/dist sum)</option>
+      <option value="rotozoom">Rotozoom (rotated XOR tile)</option>
+      <option value="caustics">Caustics (water light refraction)</option>
+      <option value="crosshatch">Crosshatch (layered diagonal lines)</option>
+      <option value="hexgrid">Hex Grid (hexagonal cells)</option>
+      <option value="domainwarp">Domain Warp (recursive sin distort)</option>
+      <option value="scales">Scales (overlapping arcs)</option>
+    </select>
+  </div>
+
+<div class="preview-wrap">
+  <canvas id="cv" width="320" height="240" style="width:640px;height:480px;"></canvas>
+  <div class="label" id="modeLabel">PLASMA</div>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Color A <span class="val" id="vA"></span></label>
+    <input type="color" id="colorA" value="#b07820">
+  </div>
+  <div class="control-group">
+    <label>Color B <span class="val" id="vB"></span></label>
+    <input type="color" id="colorB" value="#e8c840">
+  </div>
+  <div class="control-group">
+    <label>Spread <span class="val" id="vSpread"></span></label>
+    <input type="range" id="spread" min="5" max="100" step="5" value="35">
+  </div>
+  <div class="control-group">
+    <label>Frequency <span class="val" id="vFreq"></span></label>
+    <input type="range" id="freq" min="1" max="24" step="1" value="6">
+  </div>
+  <div class="control-group">
+    <label>Phase / Seed <span class="val" id="vPhase"></span></label>
+    <input type="range" id="phase" min="0" max="255" value="0">
+  </div>
+  <div class="control-group">
+    <label>Palette Size</label>
+    <select id="palSize">
+      <option value="4">4</option>
+      <option value="8">8</option>
+      <option value="16" selected>16</option>
+      <option value="32">32</option>
+    </select>
+  </div>
+  <div class="control-group full-width">
+    <label>Palette</label>
+    <div class="pal-row" id="palRow"></div>
+  </div>
+  <div class="mem-info" id="memInfo">--</div>
+  <div class="stats" id="stats">--</div>
+</div>
+
+<script>
+const W = 320, H = 240, CX = 160, CY = 120;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const imgData = ctx.createImageData(W, H);
+
+// === SMALL LOOKUP TABLES (all fit in <2 KB) ===
+
+// sinLUT[256]: int8, 256 bytes
+const SIN = new Int8Array(256);
+for (let i = 0; i < 256; i++) SIN[i] = Math.round(Math.sin(i * Math.PI * 2 / 256) * 127);
+
+// atanLUT[65]: uint8, 65 bytes. ratio 0..64 -> angle 0..32 within octant
+const ATAN = new Uint8Array(65);
+for (let i = 0; i <= 64; i++) ATAN[i] = Math.round(Math.atan(i / 64) / (Math.PI / 4) * 32);
+
+// Integer hash for deterministic noise (fire, etc.)
+function hash16(x, seed) {
+  let h = ((x * 374761393) + (seed * 668265263)) >>> 0;
+  h ^= h >>> 13; h = (h * 1274126177) >>> 0; h ^= h >>> 16;
+  return h & 0xFF;
+}
+
+// Integer distance approx: max(|a|,|b|) + 3*min/8. ~3.5% error, no sqrt
+function idist(dx, dy) {
+  const ax = dx < 0 ? -dx : dx;
+  const ay = dy < 0 ? -dy : dy;
+  const mn = ax < ay ? ax : ay;
+  const mx = ax > ay ? ax : ay;
+  return mx + ((mn * 3) >> 3);
+}
+
+// --- Palette helpers (setup only) ---
+
+function hexToRgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF];
+}
+function rgbToRgb565(r, g, b) { return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3); }
+function rgb565ToRgb(c) {
+  const r = ((c >> 11) & 0x1F) << 3;
+  const g = ((c >> 5) & 0x3F) << 2;
+  const b = (c & 0x1F) << 3;
+  return [r | (r >> 5), g | (g >> 6), b | (b >> 5)];
+}
+function lerpRgb565(c1, c2, t) {
+  const [r1, g1, b1] = rgb565ToRgb(c1);
+  const [r2, g2, b2] = rgb565ToRgb(c2);
+  return rgbToRgb565(r1 + ((r2 - r1) * t + 0.5 | 0), g1 + ((g2 - g1) * t + 0.5 | 0), b1 + ((b2 - b1) * t + 0.5 | 0));
+}
+function buildPalette(hexA, hexB, spread, count) {
+  const ca = rgbToRgb565(...hexToRgb(hexA));
+  const cb = rgbToRgb565(...hexToRgb(hexB));
+  const mid = lerpRgb565(ca, cb, 0.5);
+  const s = spread / 100;
+  const pal = [];
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const target = t < 0.5 ? ca : cb;
+    const blend = Math.abs(t - 0.5) * 2;
+    pal.push(lerpRgb565(mid, target, blend * s));
+  }
+  return pal;
+}
+function drawPalette(palette) {
+  const row = document.getElementById('palRow');
+  row.innerHTML = '';
+  for (const c of palette) {
+    const [r, g, b] = rgb565ToRgb(c);
+    const d = document.createElement('div');
+    d.style.background = `rgb(${r},${g},${b})`;
+    row.appendChild(d);
+  }
+}
+function flattenPalette(palette) {
+  const r = new Uint8Array(palette.length);
+  const g = new Uint8Array(palette.length);
+  const b = new Uint8Array(palette.length);
+  for (let i = 0; i < palette.length; i++) {
+    const rgb = rgb565ToRgb(palette[i]);
+    r[i] = rgb[0]; g[i] = rgb[1]; b[i] = rgb[2];
+  }
+  return { r, g, b };
+}
+
+function putPixel(data, off, pal, idx) {
+  data[off] = pal.r[idx]; data[off|1] = pal.g[idx];
+  data[off|2] = pal.b[idx]; data[off|3] = 255;
+}
+
+function render() {
+  const hexA = document.getElementById('colorA').value;
+  const hexB = document.getElementById('colorB').value;
+  const spread = parseInt(document.getElementById('spread').value);
+  const freq = parseInt(document.getElementById('freq').value);
+  const phase = parseInt(document.getElementById('phase').value);
+  const palSize = parseInt(document.getElementById('palSize').value);
+  const mode = document.getElementById('mode').value;
+  const palMask = palSize - 1;
+  const idxShift = {4:6, 8:5, 16:4, 32:3}[palSize];
+
+  document.getElementById('vA').textContent = hexA;
+  document.getElementById('vB').textContent = hexB;
+  document.getElementById('vSpread').textContent = spread + '%';
+  document.getElementById('vFreq').textContent = freq;
+  document.getElementById('vPhase').textContent = phase;
+  document.getElementById('modeLabel').textContent = mode.toUpperCase();
+
+  const palette = buildPalette(hexA, hexB, spread, palSize);
+  drawPalette(palette);
+  const pal = flattenPalette(palette);
+
+  const t0 = performance.now();
+  const data = imgData.data;
+  let ops = '', tblB = 0, tblD = '', notes = '';
+
+  const p0 = phase & 0xFF;
+  const p1 = (phase * 3) & 0xFF;
+  const p2 = (phase * 5) & 0xFF;
+  const p3 = (phase * 7) & 0xFF;
+
+  // ==================== PLASMA ====================
+  if (mode === 'plasma') {
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy = y - CY;
+      const ayy = dy < 0 ? -dy : dy;
+      const v2 = SIN[((y * freq >> 1) + p1) & 0xFF];
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        const axx = dx < 0 ? -dx : dx;
+        const v1 = SIN[((x * freq >> 1) + p0) & 0xFF];
+        const v3 = SIN[(((x + y) * freq >> 2) + p2) & 0xFF];
+        const mn = axx < ayy ? axx : ayy;
+        const mx = axx > ayy ? axx : ayy;
+        const dist = mx + ((mn * 3) >> 3);
+        const v4 = SIN[((dist * freq >> 2) + p3) & 0xFF];
+        const raw = ((v1 + v2 + v3 + v4 + 508) >> 2) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 4 SIN'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div';
+  }
+
+  // ==================== NOVA ====================
+  else if (mode === 'nova') {
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy = y - CY;
+      const ayy = dy < 0 ? -dy : dy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        const axx = dx < 0 ? -dx : dx;
+        const mn = axx < ayy ? axx : ayy;
+        const mx = axx > ayy ? axx : ayy;
+        const dist = mx + ((mn * 3) >> 3);
+        let angle;
+        if (mx === 0) { angle = 0; }
+        else {
+          const ratio = ((mn << 6) / mx) | 0;
+          angle = ATAN[ratio];
+          if (ayy > axx) angle = 64 - angle;
+          if (dx < 0)  angle = 128 - angle;
+          if (dy < 0)  angle = (256 - angle) & 0xFF;
+        }
+        const v1 = SIN[((dist * freq >> 2) + p3) & 0xFF];
+        const v2 = SIN[((angle << 1) + p1) & 0xFF];
+        const v3 = SIN[((dist * freq >> 3) + angle + p0) & 0xFF];
+        const glow = 127 - (dist >> 1);
+        const g = glow > 0 ? (glow < 127 ? glow : 127) : 0;
+        const raw = ((v1 + v2 + v3 + g + 508) >> 2) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 imul + 3 SIN + 1 ATAN + 1 idiv'; tblB = 321; tblD = 'SIN[256]+ATAN[65]';
+    notes = '1 idiv/px for angle';
+  }
+
+  // ==================== MARBLE ====================
+  else if (mode === 'marble') {
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const turb2 = SIN[((y >> 3) + p1) & 0xFF] >> 2;
+      for (let x = 0; x < W; x++) {
+        const turb1 = SIN[((x >> 2) + p0) & 0xFF] >> 2;
+        const turb3 = SIN[(((x + y) >> 4) + p2) & 0xFF] >> 3;
+        const turb = turb1 + turb2 + turb3;
+        const veinArg = (x * 5 + y * 10) * freq >> 4;
+        const vein = SIN[(veinArg + turb) & 0xFF];
+        const raw = (vein + 127) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 4 SIN'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div';
+  }
+
+  // ==================== MOIRE ====================
+  else if (mode === 'moire') {
+    // Two foci offset by phase; XOR of integer distances, map to palette
+    const fx1 = CX - 40 + ((phase * 3) & 63);
+    const fy1 = CY - 30 + ((phase * 5) & 63);
+    const fx2 = CX + 40 - ((phase * 7) & 63);
+    const fy2 = CY + 30 - ((phase * 11) & 63);
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy1 = y - fy1, dy2 = y - fy2;
+      const ay1 = dy1 < 0 ? -dy1 : dy1;
+      const ay2 = dy2 < 0 ? -dy2 : dy2;
+      for (let x = 0; x < W; x++) {
+        const dx1 = x - fx1, dx2 = x - fx2;
+        const ax1 = dx1 < 0 ? -dx1 : dx1;
+        const ax2 = dx2 < 0 ? -dx2 : dx2;
+        const mn1 = ax1 < ay1 ? ax1 : ay1, mx1 = ax1 > ay1 ? ax1 : ay1;
+        const d1 = mx1 + ((mn1 * 3) >> 3);
+        const mn2 = ax2 < ay2 ? ax2 : ay2, mx2 = ax2 > ay2 ? ax2 : ay2;
+        const d2 = mx2 + ((mn2 * 3) >> 3);
+        const raw = ((d1 * freq >> 1) ^ (d2 * freq >> 1)) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 imul + 1 XOR + 2 idist'; tblB = 0; tblD = 'none';
+    notes = 'no LUT, no div, pure ALU';
+  }
+
+  // ==================== INTERFERENCE ====================
+  else if (mode === 'interference') {
+    // 3 point sources, sum of sinLUT[distance * freq]
+    const sx = [CX - 60 + (p0 & 31), CX + 50 - (p1 & 31), CX + (p2 & 31) - 16];
+    const sy = [CY - 40 + (p0 & 15), CY + 40 - (p2 & 15), CY - (p1 & 15) + 8];
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dys = [y - sy[0], y - sy[1], y - sy[2]];
+      const ays = dys.map(d => d < 0 ? -d : d);
+      for (let x = 0; x < W; x++) {
+        let sum = 0;
+        for (let s = 0; s < 3; s++) {
+          const dx = x - sx[s];
+          const ax = dx < 0 ? -dx : dx;
+          const mn = ax < ays[s] ? ax : ays[s];
+          const mx = ax > ays[s] ? ax : ays[s];
+          const d = mx + ((mn * 3) >> 3);
+          sum += SIN[(d * freq >> 1) & 0xFF];
+        }
+        const raw = ((sum + 381) / 3 + 0.5 | 0) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 3 SIN + 3 idist'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div in dist';
+  }
+
+  // ==================== XOR WARP ====================
+  else if (mode === 'xorwarp') {
+    // Classic XOR pattern with sine distortion on both axes
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const yWarp = SIN[((y * freq >> 2) + p1) & 0xFF] >> 2;
+      for (let x = 0; x < W; x++) {
+        const xWarp = SIN[((x * freq >> 2) + p0) & 0xFF] >> 2;
+        const xw = (x + yWarp) & 0xFF;
+        const yw = (y + xWarp) & 0xFF;
+        const raw = (xw ^ yw) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 imul + 2 SIN + 1 XOR'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div';
+  }
+
+  // ==================== WOOD ====================
+  else if (mode === 'wood') {
+    // Concentric rings (integer distance from center) + sine turbulence
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy = y - CY;
+      const ayy = dy < 0 ? -dy : dy;
+      const turb2 = SIN[((y >> 2) + p1) & 0xFF] >> 3;
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        const axx = dx < 0 ? -dx : dx;
+        const mn = axx < ayy ? axx : ayy;
+        const mx = axx > ayy ? axx : ayy;
+        const dist = mx + ((mn * 3) >> 3);
+        const turb1 = SIN[((x >> 2) + p0) & 0xFF] >> 3;
+        const turb3 = SIN[(((x * 3 + y * 7) >> 4) + p2) & 0xFF] >> 3;
+        const ring = (dist * freq >> 1) + turb1 + turb2 + turb3;
+        const raw = ((SIN[ring & 0xFF] + 127) & 0xFF);
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 imul + 4 SIN + 1 idist'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div';
+  }
+
+  // ==================== FIRE ====================
+  else if (mode === 'fire') {
+    // Frozen fire: seed-deterministic pixel-averaging automaton
+    // Runs N passes of "cool + average" on a hash-seeded buffer
+    const buf = new Uint8Array(W * H);
+    // seed bottom rows with hash-based fuel
+    for (let x = 0; x < W; x++) {
+      buf[(H - 1) * W + x] = hash16(x, phase);
+      buf[(H - 2) * W + x] = hash16(x + W, phase);
+      buf[(H - 3) * W + x] = hash16(x + W * 2, phase);
+    }
+    // also scatter some sparks seeded by phase
+    for (let i = 0; i < W * 3; i++) {
+      const sx = hash16(i, phase ^ 0xAA) % W;
+      const sy = H - 1 - (hash16(i, phase ^ 0x55) % 8);
+      buf[sy * W + sx] = 255;
+    }
+    // simulate: average 4 neighbors + cool, repeated passes for taller flames
+    const passes = 4 + (freq >> 1);
+    for (let pass = 0; pass < passes; pass++) {
+      for (let y = 1; y < H - 1; y++) {
+        const row = y * W;
+        for (let x = 1; x < W - 1; x++) {
+          const avg = (buf[row + x - 1] + buf[row + x + 1] +
+                       buf[row - W + x] + buf[row + W + x]) >> 2;
+          const cool = avg > 2 ? avg - 2 : 0;
+          buf[(y - 1) * W + x] = cool;
+        }
+      }
+    }
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        const raw = buf[y * W + x];
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = 'automaton: 4 add + 1 shift/px * ' + passes + ' passes';
+    tblB = W * H; tblD = 'buf[76800]';
+    notes = 'NOT per-frame! precompute once from seed';
+  }
+
+  // ==================== VORONOI (Manhattan) ====================
+  else if (mode === 'voronoi') {
+    // N seed points from hash, per pixel: find min Manhattan distance
+    const N = 12 + (freq >> 1);
+    const px = new Int16Array(N), py = new Int16Array(N);
+    for (let i = 0; i < N; i++) {
+      px[i] = hash16(i * 2, phase) * W >> 8;
+      py[i] = hash16(i * 2 + 1, phase) * H >> 8;
+    }
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        let minD = 0x7FFF, minD2 = 0x7FFF;
+        for (let i = 0; i < N; i++) {
+          const dx = x - px[i], dy = y - py[i];
+          const d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+          if (d < minD) { minD2 = minD; minD = d; }
+          else if (d < minD2) { minD2 = d; }
+        }
+        const raw = ((minD2 - minD) * freq) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = N + ' pts: Manhattan dist + min'; tblB = N * 4; tblD = 'pts[' + N + ']';
+    notes = 'no LUT, no div, pure ALU';
+  }
+
+  // ==================== LAVA ====================
+  else if (mode === 'lava') {
+    // Like plasma but with abs() creating sharp ridges (lava cracks)
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const v2 = SIN[((y * freq >> 1) + p1) & 0xFF];
+      for (let x = 0; x < W; x++) {
+        const v1 = SIN[((x * freq >> 1) + p0) & 0xFF];
+        const v3 = SIN[(((x + y) * freq >> 2) + p2) & 0xFF];
+        const v4 = SIN[(((x - y + 320) * freq >> 2) + p3) & 0xFF];
+        // abs of each sine creates sharp V-shaped ridges
+        const a1 = v1 < 0 ? -v1 : v1;
+        const a2 = v2 < 0 ? -v2 : v2;
+        const a3 = v3 < 0 ? -v3 : v3;
+        const a4 = v4 < 0 ? -v4 : v4;
+        const raw = ((a1 + a2 + a3 + a4) >> 1) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 4 SIN + 4 abs'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div, sharp ridges from abs()';
+  }
+
+  // ==================== CLOUDS ====================
+  else if (mode === 'clouds') {
+    // Multi-octave value noise via sin hash at decreasing frequencies
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        let val = 0, amp = 64;
+        // 4 octaves, each doubling frequency, halving amplitude
+        for (let oct = 0; oct < 4; oct++) {
+          const f = freq << oct;
+          const v = SIN[((x * f >> 3) + (y * f >> 4) + p0 * (oct + 1)) & 0xFF];
+          const v2 = SIN[((y * f >> 3) + (x * f >> 5) + p1 * (oct + 1)) & 0xFF];
+          val += ((v + v2) * amp) >> 8;
+          amp >>= 1;
+        }
+        const raw = (val + 128) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '8 imul + 8 SIN (4 octaves)'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div, multi-octave noise';
+  }
+
+  // ==================== DIAMONDS ====================
+  else if (mode === 'diamonds') {
+    // 45-degree rotated grid (Manhattan distance to nearest grid point) + sine modulation
+    const gridSize = 8 + freq * 2;
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        // rotate 45 degrees: u = x+y, v = x-y (integer)
+        const u = x + y;
+        const v = x - y + 256;
+        // distance to nearest grid intersection (Manhattan in rotated space)
+        const du = u % gridSize;
+        const dv = v % gridSize;
+        const cu = du > (gridSize >> 1) ? gridSize - du : du;
+        const cv = dv > (gridSize >> 1) ? gridSize - dv : dv;
+        const d = cu + cv;
+        const modulated = SIN[(d * 8 + p0) & 0xFF];
+        const raw = (modulated + 127) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 mod + 1 SIN + adds'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div (mod only), diamond grid';
+  }
+
+  // ==================== SPIRAL ====================
+  else if (mode === 'spiral') {
+    // Angle + distance create spiral arms, using int atan2
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy = y - CY;
+      const ayy = dy < 0 ? -dy : dy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        const axx = dx < 0 ? -dx : dx;
+        const mn = axx < ayy ? axx : ayy;
+        const mx = axx > ayy ? axx : ayy;
+        const dist = mx + ((mn * 3) >> 3);
+        let angle;
+        if (mx === 0) { angle = 0; }
+        else {
+          const ratio = ((mn << 6) / mx) | 0;
+          angle = ATAN[ratio];
+          if (ayy > axx) angle = 64 - angle;
+          if (dx < 0)  angle = 128 - angle;
+          if (dy < 0)  angle = (256 - angle) & 0xFF;
+        }
+        // spiral: angle + dist*freq creates arms
+        const spiralArg = angle + (dist * freq >> 2);
+        const raw = ((SIN[spiralArg & 0xFF] + 127) & 0xFF);
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '1 imul + 1 SIN + 1 ATAN + 1 idiv + idist'; tblB = 321; tblD = 'SIN[256]+ATAN[65]';
+    notes = '1 idiv/px for angle';
+  }
+
+  // ==================== METABALLS ====================
+  else if (mode === 'metaballs') {
+    // 3 blobs at hash-seeded positions; per pixel: sum of 256/dist for each blob
+    const bx = [80 + (p0 & 127), 160 + (p1 & 63), 220 - (p2 & 63)];
+    const by = [60 + (p1 & 63), 140 - (p0 & 63), 180 + (p3 & 31)];
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        let sum = 0;
+        for (let i = 0; i < 3; i++) {
+          const dx = x - bx[i], dy = y - by[i];
+          const ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+          const mn = ax < ay ? ax : ay, mx = ax > ay ? ax : ay;
+          const d = mx + ((mn * 3) >> 3);
+          if (d > 0) sum += ((freq * 256) / d) | 0;
+        }
+        const raw = sum > 255 ? 255 : sum;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 idiv + 3 idist'; tblB = 0; tblD = 'none';
+    notes = '3 idiv/px (blob falloff), no LUT';
+  }
+
+  // ==================== ROTOZOOM ====================
+  else if (mode === 'rotozoom') {
+    // Rotate+zoom a simple XOR pattern using SIN/COS from LUT
+    const angle = phase;
+    const cosA = SIN[(angle + 64) & 0xFF]; // cos = sin(x+64)
+    const sinA = SIN[angle & 0xFF];
+    const zoom = freq + 2;
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const dy = y - CY;
+      for (let x = 0; x < W; x++) {
+        const dx = x - CX;
+        // integer rotation: (dx*cos - dy*sin) >> 7, scaled by zoom
+        const u = ((dx * cosA - dy * sinA) * zoom >> 7) & 0xFF;
+        const v = ((dx * sinA + dy * cosA) * zoom >> 7) & 0xFF;
+        const raw = (u ^ v) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '4 imul + 1 XOR'; tblB = 256; tblD = 'SIN[256] (cos=sin+64)';
+    notes = 'no div, rotation via sin/cos LUT';
+  }
+
+  // ==================== CAUSTICS ====================
+  else if (mode === 'caustics') {
+    // Water caustics: sum of 3 sin waves at different angles, abs for bright lines
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        // 3 wave directions at roughly 0, 60, 120 degrees (integer approximations)
+        const w1 = SIN[(x * freq >> 1) + p0 & 0xFF];
+        const w2 = SIN[((x * 3 + y * 5) * freq >> 3) + p1 & 0xFF];
+        const w3 = SIN[((x * 5 - y * 3 + 512) * freq >> 3) + p2 & 0xFF];
+        // abs creates bright caustic lines where waves align
+        const a1 = w1 < 0 ? -w1 : w1;
+        const a2 = w2 < 0 ? -w2 : w2;
+        const a3 = w3 < 0 ? -w3 : w3;
+        // invert: bright = where all waves near zero (caustic focus)
+        const raw = 255 - ((a1 + a2 + a3) * 2 / 3 | 0);
+        const clamped = raw < 0 ? 0 : raw;
+        putPixel(data, rowOff + (x << 2), pal, (clamped >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 3 SIN + 3 abs'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div, inverted abs = caustic lines';
+  }
+
+  // ==================== CROSSHATCH ====================
+  else if (mode === 'crosshatch') {
+    // Layered diagonal lines at 3 angles with sin-modulated density
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        // 3 line directions (diagonal, anti-diagonal, horizontal)
+        const l1 = SIN[((x + y) * freq >> 1 + p0) & 0xFF];
+        const l2 = SIN[((x - y + 256) * freq >> 1 + p1) & 0xFF];
+        const l3 = SIN[(y * freq + p2) & 0xFF];
+        // density modulation: use abs, multiply, shift
+        const d1 = l1 < 0 ? -l1 : l1;
+        const d2 = l2 < 0 ? -l2 : l2;
+        const d3 = l3 < 0 ? -l3 : l3;
+        // blend: darker where any line is dark (multiply-like)
+        const raw = ((d1 * d2 * d3) >> 14) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '3 imul + 3 SIN + 3 abs + 2 mul'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div, multiply-blend lines';
+  }
+
+  // ==================== HEX GRID ====================
+  else if (mode === 'hexgrid') {
+    // Hexagonal cell distance pattern using integer coordinate transform
+    const sz = 6 + freq * 2;
+    const szH = sz * 3 >> 1; // hex row height ≈ sz*1.5
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const row = (y / szH | 0);
+      const yInCell = y - row * szH;
+      for (let x = 0; x < W; x++) {
+        // offset every other row
+        const xOff = (row & 1) ? x + (sz >> 1) : x;
+        const col = (xOff / sz | 0);
+        const xInCell = xOff - col * sz;
+        // distance to cell center (hex approximation)
+        const cx = xInCell - (sz >> 1);
+        const cy = yInCell - (szH >> 1);
+        const ax = cx < 0 ? -cx : cx;
+        const ay = cy < 0 ? -cy : cy;
+        const mn = ax < ay ? ax : ay;
+        const mx = ax > ay ? ax : ay;
+        const d = mx + ((mn * 3) >> 3);
+        // modulate with position hash for variety
+        const h = ((col * 17 + row * 31 + p0) * 2654435761 >>> 24) & 0xFF;
+        const raw = ((d * 8 + h) & 0xFF);
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 idiv + 1 idist + hash'; tblB = 0; tblD = 'none';
+    notes = '2 div for cell coords, no LUT';
+  }
+
+  // ==================== DOMAIN WARP ====================
+  else if (mode === 'domainwarp') {
+    // Recursive domain warping: f(p + g(p + h(p)))
+    // Each layer distorts coords with SIN lookups
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      for (let x = 0; x < W; x++) {
+        // layer 1: base distortion
+        const wx1 = SIN[((x * freq >> 2) + p0) & 0xFF] >> 1;
+        const wy1 = SIN[((y * freq >> 2) + p1) & 0xFF] >> 1;
+        // layer 2: warp the warped coords
+        const wx2 = SIN[(((x + wx1) * freq >> 3) + p2) & 0xFF] >> 2;
+        const wy2 = SIN[(((y + wy1) * freq >> 3) + p3) & 0xFF] >> 2;
+        // final evaluation
+        const fx = x + wx1 + wx2;
+        const fy = y + wy1 + wy2;
+        const v1 = SIN[((fx * freq >> 2) + p0) & 0xFF];
+        const v2 = SIN[((fy * freq >> 2) + p1) & 0xFF];
+        const raw = ((v1 + v2 + 254) >> 1) & 0xFF;
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '6 imul + 6 SIN (2 warp layers)'; tblB = 256; tblD = 'SIN[256]';
+    notes = 'no div, IQ-style domain warp';
+  }
+
+  // ==================== SCALES ====================
+  else if (mode === 'scales') {
+    // Overlapping arc/scale pattern (fish scales, roof tiles)
+    const sz = 8 + freq * 2;
+    for (let y = 0; y < H; y++) {
+      const rowOff = y * W << 2;
+      const row = (y / sz | 0);
+      const yInCell = y - row * sz;
+      for (let x = 0; x < W; x++) {
+        const xOff = (row & 1) ? x + (sz >> 1) : x;
+        const col = (xOff / sz | 0);
+        const xInCell = xOff - col * sz;
+        // distance from top-center of cell (arc center)
+        const cx = xInCell - (sz >> 1);
+        const cy = yInCell;
+        const ax = cx < 0 ? -cx : cx;
+        const mn = ax < cy ? ax : cy;
+        const mx = ax > cy ? ax : cy;
+        const d = mx + ((mn * 3) >> 3);
+        // hash for color variation per cell
+        const h = ((col * 13 + row * 37 + p0) * 2654435761 >>> 28) & 0xF;
+        const raw = ((SIN[(d * 4 + h + p0) & 0xFF] + 127) & 0xFF);
+        putPixel(data, rowOff + (x << 2), pal, (raw >> idxShift) & palMask);
+      }
+    }
+    ops = '2 idiv + 1 SIN + 1 idist + hash'; tblB = 256; tblD = 'SIN[256]';
+    notes = '2 div for cell, overlapping arcs';
+  }
+
+  const elapsed = (performance.now() - t0).toFixed(2);
+  ctx.putImageData(imgData, 0, 0);
+
+  document.getElementById('memInfo').textContent =
+    `Tables: ${tblD} = ${tblB} B | pal[${palSize}]=${palSize*2} B | Ops/px: ${ops}`;
+  document.getElementById('stats').textContent =
+    `${elapsed} ms | integer-only | ${notes}`;
+}
+
+document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>

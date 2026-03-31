@@ -206,7 +206,7 @@ static void register_test_history_load_from_file_crash_reproduction(void) {
   }
 }
 
-TEST(test_pr_str_escapes_quotes) {
+TEST(test_make_string_description_escapes_quotes) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   // Create a string with quotes inside
@@ -214,8 +214,8 @@ TEST(test_pr_str_escapes_quotes) {
   CljString *str = make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
-  // Test pr_str on the string
-  CljString *result = pr_str(str);
+  // Test make_string_description on the string
+  CljString *result = make_string_description(str);
   TEST_ASSERT_NOT_NULL(result);
 
   // Verify that quotes are escaped

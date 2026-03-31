@@ -4,16 +4,19 @@
 
 #include "memory.h"
 #include "platform.h"
-#include "runtime.h"
-#include "builtins.h"
 #include "source_resolver.h"
-#include "meta.h"
+#include "namespace.h"
 #include "line_editor.h"
 #include "event_loop.h"
+#include "exception.h"
 #include "mini_format.h"
 #include "repl.h"
 #include "startup_pipeline.h"
 #include "tiny_clj.h"
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#include "tinyclj_idf_display.h"
+#include "panel.h"
+#endif
 
 #ifndef ESP_REPL_HISTORY_PERSIST_ENABLED
 #define ESP_REPL_HISTORY_PERSIST_ENABLED 1
@@ -30,13 +33,6 @@ static void esp_put_line(const char *s) {
     platform_put_string(NULL, "\n");
 }
 #endif
-
-// If history handling ever OOMs, disable it for the running session.
-static bool g_esp_history_disabled = false;
-
-static bool esp_exception_is_oom(const CLJException *ex) {
-    return ex && ex->type[0] && strcmp(ex->type, EXCEPTION_OUT_OF_MEMORY) == 0;
-}
 
 static bool esp_boot_load_root_file(EvalState *st) {
     if (!st) return false;
@@ -60,18 +56,57 @@ static bool esp_boot_load_root_file(EvalState *st) {
     return ok;
 }
 
-static unsigned int esp_repl_idle_sleep_ms(void) {
-    if (event_loop_has_pending_tasks()) {
-        return 1u;
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+static void esp_report_display_throughput_if_due(void) {
+    static uint32_t s_last_report_ms = 0u;
+    uint32_t now_ms = tinyclj_esp32_current_time_ms();
+    uint32_t elapsed_ms = now_ms - s_last_report_ms;
+    if (elapsed_ms < 1000u) {
+        return;
     }
 
-    int until_next_timer_ms = event_loop_time_until_next_timer_ms();
-    if (until_next_timer_ms >= 0 && until_next_timer_ms < 10) {
-        return (until_next_timer_ms <= 1) ? 1u : (unsigned int)until_next_timer_ms;
+    TinycljIdfDisplay *display = tinyclj_idf_display_get();
+    if (!display || !display->initialized) {
+        s_last_report_ms = now_ms;
+        return;
     }
 
-    return 10u;
+    VgPanelTransferStats stats = {0};
+    if (!vg_panel_transfer_stats_snapshot(&display->panel.panel, &stats)) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+    if (!vg_panel_transfer_stats_reset(&display->panel.panel)) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+    if (stats.transfer_count == 0u) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+
+    uint64_t bytes_per_s = (stats.transferred_bytes * 1000u) / (uint64_t)elapsed_ms;
+    uint64_t mib_x1000 = (bytes_per_s * 1000u) / (1024u * 1024u);
+    uint32_t mib_int = (uint32_t)(mib_x1000 / 1000u);
+    uint32_t mib_frac = (uint32_t)(mib_x1000 % 1000u);
+
+    char line[192];
+    (void)mini_snprintf(line,
+                        sizeof(line),
+                        "[esp-panel] tx=%llu px=%llu bytes=%llu rate=%llu B/s (%u.%03u MiB/s)\n",
+                        (unsigned long long)stats.transfer_count,
+                        (unsigned long long)stats.transferred_pixels,
+                        (unsigned long long)stats.transferred_bytes,
+                        (unsigned long long)bytes_per_s,
+                        mib_int,
+                        mib_frac);
+    platform_put_string(NULL, line);
+    s_last_report_ms = now_ms;
 }
+#else
+static void esp_report_display_throughput_if_due(void) {
+}
+#endif
 
 /**
  * @brief Loads serialized REPL history from KV storage.
@@ -103,9 +138,6 @@ static bool esp_repl_history_save(LineEditor *ed) {
     (void)ed;
     return false;
 #else
-    if (g_esp_history_disabled) {
-        return false;
-    }
     if (!ed) {
         return false;
     }
@@ -113,46 +145,10 @@ static bool esp_repl_history_save(LineEditor *ed) {
     if (!history) {
         return false;
     }
-    bool saved = false;
-    TRY {
-        saved = line_editor_history_save_default((CljObject*)history);
-    }
-    CATCH(ex) {
-        if (esp_exception_is_oom(ex)) {
-            g_esp_history_disabled = true;
-            line_editor_clear_history(ed);
-        }
-        saved = false;
-    }
-    END_TRY
+    bool saved = line_editor_history_save_default((CljObject*)history);
     RELEASE(history);
     return saved;
 #endif
-}
-
-/**
- * @brief Adds an entry to REPL history without letting history failures abort the REPL.
- *
- * History is best-effort on ESP32. Under memory pressure, adding an entry may throw
- * (e.g. while growing the backing vector). Those failures are intentionally swallowed.
- */
-static void esp_repl_history_add_best_effort(LineEditor *ed, const char *line) {
-    if (g_esp_history_disabled) {
-        return;
-    }
-    if (!ed || !line) {
-        return;
-    }
-    TRY {
-        line_editor_add_to_history(ed, line);
-    }
-    CATCH(ex) {
-        if (esp_exception_is_oom(ex)) {
-            g_esp_history_disabled = true;
-            line_editor_clear_history(ed);
-        }
-    }
-    END_TRY
 }
 
 /**
@@ -167,6 +163,7 @@ void tinyclj_idf_start(void) {
         platform_put_string(NULL, "Error: runtime bootstrap failed\n");
         return;
     }
+    subjective_c_register_interpreter_thread();
 
     bool boot_root_loaded = true;
     bool boot_root_present = (resolve_path_to_bytes("/boot/root.edn") != NULL);
@@ -245,10 +242,11 @@ void tinyclj_idf_start(void) {
             }
             if (r == LINE_EDITOR_EOF) {
                 (void)esp_repl_history_save(ed);  // best-effort
+                subjective_c_clear_interpreter_thread();
                 return;
             }
-            repl_process_event_loop(st);
-            platform_sleep_ms(esp_repl_idle_sleep_ms());
+            esp_report_display_throughput_if_due();
+            (void)event_loop_run(NULL, st);
         }
 
         LineEditorState s;
@@ -274,13 +272,13 @@ void tinyclj_idf_start(void) {
             }
             if (form_state == REPL_FORM_INVALID) {
                 platform_put_string(NULL, "Error: Too many closing parentheses\n");
-                esp_repl_history_add_best_effort(ed, acc);
+                line_editor_add_to_history(ed, acc);
                 (void)esp_repl_history_save(ed); // best-effort
                 acc[0] = '\0';
                 continue;
             }
 
-            esp_repl_history_add_best_effort(ed, acc);
+            line_editor_add_to_history(ed, acc);
             (void)esp_repl_history_save(ed);  // best-effort
             (void)eval_multiform_string(acc, st);
             acc[0] = '\0';

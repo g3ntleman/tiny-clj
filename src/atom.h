@@ -3,10 +3,19 @@
 
 #include "object.h"
 #include "common.h" // For CLJ_ASSERT
+#if defined(__APPLE__) || defined(__linux__)
+#include <pthread.h>
+#define CLJ_ATOM_USE_MUTEX 1
+#else
+#define CLJ_ATOM_USE_MUTEX 0
+#endif
 
 // CljAtom struct definition
 typedef struct {
   CljObject base;
+#if CLJ_ATOM_USE_MUTEX
+  pthread_mutex_t mutex;
+#endif
   ID value; // The current value (can be any type, including NULL/nil)
 } CljAtom;
 
@@ -30,6 +39,11 @@ CljAtom *make_atom(ID value);
 /** Get the current value of an atom (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_deref(CljAtom *atom);
 
+/** Get the current value of an atom as an owned strong reference.
+ * Caller must RELEASE() the returned heap object when done.
+ */
+ID atom_deref_owned(CljAtom *atom);
+
 /** Borrow the current atom value without retain/autorelease churn.
  * Intended for hot C paths when the atom outlives the usage.
  */
@@ -45,5 +59,8 @@ ID atom_reset(CljAtom *atom, ID new_value);
 
 /** Apply a function to the atom's value and update it (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc);
+
+/** Destroy host-side atom synchronization primitives before final free. */
+void atom_destroy(CljAtom *atom);
 
 #endif // TINY_CLJ_ATOM_H

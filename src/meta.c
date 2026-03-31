@@ -23,6 +23,11 @@
 #include "list.h"
 // clj_equal is available via map.h -> equality.h
 
+static ID g_kw_column = NULL;
+static const IdSymbolCacheEntry g_meta_kw_cache[] = {
+    {&g_kw_column, ":column"},
+};
+
 void meta_registry_init() {
   if (!g_runtime.meta_registry) {
     g_runtime.meta_registry = make_hashmap(32);
@@ -37,8 +42,9 @@ void meta_registry_cleanup() {
 void meta_set(ID v, ID meta) {
   if (!v)
     return;
-
-  CLJ_ASSERT(!IS_IMMEDIATE(v) && "meta_set: immediates cannot have metadata");
+  /* Heap objects only: tagged immediates (numbers, booleans, keywords, …) carry no metadata. */
+  if (IS_IMMEDIATE(v))
+    return;
 
   meta_registry_init();
   if (!g_runtime.meta_registry)
@@ -103,8 +109,9 @@ CljPersistentMap *make_location_meta(void *reader_ptr, void *st_ptr) {
   }
 
   // Get or create :column keyword
-  CljSymbol *kw_column = intern_symbol_global(":column");
-  if (!kw_column) {
+  if (!id_symbol_cache_init_global(g_meta_kw_cache,
+                                   sizeof(g_meta_kw_cache) / sizeof(g_meta_kw_cache[0])) ||
+      !g_kw_column) {
     RELEASE(location_map);
     return NULL;
   }
@@ -116,8 +123,8 @@ CljPersistentMap *make_location_meta(void *reader_ptr, void *st_ptr) {
   }
 
   // Add :column (Clojure-compatible)
-  if (kw_column) {
-    map_assoc_inplace(&location_map, kw_column, fixnum(column));
+  if (g_kw_column) {
+    map_assoc_inplace(&location_map, g_kw_column, fixnum(column));
   }
 
   // Add :file (Clojure-compatible) - file information not available from EvalState

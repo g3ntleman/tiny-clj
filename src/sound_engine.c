@@ -1,13 +1,14 @@
 /*
- * Sound engine implementation (trk1 streaming, SPSC queue, track registry).
+ * Sound engine implementation (trk1 streaming, SPSC queue, push-based callbacks).
  *
  * Platform-agnostic: ESP32 LEDC and host stubs are in separate files.
  */
 
 #include "sound_engine.h"
 #include "byte_array.h"
-#include "memory.h"
 #include "event_loop.h"
+#include "eval.h"
+#include "memory.h"
 #include "symbol.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -21,6 +22,13 @@ static ID KW_KIND = NULL;
 static ID KW_TRACK_ID = NULL;
 static ID KW_AUDIO = NULL;
 static ID KW_FINISHED = NULL;
+static const IdSymbolCacheEntry g_sound_finished_event_kw_cache[] = {
+    {&KW_SOURCE, ":source"},
+    {&KW_KIND, ":kind"},
+    {&KW_TRACK_ID, ":track-id"},
+    {&KW_AUDIO, ":audio"},
+    {&KW_FINISHED, ":finished"},
+};
 
 #if defined(DEBUG) || defined(TINY_CLJ_TEST_RUNNER)
 __attribute__((weak)) void tinyclj_sound_backend_observe_set_voice(int voice_index,
@@ -153,25 +161,10 @@ bool trk1_decode_varuint(const uint8_t **cursor, const uint8_t *end, uint32_t *o
     return false; /* ran out of data */
 }
 
-/* ========================================================================= */
-/* Track registry helpers                                                    */
-/* ========================================================================= */
-
-static SoundTrackEntry *find_track(ID track_id) {
-    for (int i = 0; i < g_sound_engine.track_count; i++) {
-        if (g_sound_engine.tracks[i].track_id == track_id)
-            return &g_sound_engine.tracks[i];
-    }
-    return NULL;
-}
-
 static void sound_ensure_finished_event_keywords(void) {
-    if (KW_SOURCE) return;
-    KW_SOURCE = intern_symbol_global(":source");
-    KW_KIND = intern_symbol_global(":kind");
-    KW_TRACK_ID = intern_symbol_global(":track-id");
-    KW_AUDIO = intern_symbol_global(":audio");
-    KW_FINISHED = intern_symbol_global(":finished");
+    (void)id_symbol_cache_init_global(
+        g_sound_finished_event_kw_cache,
+        sizeof(g_sound_finished_event_kw_cache) / sizeof(g_sound_finished_event_kw_cache[0]));
 }
 
 static ID sound_make_finished_event(ID track_id) {
@@ -182,20 +175,93 @@ static ID sound_make_finished_event(ID track_id) {
                             KW_TRACK_ID, track_id);
 }
 
+typedef struct {
+    ID callback_fn;
+    ID track_id;
+    uint32_t epoch;
+} SoundFinishedIngressCtx;
+
+static uint32_t g_sound_engine_callback_epoch = 0u;
+static uint32_t g_sound_engine_callback_epoch_counter = 0u;
+
+static void sound_deferred_release_run(void *ctx, EvalState *st) {
+    (void)st;
+    ID retained_obj = ctx;
+    RELEASE(retained_obj);
+}
+
+static void sound_release_retained_obj(ID retained_obj) {
+    if (!retained_obj) {
+        return;
+    }
+    if (event_loop_dispatch_native(sound_deferred_release_run,
+                                   retained_obj,
+                                   NULL)) {
+        return;
+    }
+    RELEASE(retained_obj);
+}
+
+static void sound_finished_ingress_run(void *ctx, EvalState *st) {
+    SoundFinishedIngressCtx *finished_ctx = (SoundFinishedIngressCtx *)ctx;
+    if (!finished_ctx || !finished_ctx->callback_fn || !finished_ctx->track_id) {
+        return;
+    }
+    if (finished_ctx->epoch != g_sound_engine_callback_epoch) {
+        return;
+    }
+
+    ID event_payload = sound_make_finished_event(finished_ctx->track_id);
+    if (!event_payload) {
+        g_sound_engine.telemetry.finished_drop_count++;
+        return;
+    }
+
+    ID args[1] = { event_payload };
+    (void)eval_function_call(finished_ctx->callback_fn, args, 1u, NULL, st);
+    RELEASE(event_payload);
+}
+
+static void sound_finished_ingress_cleanup(void *ctx) {
+    SoundFinishedIngressCtx *finished_ctx = (SoundFinishedIngressCtx *)ctx;
+    if (!finished_ctx) {
+        return;
+    }
+    RELEASE(finished_ctx->callback_fn);
+    CLJ_FREE(finished_ctx);
+}
+
 /* ========================================================================= */
 /* Stream helpers                                                            */
 /* ========================================================================= */
 
-static void stream_init(SoundStream *s, SoundTrackEntry *t, int32_t repeat) {
-    s->cursor = t->header.stream_start;
-    s->stream_end = t->header.stream_start + t->header.stream_len_bytes;
-    s->stream_start = t->header.stream_start;
+static void stream_release(SoundStream *s) {
+    if (!s) {
+        return;
+    }
+    sound_release_retained_obj(s->retained_obj);
+    memset(s, 0, sizeof(*s));
+}
+
+static void stream_init(SoundStream *s,
+                        ID track_id,
+                        ID retained_obj,
+                        const Trk1Header *header,
+                        int32_t repeat) {
+    if (!s || !header) {
+        return;
+    }
+    stream_release(s);
+    s->cursor = header->stream_start;
+    s->stream_end = header->stream_start + header->stream_len_bytes;
+    s->stream_start = header->stream_start;
     s->current_tick = 0;
     s->next_event_tick = 0;
     s->repeat_remaining = repeat;
     s->track_volume = 255;
     s->active = true;
-    s->track_id = t->track_id;
+    s->track_id = track_id;
+    s->retained_obj = retained_obj;
     memset(&s->envelope, 0, sizeof(s->envelope));
 }
 
@@ -515,25 +581,55 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
 }
 
 /* ========================================================================= */
-/* Finished notification (enqueue scheduler task)                            */
+/* Finished notification (tick-safe queue + ingress enqueue)                  */
 /* ========================================================================= */
 
-static void notify_finished(ID track_id) {
-    ID fn = RETAIN(g_sound_engine.on_finished_fn);
-    if (!fn) return;
-
-    ID event_payload = sound_make_finished_event(track_id);
-    if (!event_payload) {
-        g_sound_engine.telemetry.finished_drop_count++;
-        RELEASE(fn);
+static void sound_queue_finished_notification(ID track_id) {
+    if (!track_id) {
         return;
     }
-
-    if (!event_loop_enqueue_ingress_call(fn, event_payload)) {
+    SoundFinishedNotification notification = {
+        .track_id = track_id,
+    };
+    if (!lockfree_spsc_queue_push(&g_sound_engine.finished_queue.spsc, &notification)) {
         g_sound_engine.telemetry.finished_drop_count++;
     }
-    RELEASE(event_payload);
-    RELEASE(fn);
+}
+
+static void sound_engine_enqueue_finished_notifications(void) {
+    SoundFinishedNotification notification = {0};
+    while (lockfree_spsc_queue_pop(&g_sound_engine.finished_queue.spsc, &notification)) {
+        ID fn = RETAIN(g_sound_engine.on_finished_fn);
+        if (!fn || !notification.track_id) {
+            RELEASE(fn);
+            continue;
+        }
+
+        SoundFinishedIngressCtx *ctx =
+            (SoundFinishedIngressCtx *)CLJ_MALLOC(sizeof(SoundFinishedIngressCtx));
+        if (!ctx) {
+            g_sound_engine.telemetry.finished_drop_count++;
+            RELEASE(fn);
+            continue;
+        }
+        ctx->callback_fn = fn;
+        ctx->track_id = notification.track_id;
+        ctx->epoch = g_sound_engine_callback_epoch;
+
+        if (!event_loop_enqueue_ingress_native(sound_finished_ingress_run,
+                                               ctx,
+                                               sound_finished_ingress_cleanup)) {
+            g_sound_engine.telemetry.finished_drop_count++;
+            sound_finished_ingress_cleanup(ctx);
+        }
+    }
+}
+
+static void notify_finished(ID track_id) {
+    if (!g_sound_engine.on_finished_fn) {
+        return;
+    }
+    sound_queue_finished_notification(track_id);
 }
 
 /* ========================================================================= */
@@ -542,6 +638,7 @@ static void notify_finished(ID track_id) {
 
 void sound_engine_init(int voice_count) {
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
+    g_sound_engine_callback_epoch = ++g_sound_engine_callback_epoch_counter;
     sound_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
     if (voice_count > SOUND_MAX_VOICES) voice_count = SOUND_MAX_VOICES;
@@ -555,19 +652,31 @@ void sound_engine_init(int voice_count) {
         CLJ_ASSERT(ok);
         if (!ok) return;
     }
+    memset(g_sound_engine.finished_queue.slots, 0, sizeof(g_sound_engine.finished_queue.slots));
+    {
+        bool ok = lockfree_spsc_queue_init(&g_sound_engine.finished_queue.spsc,
+                                           g_sound_engine.finished_queue.slots,
+                                           SOUND_FINISHED_QUEUE_CAP,
+                                           sizeof(g_sound_engine.finished_queue.slots[0]));
+        CLJ_ASSERT(ok);
+        if (!ok) return;
+    }
     sound_backend_init(voice_count);
     g_sound_engine.voice_count = voice_count;
 }
 
 void sound_engine_shutdown(void) {
+    g_sound_engine_callback_epoch = ++g_sound_engine_callback_epoch_counter;
+
     /* Stop tick */
     if (g_sound_engine.tick_running) {
         sound_tick_stop();
     }
 
-    /* Release all loaded tracks */
-    for (int i = 0; i < g_sound_engine.track_count; i++) {
-        RELEASE(g_sound_engine.tracks[i].retained_obj);
+    stream_release(&g_sound_engine.music_stream);
+    for (int i = 0; i < SOUND_MAX_SFX; i++) {
+        stream_release(&g_sound_engine.sfx[i].stream);
+        g_sound_engine.sfx[i].voice_index = -1;
     }
 
     /* Release on-finished callback */
@@ -577,65 +686,25 @@ void sound_engine_shutdown(void) {
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
 }
 
-bool sound_engine_load_track(ID track_id, ID byte_array_obj) {
-    if (!track_id || !byte_array_obj) return false;
-    if (TAG(byte_array_obj) != CLJ_BYTE_ARRAY) return false;
+bool sound_engine_play_music(ID track_id, ID byte_array_obj, int32_t repeat) {
+    if (!track_id || !byte_array_obj || TAG(byte_array_obj) != CLJ_BYTE_ARRAY) return false;
 
     CljByteArray *ba = as_byte_array(byte_array_obj);
-    const uint8_t *data = ba->data;
-    int len = ba->length;
-
     Trk1Header header;
-    if (!trk1_parse_header(data, len, &header)) return false;
+    if (!trk1_parse_header(ba->data, ba->length, &header)) return false;
 
-    /* Check if already loaded (replace) */
-    SoundTrackEntry *existing = find_track(track_id);
-    if (existing) {
-        RELEASE(existing->retained_obj);
-        existing->retained_obj = RETAIN(byte_array_obj);
-        existing->header = header;
-        return true;
-    }
-
-    /* New entry */
-    if (g_sound_engine.track_count >= SOUND_MAX_TRACKS) return false;
-
-    SoundTrackEntry *entry = &g_sound_engine.tracks[g_sound_engine.track_count++];
-    entry->track_id = track_id;
-    entry->retained_obj = RETAIN(byte_array_obj);
-    entry->header = header;
-    return true;
-}
-
-bool sound_engine_unload_track(ID track_id) {
-    if (!track_id) return false;
-
-    /* Stop if this track is currently playing */
-    if (g_sound_engine.music_stream.active &&
-        g_sound_engine.music_stream.track_id == track_id) {
-        g_sound_engine.music_stream.active = false;
-        sound_engine_release_all_voice_holds();
-    }
-
-    for (int i = 0; i < g_sound_engine.track_count; i++) {
-        if (g_sound_engine.tracks[i].track_id == track_id) {
-            RELEASE(g_sound_engine.tracks[i].retained_obj);
-            /* Compact: move last entry into this slot */
-            g_sound_engine.track_count--;
-            if (i < g_sound_engine.track_count) {
-                g_sound_engine.tracks[i] = g_sound_engine.tracks[g_sound_engine.track_count];
-            }
-            memset(&g_sound_engine.tracks[g_sound_engine.track_count], 0, sizeof(SoundTrackEntry));
-            return true;
-        }
-    }
-    return false;
-}
-
-bool sound_engine_play_music(ID track_id, int32_t repeat) {
-    SoundCmd cmd = { .type = SOUND_CMD_PLAY_TRACK, .track_id = track_id, .int_param = repeat };
+    SoundCmd cmd = {
+        .type = SOUND_CMD_PLAY_TRACK,
+        .track_id = track_id,
+        .retained_obj = RETAIN(byte_array_obj),
+        .header = header,
+        .int_param = repeat
+    };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
-    if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (!ok) {
+        g_sound_engine.telemetry.cmd_drop_count++;
+        RELEASE(cmd.retained_obj);
+    }
     if (ok) {
         sound_tick_kick();
     }
@@ -661,25 +730,25 @@ void sound_engine_stop_music(void) {
     }
 }
 
-bool sound_engine_play_sfx(ID sfx_id) {
-    if (!sfx_id) return false;
-    if (!find_track(sfx_id)) return false;
+bool sound_engine_play_sfx(ID sfx_id, ID byte_array_obj) {
+    if (!sfx_id || !byte_array_obj || TAG(byte_array_obj) != CLJ_BYTE_ARRAY) return false;
 
-    bool has_free_slot = false;
-    for (int i = 0; i < SOUND_MAX_SFX; i++) {
-        if (!g_sound_engine.sfx[i].stream.active) {
-            has_free_slot = true;
-            break;
-        }
-    }
-    if (!has_free_slot) {
-        g_sound_engine.telemetry.sfx_drop_count++;
-        return false;
-    }
+    CljByteArray *ba = as_byte_array(byte_array_obj);
+    Trk1Header header;
+    if (!trk1_parse_header(ba->data, ba->length, &header)) return false;
 
-    SoundCmd cmd = { .type = SOUND_CMD_PLAY_SFX, .track_id = sfx_id };
+    SoundCmd cmd = {
+        .type = SOUND_CMD_PLAY_SFX,
+        .track_id = sfx_id,
+        .retained_obj = RETAIN(byte_array_obj),
+        .header = header
+    };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
-    if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (!ok) {
+        g_sound_engine.telemetry.cmd_drop_count++;
+        g_sound_engine.telemetry.sfx_drop_count++;
+        RELEASE(cmd.retained_obj);
+    }
     if (ok) {
         sound_tick_kick();
     }
@@ -749,13 +818,11 @@ static void tick_drain_commands(void) {
         drained++;
         switch (cmd.type) {
         case SOUND_CMD_PLAY_TRACK: {
-            SoundTrackEntry *t = find_track(cmd.track_id);
-            if (t) {
-                stream_init(&g_sound_engine.music_stream, t, cmd.int_param);
-                /* Apply default_loop from header if repeat not specified */
-                if (cmd.int_param == 0 && (t->header.flags & TRK1_FLAG_DEFAULT_LOOP)) {
-                    g_sound_engine.music_stream.repeat_remaining = 0; /* infinite */
-                }
+            stream_init(&g_sound_engine.music_stream, cmd.track_id, cmd.retained_obj, &cmd.header, cmd.int_param);
+            cmd.retained_obj = NULL;
+            /* Apply default_loop from header if repeat not specified */
+            if (cmd.int_param == 0 && (cmd.header.flags & TRK1_FLAG_DEFAULT_LOOP)) {
+                g_sound_engine.music_stream.repeat_remaining = 0; /* infinite */
             }
             break;
         }
@@ -764,6 +831,7 @@ static void tick_drain_commands(void) {
                 g_sound_engine.music_stream.track_id == cmd.track_id) {
                 g_sound_engine.music_stream.active = false;
                 sound_engine_release_all_voice_holds();
+                stream_release(&g_sound_engine.music_stream);
                 /* No finished notification for manual stop */
             }
             /* Also stop matching SFX */
@@ -775,6 +843,7 @@ static void tick_drain_commands(void) {
                         sound_voice_force_silence(&g_sound_engine.voices[g_sound_engine.sfx[i].voice_index]);
                     }
                     g_sound_engine.sfx[i].voice_index = -1;
+                    stream_release(&g_sound_engine.sfx[i].stream);
                 }
             }
             break;
@@ -782,12 +851,11 @@ static void tick_drain_commands(void) {
         case SOUND_CMD_STOP_MUSIC:
             g_sound_engine.music_stream.active = false;
             sound_engine_release_all_voice_holds();
+            stream_release(&g_sound_engine.music_stream);
             break;
 
         case SOUND_CMD_PLAY_SFX: {
-            SoundTrackEntry *t = find_track(cmd.track_id);
-            if (!t) break;
-            /* Find free SFX slot */
+            /* Find free SFX slot; if none, evict the oldest (lowest current_tick). */
             int slot = -1;
             for (int i = 0; i < SOUND_MAX_SFX; i++) {
                 if (!g_sound_engine.sfx[i].stream.active) {
@@ -796,8 +864,19 @@ static void tick_drain_commands(void) {
                 }
             }
             if (slot < 0) {
-                g_sound_engine.telemetry.sfx_drop_count++;
-                break;
+                uint32_t oldest_tick = 0;
+                for (int i = 0; i < SOUND_MAX_SFX; i++) {
+                    if (slot < 0 || g_sound_engine.sfx[i].stream.current_tick > oldest_tick) {
+                        oldest_tick = g_sound_engine.sfx[i].stream.current_tick;
+                        slot = i;
+                    }
+                }
+                g_sound_engine.sfx[slot].stream.active = false;
+                if (g_sound_engine.sfx[slot].voice_index >= 0) {
+                    sound_voice_force_silence(&g_sound_engine.voices[g_sound_engine.sfx[slot].voice_index]);
+                    g_sound_engine.sfx[slot].voice_index = -1;
+                }
+                stream_release(&g_sound_engine.sfx[slot].stream);
             }
             /* Find free voice */
             int vi = -1;
@@ -818,7 +897,21 @@ static void tick_drain_commands(void) {
                 }
             }
             if (vi < 0) break;
-            stream_init(&g_sound_engine.sfx[slot].stream, t, 1); /* one-shot */
+            /* Ensure one voice is owned by at most one active SFX stream. */
+            for (int i = 0; i < SOUND_MAX_SFX; i++) {
+                if (i == slot) {
+                    continue;
+                }
+                if (g_sound_engine.sfx[i].stream.active &&
+                    g_sound_engine.sfx[i].voice_index == vi) {
+                    g_sound_engine.sfx[i].stream.active = false;
+                    g_sound_engine.sfx[i].voice_index = -1;
+                    stream_release(&g_sound_engine.sfx[i].stream);
+                }
+            }
+            sound_voice_force_silence(&g_sound_engine.voices[vi]);
+            stream_init(&g_sound_engine.sfx[slot].stream, cmd.track_id, cmd.retained_obj, &cmd.header, 1); /* one-shot */
+            cmd.retained_obj = NULL;
             g_sound_engine.sfx[slot].voice_index = vi;
             break;
         }
@@ -836,9 +929,11 @@ static void tick_drain_commands(void) {
 
         case SOUND_CMD_STOP_ALL:
             g_sound_engine.music_stream.active = false;
+            stream_release(&g_sound_engine.music_stream);
             for (int i = 0; i < SOUND_MAX_SFX; i++) {
                 g_sound_engine.sfx[i].stream.active = false;
                 g_sound_engine.sfx[i].voice_index = -1;
+                stream_release(&g_sound_engine.sfx[i].stream);
             }
             for (int i = 0; i < g_sound_engine.voice_count; i++) {
                 g_sound_engine.voices[i].active = false;
@@ -853,6 +948,11 @@ static void tick_drain_commands(void) {
             }
             break;
         }
+        RELEASE(cmd.retained_obj);
+    }
+
+    if (!lockfree_spsc_queue_empty(&g_sound_engine.finished_queue.spsc)) {
+        sound_tick_kick();
     }
 
     if (!lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc)) {
@@ -936,6 +1036,7 @@ static void tick_process_due_stream(SoundStream *s) {
         bool had_more = stream_parse_event(s, g_sound_engine.voices, g_sound_engine.voice_count);
         if (!had_more && !s->active) {
             notify_finished(s->track_id);
+            stream_release(s);
             break;
         }
     }
@@ -972,6 +1073,7 @@ static void tick_process_due_sfx(void) {
 
         if (!sfx->stream.active) {
             tick_release_sfx_voice(sfx);
+            stream_release(&sfx->stream);
         }
     }
 }
@@ -1081,9 +1183,7 @@ static void tick_maybe_stop_when_idle(void) {
     if (!tick_has_active_audio() &&
         lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc) &&
         !sound_backend_keepalive_active()) {
-        if (g_sound_engine.tick_running) {
-            sound_tick_stop();
-        }
+        sound_tick_sleep();
     }
 }
 
@@ -1124,6 +1224,7 @@ void sound_engine_advance_ticks(uint32_t ticks) {
         remaining -= step;
     }
 
+    sound_engine_enqueue_finished_notifications();
     tick_maybe_stop_when_idle();
 }
 
@@ -1132,5 +1233,6 @@ void sound_engine_tick(void) {
     tick_process_due_stream(&g_sound_engine.music_stream);
     tick_process_due_sfx();
     tick_fast_forward(1u);
+    sound_engine_enqueue_finished_notifications();
     tick_maybe_stop_when_idle();
 }

@@ -16,6 +16,9 @@ typedef struct {
     bool closed;
 } EventLoopIngressStats;
 
+typedef void (*EventLoopNativeIngressFn)(void *ctx, EvalState *st);
+typedef void (*EventLoopNativeIngressCleanupFn)(void *ctx);
+
 // Initialize event loop (idempotent)
 void event_loop_init(void);
 
@@ -34,6 +37,20 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
 // Callback return values are ignored by the C event bridge.
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg);
 
+// Thread-safe generic ingress queue for native callbacks that must run on the
+// event-loop / interpreter thread. Returns false when queue is full or input invalid.
+// The optional cleanup runs after callback execution or when a queued entry is discarded.
+bool event_loop_enqueue_ingress_native(EventLoopNativeIngressFn callback,
+                                       void *ctx,
+                                       EventLoopNativeIngressCleanupFn cleanup);
+
+// Execute a native callback immediately when already on the interpreter thread
+// (or when no interpreter thread is registered yet), otherwise enqueue it through
+// the ingress queue. Returns false when enqueueing fails.
+bool event_loop_dispatch_native(EventLoopNativeIngressFn callback,
+                                void *ctx,
+                                EventLoopNativeIngressCleanupFn cleanup);
+
 // Returns true when the ingress queue has pending tasks.
 bool event_loop_ingress_has_pending(void);
 
@@ -48,6 +65,23 @@ bool event_loop_ingress_stats(EventLoopIngressStats *out_stats);
 
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st);
+
+// Wakes one or more threads currently blocked in event_loop_run().
+// This is used when external lifecycle control (for example shutdown) needs
+// to interrupt an idle wait even when no task or timer became ready.
+void event_loop_wake(void);
+
+// Blocking event-loop driver.
+//
+// Semantics:
+// - Keeps calling event_loop_run_next() until one task/timer/ingress callback
+//   was executed, then returns true.
+// - When no work is ready, blocks until either:
+//   - a timer deadline becomes due, or
+//   - a producer enqueues new work and signals wake.
+// - Returns false when woken externally but still no runnable work exists
+//   (for example lifecycle shutdown wake-up).
+bool event_loop_run(CljPersistentMap *env, EvalState *st);
 
 // Returns true when the normal task queue currently has pending entries.
 bool event_loop_has_pending_tasks(void);

@@ -6,6 +6,7 @@
  */
 
 #include "tests_common.h"
+#include <pthread.h>
 #include <unistd.h>
 
 // ============================================================================
@@ -72,6 +73,103 @@ static char *capture_print_exception_output(CLJException *ex) {
     buffer[nread] = '\0';
     fclose(tmp);
     return buffer;
+}
+
+typedef struct {
+    bool returned;
+} ThrowOomWorkerArgs;
+
+typedef struct {
+    bool caught;
+    bool returned;
+} ThrowOomTryCatchWorkerArgs;
+
+typedef struct {
+    bool before_register_is_main_thread;
+    bool after_register_is_main_thread;
+} MainThreadRegistrationWorkerArgs;
+
+typedef struct {
+    bool before_has_interpreter_thread;
+    bool before_is_interpreter_thread;
+    bool after_register_has_interpreter_thread;
+    bool after_register_is_interpreter_thread;
+    bool after_clear_has_interpreter_thread;
+    bool after_clear_is_interpreter_thread;
+} InterpreterThreadRegistrationWorkerArgs;
+
+static bool g_release_throw_invoked_during_drain = false;
+static bool g_release_throw_caught = false;
+
+static void byte_array_release_throw_while_draining(CljObject *obj) {
+    CljByteArray *ba = (CljByteArray *)obj;
+    g_release_throw_invoked_during_drain = is_autorelease_pool_draining();
+
+    // Mirror default CLJ_BYTE_ARRAY payload cleanup for this test override.
+    if (ba && ba->data && ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) == 0)) {
+        CLJ_FREE(ba->data);
+        ba->data = NULL;
+    }
+
+    TRY {
+        throw_exception_formatted("AutoreleasePoolError",
+                                  __FILE__, __LINE__, 0,
+                                  "release callback throw during drain");
+    } CATCH(ex) {
+        g_release_throw_caught = (ex != NULL && strcmp(ex->type, "AutoreleasePoolError") == 0);
+    } END_TRY
+}
+
+static void *throw_oom_worker_main(void *arg) {
+    ThrowOomWorkerArgs *args = (ThrowOomWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    throw_oom();
+    args->returned = true;
+    return NULL;
+}
+
+static void *throw_oom_try_catch_worker_main(void *arg) {
+    ThrowOomTryCatchWorkerArgs *args = (ThrowOomTryCatchWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    TRY {
+        throw_oom();
+    } CATCH(ex) {
+        (void)ex;
+        args->caught = true;
+    } END_TRY
+    args->returned = true;
+    return NULL;
+}
+
+static void *main_thread_registration_worker_main(void *arg) {
+    MainThreadRegistrationWorkerArgs *args = (MainThreadRegistrationWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->before_register_is_main_thread = subjective_c_is_main_thread();
+    subjective_c_register_main_thread();
+    args->after_register_is_main_thread = subjective_c_is_main_thread();
+    return NULL;
+}
+
+static void *interpreter_thread_registration_worker_main(void *arg) {
+    InterpreterThreadRegistrationWorkerArgs *args = (InterpreterThreadRegistrationWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->before_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->before_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    subjective_c_register_interpreter_thread();
+    args->after_register_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->after_register_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    subjective_c_clear_interpreter_thread();
+    args->after_clear_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->after_clear_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    return NULL;
 }
 
 TEST(test_simple_try_catch_exception_caught) {
@@ -279,6 +377,33 @@ TEST(test_with_autorelease_pool_swallows_exceptions) {
     // This test should now PASS, proving the fix works
 }
 
+TEST(test_throw_exception_formatted_during_pool_drain_does_not_recurse) {
+    bool escaped = false;
+    g_release_throw_invoked_during_drain = false;
+    g_release_throw_caught = false;
+
+    subjective_c_register_release_fn(CLJ_BYTE_ARRAY, byte_array_release_throw_while_draining);
+
+    uint32_t mark = autorelease_pool_mark();
+    CljByteArray *ba = AUTORELEASE(make_byte_array(8));
+    TEST_ASSERT_NOT_NULL(ba);
+
+    TRY {
+        autorelease_pool_drain_to_depth(mark);
+    } CATCH(ex) {
+        (void)ex;
+        escaped = true;
+    } END_TRY
+
+    subjective_c_register_release_fn(CLJ_BYTE_ARRAY, NULL);
+
+    TEST_ASSERT_FALSE_MESSAGE(escaped, "Exception from release callback should be catchable without recursion");
+    TEST_ASSERT_TRUE_MESSAGE(g_release_throw_invoked_during_drain,
+                             "Release callback must execute while autorelease pool is draining");
+    TEST_ASSERT_TRUE_MESSAGE(g_release_throw_caught,
+                             "throw_exception_formatted must be catchable during drain (no recursive throw)");
+}
+
 TEST(test_throw_existing_exception) {
     bool exception_caught = false;
     CLJException *original_exception = NULL;
@@ -357,6 +482,84 @@ TEST(test_print_exception_oom_includes_native_stacktrace_marker) {
 
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
     TEST_ASSERT_TRUE_MESSAGE(marker_found, "OOM output should include native stacktrace marker");
+}
+
+TEST(test_throw_oom_on_background_thread_does_not_cross_thread_longjmp) {
+    pthread_t worker;
+    ThrowOomWorkerArgs args = {0};
+    bool exception_caught = false;
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TRY {
+        TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_worker_main, &args));
+        TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+    } CATCH(ex) {
+        (void)ex;
+        exception_caught = true;
+    } END_TRY
+
+    TEST_ASSERT_FALSE_MESSAGE(exception_caught, "background-thread OOM must not longjmp into main-thread TRY");
+    TEST_ASSERT_TRUE_MESSAGE(args.returned, "throw_oom should return on background threads");
+}
+
+TEST(test_throw_oom_on_background_thread_with_local_try_catch_is_catchable) {
+    pthread_t worker;
+    ThrowOomTryCatchWorkerArgs args = {0};
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_try_catch_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_TRUE_MESSAGE(args.returned, "worker thread should complete after local OOM handling");
+    TEST_ASSERT_TRUE_MESSAGE(args.caught, "background-thread OOM should be catchable inside local TRY/CATCH");
+}
+
+TEST(test_register_main_thread_does_not_replace_existing_main_thread) {
+    pthread_t worker;
+    MainThreadRegistrationWorkerArgs args = {0};
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, main_thread_registration_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_FALSE_MESSAGE(args.before_register_is_main_thread, "worker must not start as main thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_register_is_main_thread, "worker must not become main thread by registering");
+    TEST_ASSERT_TRUE_MESSAGE(subjective_c_is_main_thread(), "main-thread registration must remain stable");
+}
+
+TEST(test_register_interpreter_thread_is_visible_process_wide_and_clearable) {
+    pthread_t worker;
+    InterpreterThreadRegistrationWorkerArgs args = {0};
+
+    subjective_c_clear_interpreter_thread();
+    TEST_ASSERT_FALSE(subjective_c_has_interpreter_thread());
+    TEST_ASSERT_FALSE(subjective_c_is_interpreter_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, interpreter_thread_registration_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_FALSE_MESSAGE(args.before_has_interpreter_thread,
+                              "worker must not start with a registered interpreter thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.before_is_interpreter_thread,
+                              "worker must not start as interpreter thread");
+    TEST_ASSERT_TRUE_MESSAGE(args.after_register_has_interpreter_thread,
+                             "worker registration must become globally visible");
+    TEST_ASSERT_TRUE_MESSAGE(args.after_register_is_interpreter_thread,
+                             "registered worker must see itself as interpreter thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_clear_has_interpreter_thread,
+                              "clearing interpreter thread must remove global registration");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_clear_is_interpreter_thread,
+                              "worker must stop matching interpreter thread after clear");
+    TEST_ASSERT_FALSE_MESSAGE(subjective_c_has_interpreter_thread(),
+                              "main thread must observe cleared interpreter-thread registration");
+    TEST_ASSERT_FALSE_MESSAGE(subjective_c_is_interpreter_thread(),
+                              "main thread must not match interpreter-thread registration");
 }
 
 TEST(test_throw_macro_convenience) {

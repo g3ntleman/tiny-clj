@@ -325,6 +325,11 @@ static FsKvStore *g_fs_global_store = NULL;
 static FsKvStore *g_fs_sync_store_head = NULL;
 static ID g_fs_sync_timer_fn_obj = NULL;
 static ID g_fs_sync_timer_key = NULL;
+static ID g_fs_sync_fn_symbol = NULL;
+static const IdSymbolCacheEntry g_fs_sync_symbol_cache[] = {
+    {&g_fs_sync_fn_symbol, "tiny-clj.fs/kv-sync-flush"},
+    {&g_fs_sync_timer_key, FS_KV_SYNC_TIMER_KEY_NAME},
+};
 
 static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc);
 
@@ -361,17 +366,20 @@ static void fs_kv_sync_unregister_store(FsKvStore *st)
 static void fs_kv_sync_ensure_timer_fn(void)
 {
     if (g_fs_sync_timer_fn_obj) return;
-    CljSymbol *sym = intern_symbol_global("tiny-clj.fs/kv-sync-flush");
-    g_fs_sync_timer_fn_obj = make_named_func(fs_kv_sync_timer_callback, sym);
+    if (!id_symbol_cache_init_global(g_fs_sync_symbol_cache,
+                                     sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0])) ||
+        !g_fs_sync_fn_symbol) {
+        return;
+    }
+    g_fs_sync_timer_fn_obj = make_named_func(fs_kv_sync_timer_callback, g_fs_sync_fn_symbol);
 }
 
 static void fs_kv_sync_schedule_debounced(void)
 {
     fs_kv_sync_ensure_timer_fn();
     if (!g_fs_sync_timer_fn_obj) return;
-    if (!g_fs_sync_timer_key) {
-        g_fs_sync_timer_key = intern_symbol_global(FS_KV_SYNC_TIMER_KEY_NAME);
-    }
+    (void)id_symbol_cache_init_global(g_fs_sync_symbol_cache,
+                                      sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0]));
     (void)timer_upsert_named(g_fs_sync_timer_key,
                              RETAIN(g_fs_sync_timer_fn_obj),
                              FS_KV_SYNC_DEBOUNCE_MS,
@@ -403,9 +411,8 @@ static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc)
     }
 
     if (retry_needed && g_fs_sync_timer_fn_obj) {
-        if (!g_fs_sync_timer_key) {
-            g_fs_sync_timer_key = intern_symbol_global(FS_KV_SYNC_TIMER_KEY_NAME);
-        }
+        (void)id_symbol_cache_init_global(g_fs_sync_symbol_cache,
+                                          sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0]));
         (void)timer_upsert_named(g_fs_sync_timer_key,
                                  RETAIN(g_fs_sync_timer_fn_obj),
                                  FS_KV_SYNC_DEBOUNCE_MS,

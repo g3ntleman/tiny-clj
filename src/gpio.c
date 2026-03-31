@@ -47,7 +47,9 @@ static CljSymbol *KW_SENSOR_THRESHOLD_CROSSED = NULL;
 static CljSymbol *KW_SENSOR_ACTIVE = NULL;
 static CljSymbol *KW_SENSOR_INACTIVE = NULL;
 static CljSymbol *KW_INPUT_RUNTIME = NULL;
+static CljSymbol *KW_BUTTON_RUNTIME = NULL;
 static CljSymbol *SYM_GPIO_INPUT_RUNTIME_TICK = NULL;
+static CljSymbol *SYM_GPIO_BUTTON_RUNTIME_TICK = NULL;
 static const SymbolCacheEntry g_gpio_runtime_symbol_cache[] = {
     {&KW_SOURCE, ":source", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&KW_KIND, ":kind", SYMBOL_CACHE_SCOPE_GLOBAL},
@@ -71,7 +73,9 @@ static const SymbolCacheEntry g_gpio_runtime_symbol_cache[] = {
     {&KW_SENSOR_ACTIVE, ":sensor/active", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&KW_SENSOR_INACTIVE, ":sensor/inactive", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&KW_INPUT_RUNTIME, ":gpio-input-runtime", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON_RUNTIME, ":gpio-button-runtime", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&SYM_GPIO_INPUT_RUNTIME_TICK, "tiny-clj.gpio/input-runtime-tick!", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&SYM_GPIO_BUTTON_RUNTIME_TICK, "tiny-clj.gpio/button-runtime-tick!", SYMBOL_CACHE_SCOPE_GLOBAL},
 };
 static int32_t g_next_watcher_id = 1;
 
@@ -101,8 +105,11 @@ typedef struct {
     int8_t stable_level;
     uint32_t last_change_ms;
     uint32_t down_at_ms;
+    uint32_t debounce_due_ms;
     bool pressed;
     bool hold_fired;
+    bool debounce_pending;
+    bool hold_pending;
 } GpioButtonWatch;
 
 typedef struct {
@@ -132,8 +139,10 @@ typedef struct {
 static GpioCRawCallbackEntry g_gpio_c_callbacks[GPIO_C_CALLBACK_CAP];
 static GpioButtonWatch g_gpio_button_watches[GPIO_BUTTON_WATCH_CAP];
 static GpioSensorWatch g_gpio_sensor_watches[GPIO_SENSOR_WATCH_CAP];
-static ID g_gpio_input_timer_key = NULL;
-static ID g_gpio_input_timer_fn = NULL;
+static ID g_gpio_sensor_timer_key = NULL;
+static ID g_gpio_sensor_timer_fn = NULL;
+static ID g_gpio_button_timer_key = NULL;
+static ID g_gpio_button_timer_fn = NULL;
 
 static inline uint32_t gpio_runtime_elapsed_ms(uint32_t start_ms, uint32_t end_ms) {
     return (end_ms >= start_ms) ? (end_ms - start_ms) : (86400000u - start_ms + end_ms);
@@ -154,8 +163,11 @@ static inline void gpio_runtime_release_button_watch(GpioButtonWatch *watch) {
     watch->stable_level = 0;
     watch->last_change_ms = 0u;
     watch->down_at_ms = 0u;
+    watch->debounce_due_ms = 0u;
     watch->pressed = false;
     watch->hold_fired = false;
+    watch->debounce_pending = false;
+    watch->hold_pending = false;
 }
 
 static inline void gpio_runtime_release_sensor_watch(GpioSensorWatch *watch) {
@@ -186,7 +198,10 @@ static inline void gpio_runtime_release_sensor_watch(GpioSensorWatch *watch) {
 }
 
 static ID gpio_runtime_input_tick_native(ID *args, unsigned int argc);
-static void gpio_runtime_input_timer_refresh(void);
+static ID gpio_runtime_button_tick_native(ID *args, unsigned int argc);
+static void gpio_runtime_sensor_timer_refresh(void);
+static void gpio_runtime_button_timer_refresh(void);
+static void gpio_runtime_enqueue_button_tick(void);
 static ID gpio_runtime_make_button_event(GpioButtonWatch *watch, ID kind, int32_t pressed_ms, int32_t held_ms);
 static ID gpio_runtime_make_sensor_event(GpioSensorWatch *watch, ID kind, int32_t value, int32_t delta, bool has_active, bool active_value);
 static void gpio_runtime_emit_button_event(GpioButtonWatch *watch, ID kind, int32_t pressed_ms, int32_t held_ms);
@@ -202,7 +217,8 @@ static inline void gpio_runtime_ensure_initialized(void) {
     (void)symbol_cache_init_global(g_gpio_runtime_symbol_cache,
                                    sizeof(g_gpio_runtime_symbol_cache) / sizeof(g_gpio_runtime_symbol_cache[0]));
     KW_SIGNAL = SYM_KW_SIGNAL;
-    g_gpio_input_timer_key = KW_INPUT_RUNTIME;
+    g_gpio_sensor_timer_key = KW_INPUT_RUNTIME;
+    g_gpio_button_timer_key = KW_BUTTON_RUNTIME;
 }
 
 #ifdef ESP32_BUILD
@@ -238,17 +254,22 @@ void gpio_runtime_reset_state(void) {
     for (int i = 0; i < GPIO_SENSOR_WATCH_CAP; i++) {
         gpio_runtime_release_sensor_watch(&g_gpio_sensor_watches[i]);
     }
-    if (g_gpio_input_timer_key) {
-        (void)timer_cancel_named(g_gpio_input_timer_key);
+    if (g_gpio_sensor_timer_key) {
+        (void)timer_cancel_named(g_gpio_sensor_timer_key);
     }
-    ASSIGN(g_gpio_input_timer_fn, NULL);
+    if (g_gpio_button_timer_key) {
+        (void)timer_cancel_named(g_gpio_button_timer_key);
+    }
+    ASSIGN(g_gpio_sensor_timer_fn, NULL);
+    ASSIGN(g_gpio_button_timer_fn, NULL);
 #ifdef ESP32_BUILD
     gpio_esp32_runtime_reset_state();
 #endif
     symbol_cache_clear(g_gpio_runtime_symbol_cache,
                        sizeof(g_gpio_runtime_symbol_cache) / sizeof(g_gpio_runtime_symbol_cache[0]));
     KW_SIGNAL = NULL;
-    g_gpio_input_timer_key = NULL;
+    g_gpio_sensor_timer_key = NULL;
+    g_gpio_button_timer_key = NULL;
     g_next_watcher_id = 1;
 }
 
@@ -562,12 +583,7 @@ static GpioSensorWatch *gpio_runtime_alloc_sensor_watch(void) {
     return NULL;
 }
 
-static bool gpio_runtime_has_input_watchers(void) {
-    for (int i = 0; i < GPIO_BUTTON_WATCH_CAP; i++) {
-        if (g_gpio_button_watches[i].active) {
-            return true;
-        }
-    }
+static bool gpio_runtime_has_sensor_watchers(void) {
     for (int i = 0; i < GPIO_SENSOR_WATCH_CAP; i++) {
         if (g_gpio_sensor_watches[i].active) {
             return true;
@@ -576,19 +592,94 @@ static bool gpio_runtime_has_input_watchers(void) {
     return false;
 }
 
-static void gpio_runtime_input_timer_refresh(void) {
+static bool gpio_runtime_has_pending_button_timers(void) {
+    for (int i = 0; i < GPIO_BUTTON_WATCH_CAP; i++) {
+        GpioButtonWatch *watch = &g_gpio_button_watches[i];
+        if (!watch->active) {
+            continue;
+        }
+        if (watch->debounce_pending || watch->hold_pending) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void gpio_runtime_sensor_timer_refresh(void) {
     gpio_runtime_ensure_initialized();
-    if (!g_gpio_input_timer_key) {
-        g_gpio_input_timer_key = KW_INPUT_RUNTIME;
+    if (!g_gpio_sensor_timer_key) {
+        g_gpio_sensor_timer_key = KW_INPUT_RUNTIME;
     }
-    if (!g_gpio_input_timer_fn) {
-        g_gpio_input_timer_fn = make_named_func(gpio_runtime_input_tick_native,
-                                                SYM_GPIO_INPUT_RUNTIME_TICK);
+    if (!g_gpio_sensor_timer_fn) {
+        g_gpio_sensor_timer_fn = make_named_func(gpio_runtime_input_tick_native,
+                                                 SYM_GPIO_INPUT_RUNTIME_TICK);
     }
-    if (gpio_runtime_has_input_watchers()) {
-        (void)timer_upsert_named(g_gpio_input_timer_key, g_gpio_input_timer_fn, 0, true, GPIO_INPUT_RUNTIME_TICK_MS);
-    } else if (g_gpio_input_timer_key) {
-        (void)timer_cancel_named(g_gpio_input_timer_key);
+    if (gpio_runtime_has_sensor_watchers()) {
+        (void)timer_upsert_named(g_gpio_sensor_timer_key,
+                                 g_gpio_sensor_timer_fn,
+                                 0,
+                                 true,
+                                 GPIO_INPUT_RUNTIME_TICK_MS);
+    } else if (g_gpio_sensor_timer_key) {
+        (void)timer_cancel_named(g_gpio_sensor_timer_key);
+    }
+}
+
+static void gpio_runtime_button_timer_refresh(void) {
+    gpio_runtime_ensure_initialized();
+    if (!g_gpio_button_timer_key) {
+        g_gpio_button_timer_key = KW_BUTTON_RUNTIME;
+    }
+    if (!g_gpio_button_timer_fn) {
+        g_gpio_button_timer_fn = make_named_func(gpio_runtime_button_tick_native,
+                                                 SYM_GPIO_BUTTON_RUNTIME_TICK);
+    }
+    if (!gpio_runtime_has_pending_button_timers()) {
+        if (g_gpio_button_timer_key) {
+            (void)timer_cancel_named(g_gpio_button_timer_key);
+        }
+        return;
+    }
+
+    uint32_t now_ms = platform_current_time_ms();
+    uint32_t min_delay = UINT32_MAX;
+    for (int i = 0; i < GPIO_BUTTON_WATCH_CAP; i++) {
+        GpioButtonWatch *watch = &g_gpio_button_watches[i];
+        if (!watch->active) {
+            continue;
+        }
+        if (watch->debounce_pending) {
+            uint32_t delay = gpio_runtime_elapsed_ms(now_ms, watch->debounce_due_ms);
+            if (delay < min_delay) {
+                min_delay = delay;
+            }
+        }
+        if (watch->hold_pending) {
+            uint32_t hold_due_ms = watch->down_at_ms + watch->hold_ms;
+            uint32_t delay = gpio_runtime_elapsed_ms(now_ms, hold_due_ms);
+            if (delay < min_delay) {
+                min_delay = delay;
+            }
+        }
+    }
+    if (min_delay == UINT32_MAX) {
+        min_delay = 0u;
+    }
+    (void)timer_upsert_named(g_gpio_button_timer_key,
+                             g_gpio_button_timer_fn,
+                             (int64_t)min_delay,
+                             false,
+                             0);
+}
+
+static void gpio_runtime_enqueue_button_tick(void) {
+    gpio_runtime_ensure_initialized();
+    if (!g_gpio_button_timer_fn) {
+        g_gpio_button_timer_fn = make_named_func(gpio_runtime_button_tick_native,
+                                                 SYM_GPIO_BUTTON_RUNTIME_TICK);
+    }
+    if (g_gpio_button_timer_fn) {
+        (void)event_loop_enqueue_ingress((CljObject *)g_gpio_button_timer_fn);
     }
 }
 
@@ -679,33 +770,43 @@ static void gpio_button_raw_callback(int32_t pin, int32_t level, void *ctx) {
     }
     watch->raw_level = (int8_t)(level == 0 ? 0 : 1);
     watch->last_change_ms = platform_current_time_ms();
+    watch->debounce_due_ms = watch->last_change_ms + watch->debounce_ms;
+    watch->debounce_pending = true;
+    gpio_runtime_enqueue_button_tick();
 }
 
-static bool gpio_runtime_process_button_watch(GpioButtonWatch *watch, uint32_t now_ms) {
+static bool gpio_runtime_process_button_watch_due(GpioButtonWatch *watch, uint32_t now_ms) {
     if (!watch || !watch->active) {
         return false;
     }
-    if (watch->raw_level != watch->stable_level &&
+    if (watch->debounce_pending &&
         gpio_runtime_elapsed_ms(watch->last_change_ms, now_ms) >= watch->debounce_ms) {
-        watch->stable_level = watch->raw_level;
-        if (watch->stable_level == watch->active_level) {
-            watch->pressed = true;
-            watch->down_at_ms = now_ms;
-            watch->hold_fired = false;
-            gpio_runtime_emit_button_event(watch, KW_BUTTON_DOWN, -1, -1);
-        } else {
-            int32_t pressed_ms = watch->pressed ? (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) : 0;
-            gpio_runtime_emit_button_event(watch, KW_BUTTON_UP, pressed_ms, -1);
-            if (watch->pressed && !watch->hold_fired) {
-                gpio_runtime_emit_button_event(watch, KW_BUTTON_CLICK, pressed_ms, -1);
+        watch->debounce_pending = false;
+        if (watch->raw_level != watch->stable_level) {
+            watch->stable_level = watch->raw_level;
+            if (watch->stable_level == watch->active_level) {
+                watch->pressed = true;
+                watch->down_at_ms = now_ms;
+                watch->hold_fired = false;
+                watch->hold_pending = true;
+                gpio_runtime_emit_button_event(watch, KW_BUTTON_DOWN, -1, -1);
+            } else {
+                int32_t pressed_ms = watch->pressed ? (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) : 0;
+                gpio_runtime_emit_button_event(watch, KW_BUTTON_UP, pressed_ms, -1);
+                if (watch->pressed && !watch->hold_fired) {
+                    gpio_runtime_emit_button_event(watch, KW_BUTTON_CLICK, pressed_ms, -1);
+                }
+                watch->pressed = false;
+                watch->hold_fired = false;
+                watch->hold_pending = false;
             }
-            watch->pressed = false;
-            watch->hold_fired = false;
         }
     }
-    if (watch->pressed &&
+    if (watch->hold_pending &&
+        watch->pressed &&
         !watch->hold_fired &&
         gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) >= watch->hold_ms) {
+        watch->hold_pending = false;
         watch->hold_fired = true;
         gpio_runtime_emit_button_event(
             watch,
@@ -797,13 +898,17 @@ static bool gpio_runtime_process_sensor_watch(GpioSensorWatch *watch, uint32_t n
 
 static bool gpio_runtime_process_input_tick(void) {
     uint32_t now_ms = platform_current_time_ms();
-    for (int i = 0; i < GPIO_BUTTON_WATCH_CAP; i++) {
-        (void)gpio_runtime_process_button_watch(&g_gpio_button_watches[i], now_ms);
-    }
     for (int i = 0; i < GPIO_SENSOR_WATCH_CAP; i++) {
         (void)gpio_runtime_process_sensor_watch(&g_gpio_sensor_watches[i], now_ms);
     }
-    return gpio_runtime_has_input_watchers();
+    return gpio_runtime_has_sensor_watchers();
+}
+
+static void gpio_runtime_process_button_timers(void) {
+    uint32_t now_ms = platform_current_time_ms();
+    for (int i = 0; i < GPIO_BUTTON_WATCH_CAP; i++) {
+        (void)gpio_runtime_process_button_watch_due(&g_gpio_button_watches[i], now_ms);
+    }
 }
 
 static ID gpio_runtime_input_tick_native(ID *args, unsigned int argc) {
@@ -814,6 +919,18 @@ static ID gpio_runtime_input_tick_native(ID *args, unsigned int argc) {
         return NULL;
     }
     (void)gpio_runtime_process_input_tick();
+    return NULL;
+}
+
+static ID gpio_runtime_button_tick_native(ID *args, unsigned int argc) {
+    (void)args;
+    if (argc != 0) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "Wrong number of args (%u) passed to: tiny-clj.gpio/button-runtime-tick!", argc);
+        return NULL;
+    }
+    gpio_runtime_process_button_timers();
+    gpio_runtime_button_timer_refresh();
     return NULL;
 }
 
@@ -1121,7 +1238,7 @@ ID native_button_watch(ID *args, unsigned int argc) {
     }
 
     if (!callback) {
-        gpio_runtime_input_timer_refresh();
+        gpio_runtime_button_timer_refresh();
         return NULL;
     }
 
@@ -1149,9 +1266,12 @@ ID native_button_watch(ID *args, unsigned int argc) {
     watch->raw_level = (int8_t)current_level;
     watch->stable_level = (int8_t)current_level;
     watch->last_change_ms = platform_current_time_ms();
+    watch->debounce_due_ms = watch->last_change_ms;
     watch->pressed = (current_level == active_level);
     watch->down_at_ms = watch->pressed ? platform_current_time_ms() : 0u;
     watch->hold_fired = false;
+    watch->debounce_pending = false;
+    watch->hold_pending = watch->pressed;
 
     if (!gpio_runtime_c_callback_add(pin, gpio_button_raw_callback, watch)) {
         gpio_runtime_release_button_watch(watch);
@@ -1159,7 +1279,7 @@ ID native_button_watch(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    gpio_runtime_input_timer_refresh();
+    gpio_runtime_button_timer_refresh();
     return NULL;
 }
 
@@ -1217,7 +1337,7 @@ ID native_sensor_watch(ID *args, unsigned int argc) {
     }
 
     if (!callback) {
-        gpio_runtime_input_timer_refresh();
+        gpio_runtime_sensor_timer_refresh();
         return NULL;
     }
 
@@ -1251,7 +1371,7 @@ ID native_sensor_watch(ID *args, unsigned int argc) {
     watch->last_emitted_value = 0;
     watch->last_emitted_valid = false;
 
-    gpio_runtime_input_timer_refresh();
+    gpio_runtime_sensor_timer_refresh();
     return NULL;
 }
 

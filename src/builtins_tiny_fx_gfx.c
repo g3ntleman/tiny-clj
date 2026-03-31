@@ -72,6 +72,12 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
     return tinyclj_runtime_fx_disabled("tiny-clj.runtime/renderer-timeline-progress");
 }
 
+ID native_tinyfx_color_color(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-fx.gfx/color");
+}
+
 #else
 
 #define TINYCLJ_SCENE_BENCH_WIDTH 320u
@@ -82,11 +88,6 @@ typedef struct {
     ID id;
     uint8_t index;
 } TinycljRendererSlotBinding;
-
-typedef struct {
-    ID *slot;
-    const char *name;
-} TinycljKeywordCacheEntry;
 
 typedef struct {
     ID *slot;
@@ -155,9 +156,34 @@ static ID g_kw_count = NULL;
 static ID g_kw_phase_ms = NULL;
 static ID g_kw_period_ms = NULL;
 static ID g_kw_loop = NULL;
+static ID g_kw_end_event = NULL;
+static ID g_kw_event_id = NULL;
+static ID g_kw_slot_id = NULL;
+static ID g_kw_entity_id = NULL;
+static ID g_kw_field = NULL;
+static ID g_kw_at_end = NULL;
 static ID g_kw_permille = NULL;
 
-static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
+static bool tinyfx_color_parse_u8(ID value, uint8_t *out) {
+    if (!is_fixnum(value)) {
+        return false;
+    }
+    int32_t parsed = as_fixnum(value);
+    if (parsed < 0 || parsed > 255) {
+        return false;
+    }
+    *out = (uint8_t)parsed;
+    return true;
+}
+
+static ID tinyfx_color_rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    const uint16_t r5 = (uint16_t)(((uint32_t)r * 31u) / 255u);
+    const uint16_t g6 = (uint16_t)(((uint32_t)g * 63u) / 255u);
+    const uint16_t b5 = (uint16_t)(((uint32_t)b * 31u) / 255u);
+    return fixnum((int32_t)((r5 << 11) | (g6 << 5) | b5));
+}
+
+static IdSymbolCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_id, ":id"},
     {&g_kw_atom, ":atom"},
     {&g_kw_deco, ":deco"},
@@ -208,6 +234,12 @@ static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_phase_ms, ":phase-ms"},
     {&g_kw_period_ms, ":period-ms"},
     {&g_kw_loop, ":loop"},
+    {&g_kw_end_event, ":end-event"},
+    {&g_kw_event_id, ":event-id"},
+    {&g_kw_slot_id, ":slot-id"},
+    {&g_kw_entity_id, ":entity-id"},
+    {&g_kw_field, ":field"},
+    {&g_kw_at_end, ":at-end"},
     {&g_kw_permille, ":permille"},
 };
 
@@ -247,18 +279,11 @@ static void tinyclj_runtime_reset_keyword_cache(void) {
 }
 
 static bool tinyclj_runtime_intern_common_keywords(void) {
-    size_t keyword_count = sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]);
-
-    for (size_t i = 0; i < keyword_count; i++) {
-        TinycljKeywordCacheEntry *entry = &g_runtime_keyword_cache[i];
-        if (*entry->slot) {
-            continue;
-        }
-        *entry->slot = intern_symbol_global(entry->name);
-        if (!*entry->slot) {
-            tinyclj_runtime_reset_keyword_cache();
-            return false;
-        }
+    if (!id_symbol_cache_init_global(
+            g_runtime_keyword_cache,
+            sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]))) {
+        tinyclj_runtime_reset_keyword_cache();
+        return false;
     }
     return true;
 }
@@ -281,7 +306,13 @@ static void tinyclj_runtime_clear_slot_bindings(void) {
     g_renderer_slot_binding_count = 0u;
 }
 
-static bool tinyclj_runtime_register_slot_bindings(ID slot_atoms) {
+/**
+ * @brief Populate native renderer slot index map from host :slots vector.
+ *
+ * @param slot_atoms Vector of {:id kw :atom atom} slot descriptors (same shape as start-renderer!).
+ * @return true when bindings were applied or slot_atoms was nil; false on invalid shape.
+ */
+bool builtins_tiny_fx_gfx_register_slot_bindings(ID slot_atoms) {
     tinyclj_runtime_clear_slot_bindings();
     if (!slot_atoms) {
         return true;
@@ -469,6 +500,51 @@ void builtins_tiny_fx_gfx_reset_cached_state(void) {
     tinyclj_runtime_reset_keyword_cache();
 }
 
+ID native_tinyfx_color_color(ID *args, unsigned int argc) {
+    if (argc == 1u) {
+        if (!is_fixnum(args[0])) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB888 input must be an integer in range 0x000000..0xFFFFFF",
+                            __FILE__,
+                            __LINE__,
+                            0);
+            return NULL;
+        }
+        int32_t rgb = as_fixnum(args[0]);
+        if (rgb < 0 || rgb > 0xFFFFFF) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB888 input must be an integer in range 0x000000..0xFFFFFF",
+                            __FILE__,
+                            __LINE__,
+                            0);
+            return NULL;
+        }
+        return tinyfx_color_rgb565((uint8_t)((uint32_t)rgb >> 16),
+                                   (uint8_t)(((uint32_t)rgb >> 8) & 0xFFu),
+                                   (uint8_t)((uint32_t)rgb & 0xFFu));
+    }
+    if (argc == 3u) {
+        uint8_t r = 0u;
+        uint8_t g = 0u;
+        uint8_t b = 0u;
+        if (!tinyfx_color_parse_u8(args[0], &r) ||
+            !tinyfx_color_parse_u8(args[1], &g) ||
+            !tinyfx_color_parse_u8(args[2], &b)) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "tiny-fx.gfx/color RGB channel inputs must be integers in range 0..255",
+                            __FILE__,
+                            __LINE__,
+                            0);
+            return NULL;
+        }
+        return tinyfx_color_rgb565(r, g, b);
+    }
+    throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                              "Wrong number of args (%u) passed to: tiny-fx.gfx/color",
+                              argc);
+    return NULL;
+}
+
 #ifdef DEBUG
 /**
  * @brief Benchmark decode plus render of the current Clojure demo scenes.
@@ -512,7 +588,9 @@ ID native_tinyfx_gfx_bench_vector_scene_bench(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    if (!tiny_fx_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-fx.game-demo")) {
+    if (!tiny_fx_gfx_require_records_namespace(st) ||
+        !tiny_fx_gfx_ensure_schema(st) ||
+        !require_namespace_by_name(st, "tiny-fx.game-demo")) {
         throw_exception(EXCEPTION_RUNTIME,
                         "tiny-fx.gfx-bench/vector-scene-bench failed to initialize tiny-fx scene schema",
                         __FILE__,
@@ -657,7 +735,7 @@ ID native_tinyclj_runtime_start_renderer(ID *args, unsigned int argc) {
                             0);
             return NULL;
         }
-        if (!tinyclj_runtime_register_slot_bindings(slot_atoms)) {
+        if (!builtins_tiny_fx_gfx_register_slot_bindings(slot_atoms)) {
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                             "tiny-clj.runtime/start-renderer! slot descriptors must contain unique {:id kw :atom atom} entries",
                             __FILE__,
@@ -835,12 +913,18 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
     }
 
     return AUTORELEASE(make_map_from_kv(
-        8,
+        14,
         g_kw_step, fixnum((int32_t)state.sample.step_index),
         g_kw_count, fixnum((int32_t)state.sample.keyframe_count),
         g_kw_phase_ms, fixnum((int32_t)phase),
         g_kw_period_ms, fixnum((int32_t)period),
         g_kw_loop, state.sample.loop ? clj_true : clj_false,
+        g_kw_end_event, state.sample.end_event ? clj_true : clj_false,
+        g_kw_event_id, state.sample.event_id_bits ? (ID)state.sample.event_id_bits : NULL,
+        g_kw_slot_id, args[0],
+        g_kw_entity_id, args[1],
+        g_kw_field, args[2],
+        g_kw_at_end, state.sample.at_end ? clj_true : clj_false,
         g_kw_permille, fixnum((int32_t)permille),
         g_kw_snapshot_gen, fixnum((int32_t)state.snapshot_generation),
         g_kw_ts_ms, fixnum((int32_t)state.frame_time_ms)));

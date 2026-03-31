@@ -9,6 +9,7 @@
 #include "../channel.h"
 // test_registry.h is included via tests_common.h (uses subjective-c test infrastructure)
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 // ============================================================================
@@ -131,6 +132,66 @@ TEST(test_schedule_zero_delay_lexical_capture_regression_high_level) {
         "captured lexical state should be incremented exactly once");
 
     event_loop_clear();
+}
+
+static FILE *open_breakout_repl_regression_pipe(void) {
+    const char *expr =
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.runtime) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    ((:prepare-callback cfg)) "
+        "    (tiny-clj.runtime/start-renderer! (:slots cfg)) "
+        "    (tiny-breakout.runtime/start-runtime! nil) "
+        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "    (loop [i 0] "
+        "      (if (>= i 40) "
+        "        (let [s @tiny-breakout.runtime/state* "
+        "              _ (tiny-clj.runtime/stop-renderer!)] "
+        "          [(:phase s) (:score s) (:segment-id-seq s)]) "
+        "        (do "
+        "          (Thread/sleep 40) "
+        "          (dotimes [_ 8] (run-next-task)) "
+        "          (recur (inc i)))))))";
+
+    const char *candidates[] = {
+        "./build/tiny-clj-repl",
+        "../build/tiny-clj-repl",
+        "../../build/tiny-clj-repl",
+    };
+
+    char cmd[4096];
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        if (access(candidates[i], X_OK) != 0) {
+            continue;
+        }
+        test_snprintf(cmd, sizeof(cmd), "%s -e \"%s\" </dev/null 2>&1", candidates[i], expr);
+        return popen(cmd, "r");
+    }
+    return NULL;
+}
+
+TEST(test_run_next_task_breakout_renderer_loop_regression) {
+    FILE *pipe = open_breakout_repl_regression_pipe();
+    TEST_ASSERT_NOT_NULL_MESSAGE(pipe, "failed to locate executable tiny-clj-repl for regression subprocess");
+
+    char output[8192];
+    size_t used = 0u;
+    output[0] = '\0';
+    while (!feof(pipe) && used + 1u < sizeof(output)) {
+        size_t n = fread(output + used, 1u, sizeof(output) - used - 1u, pipe);
+        used += n;
+        output[used] = '\0';
+        if (n == 0u) {
+            break;
+        }
+    }
+
+    int status = pclose(pipe);
+    TEST_ASSERT_TRUE_MESSAGE(WIFEXITED(status), "breakout renderer regression subprocess should exit normally");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, WEXITSTATUS(status), output);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(output, "[:play 10 2]"), output);
 }
 
 // Test that schedule-periodic creates a repeating timer

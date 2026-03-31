@@ -20,7 +20,7 @@ typedef struct {
     int rect_id, rect_t, rect_style, rect_visible, rect_x, rect_y, rect_w, rect_h;
     int tri_id, tri_t, tri_style, tri_visible, tri_x1, tri_y1, tri_x2, tri_y2, tri_x3, tri_y3;
     int text_id, text_t, text_style, text_visible, text_x, text_y, text_scale, text_rot, text_text;
-    int timeline_keyframes, timeline_loop;
+    int timeline_keyframes, timeline_loop, timeline_end_event, timeline_event_id;
     int frame_root, frame_index, frame_clip_rect, frame_z, frame_visible, frame_opaque, frame_erase_color, frame_guard_px;
     int scene_root, scene_index, scene_clip_rect, scene_erase_color;
 } VgRecordSchema;
@@ -50,6 +50,8 @@ typedef struct {
     ID k_text;
     ID k_keyframes;
     ID k_loop;
+    ID k_end_event;
+    ID k_event_id;
     ID k_tx;
     ID k_ty;
     ID k_sx;
@@ -76,11 +78,12 @@ DEFRECORD(Polyline, id, t, style, visible, pts, closed, prototype)
 DEFRECORD(Rect, id, t, style, visible, x, y, w, h, prototype)
 DEFRECORD(Tri, id, t, style, visible, x1, y1, x2, y2, x3, y3, prototype)
 DEFRECORD(VText, id, t, style, visible, x, y, scale, rot, text, prototype)
-DEFRECORD(Timeline, keyframes, loop)
-DEFRECORD(FrameScene, root, index, clip_rect, z, visible, opaque, erase_color, guard_px)
-DEFRECORD(Scene, root, index, clip_rect, erase_color)
+DEFRECORD(Timeline, keyframes, loop, end_event, event_id)
+DEFRECORD(FrameScene, root, index, clip_rect, z, visible, opaque, erase_color, guard_px, collision_rules)
+DEFRECORD(Scene, root, index, clip_rect, erase_color, collision_rules)
 
 bool tiny_fx_gfx_ensure_schema(EvalState *st);
+bool tiny_fx_gfx_require_records_namespace(EvalState *st);
 const VgRecordSchema *tiny_fx_gfx_schema(void);
 const VgRecordKeys *tiny_fx_gfx_record_keys(void);
 // Returns a borrowed alias; caller must ensure the parent record outlives usage.

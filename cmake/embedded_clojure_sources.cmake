@@ -28,16 +28,19 @@ set(TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES
 )
 
 set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
+    "libs/tiny-fx/trk1.clj|tiny-fx.trk1.clj.inc"
     "libs/tiny-fx/sound.clj|tiny-fx.sound.clj.inc"
-    "libs/tiny-fx/sound-native.clj|tiny-fx.sound-native.clj.inc"
     "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
+    "libs/tiny-fx/gfx-timeline.clj|tiny-fx.gfx-timeline.clj.inc"
     "libs/tiny-fx/gfx.clj|tiny-gfx.runtime.clj.inc"
     "libs/tiny-fx/startup.clj|tiny-fx.startup.clj.inc"
     "libs/tiny-fx/game-demo.clj|tiny-fx.game-demo.clj.inc"
     "libs/tiny-breakout/core.clj|tiny-breakout.core.clj.inc"
     "libs/tiny-breakout/scene.clj|tiny-breakout.scene.clj.inc"
     "libs/tiny-breakout/audio.clj|tiny-breakout.audio.clj.inc"
+    "libs/tiny-breakout/audio-compiler.clj|tiny-breakout.audio-compiler.clj.inc"
+    "libs/tiny-breakout/runtime.clj|tiny-breakout.runtime.clj.inc"
     "libs/tiny-breakout/levels.clj|tiny-breakout.levels.clj.inc"
 )
 

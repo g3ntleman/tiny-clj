@@ -45,6 +45,8 @@ STATIC_SYMBOL_DATA(sym_kw_rot_data, ":rot");
 STATIC_SYMBOL_DATA(sym_kw_text_data, ":text");
 STATIC_SYMBOL_DATA(sym_kw_keyframes_data, ":keyframes");
 STATIC_SYMBOL_DATA(sym_kw_loop_data, ":loop");
+STATIC_SYMBOL_DATA(sym_kw_end_event_data, ":end-event");
+STATIC_SYMBOL_DATA(sym_kw_event_id_data, ":event-id");
 STATIC_SYMBOL_DATA(sym_kw_tx_data, ":tx");
 STATIC_SYMBOL_DATA(sym_kw_ty_data, ":ty");
 STATIC_SYMBOL_DATA(sym_kw_sx_data, ":sx");
@@ -82,6 +84,14 @@ static int descriptor_index_of(CljRecordDescriptor *desc, ID key) {
     return vector_index_of(desc->field_keys, key);
 }
 
+bool tiny_fx_gfx_require_records_namespace(EvalState *st) {
+    EvalState *load_state = st ? st : get_global_eval_state();
+    if (!load_state) {
+        return false;
+    }
+    return require_namespace_by_name(load_state, "tiny-fx.gfx-records");
+}
+
 static void init_record_keys(void) {
     if (g_record_keys_initialized) {
         return;
@@ -111,6 +121,8 @@ static void init_record_keys(void) {
     g_record_keys.k_text = &sym_kw_text_data.sym;
     g_record_keys.k_keyframes = &sym_kw_keyframes_data.sym;
     g_record_keys.k_loop = &sym_kw_loop_data.sym;
+    g_record_keys.k_end_event = &sym_kw_end_event_data.sym;
+    g_record_keys.k_event_id = &sym_kw_event_id_data.sym;
     g_record_keys.k_tx = &sym_kw_tx_data.sym;
     g_record_keys.k_ty = &sym_kw_ty_data.sym;
     g_record_keys.k_sx = &sym_kw_sx_data.sym;
@@ -127,180 +139,6 @@ static void init_record_keys(void) {
     g_record_keys.k_opaque = &sym_kw_opaque_data.sym;
     g_record_keys.k_guard_px = &sym_kw_guard_px_data.sym;
     g_record_keys_initialized = true;
-}
-
-static void register_builtin_gfx_records(void) {
-    CljPersistentVector *fv;
-    fv = make_vector(5, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":tx"));
-    vector_conj_inplace(&fv, intern_symbol_global(":ty"));
-    vector_conj_inplace(&fv, intern_symbol_global(":sx"));
-    vector_conj_inplace(&fv, intern_symbol_global(":sy"));
-    vector_conj_inplace(&fv, intern_symbol_global(":rot"));
-    record_register_descriptor(intern_symbol_global("Transform"), fv);
-    RELEASE(fv);
-    fv = make_vector(7, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":stroke-color"));
-    vector_conj_inplace(&fv, intern_symbol_global(":stroke-width"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":has-fill"));
-    vector_conj_inplace(&fv, intern_symbol_global(":fill-color"));
-    vector_conj_inplace(&fv, intern_symbol_global(":has-bg-color"));
-    vector_conj_inplace(&fv, intern_symbol_global(":bg-color"));
-    record_register_descriptor(intern_symbol_global("Style"), fv);
-    RELEASE(fv);
-    fv = make_vector(6, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":children"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("Group"), fv);
-    RELEASE(fv);
-    fv = make_vector(9, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x1"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y1"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x2"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y2"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("Line"), fv);
-    RELEASE(fv);
-    fv = make_vector(7, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":pts"));
-    vector_conj_inplace(&fv, intern_symbol_global(":closed"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("Polyline"), fv);
-    RELEASE(fv);
-    fv = make_vector(9, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y"));
-    vector_conj_inplace(&fv, intern_symbol_global(":w"));
-    vector_conj_inplace(&fv, intern_symbol_global(":h"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("Rect"), fv);
-    RELEASE(fv);
-    fv = make_vector(11, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x1"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y1"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x2"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y2"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x3"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y3"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("Tri"), fv);
-    RELEASE(fv);
-    fv = make_vector(10, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":t"));
-    vector_conj_inplace(&fv, intern_symbol_global(":style"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":x"));
-    vector_conj_inplace(&fv, intern_symbol_global(":y"));
-    vector_conj_inplace(&fv, intern_symbol_global(":scale"));
-    vector_conj_inplace(&fv, intern_symbol_global(":rot"));
-    vector_conj_inplace(&fv, intern_symbol_global(":text"));
-    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
-    record_register_descriptor(intern_symbol_global("VText"), fv);
-    RELEASE(fv);
-    fv = make_vector(2, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":keyframes"));
-    vector_conj_inplace(&fv, intern_symbol_global(":loop"));
-    record_register_descriptor(intern_symbol_global("Timeline"), fv);
-    RELEASE(fv);
-    fv = make_vector(5, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":root"));
-    vector_conj_inplace(&fv, intern_symbol_global(":index"));
-    vector_conj_inplace(&fv, intern_symbol_global(":clip-rect"));
-    vector_conj_inplace(&fv, intern_symbol_global(":erase-color"));
-    vector_conj_inplace(&fv, intern_symbol_global(":collision-rules"));
-    record_register_descriptor(intern_symbol_global("Scene"), fv);
-    RELEASE(fv);
-    fv = make_vector(9, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":root"));
-    vector_conj_inplace(&fv, intern_symbol_global(":index"));
-    vector_conj_inplace(&fv, intern_symbol_global(":clip-rect"));
-    vector_conj_inplace(&fv, intern_symbol_global(":z"));
-    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
-    vector_conj_inplace(&fv, intern_symbol_global(":opaque"));
-    vector_conj_inplace(&fv, intern_symbol_global(":erase-color"));
-    vector_conj_inplace(&fv, intern_symbol_global(":guard-px"));
-    vector_conj_inplace(&fv, intern_symbol_global(":collision-rules"));
-    record_register_descriptor(intern_symbol_global("FrameScene"), fv);
-    RELEASE(fv);
-    fv = make_vector(7, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
-    vector_conj_inplace(&fv, intern_symbol_global(":a-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":b-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":phase-mask"));
-    vector_conj_inplace(&fv, intern_symbol_global(":enabled"));
-    vector_conj_inplace(&fv, intern_symbol_global(":cooldown-ms"));
-    record_register_descriptor(intern_symbol_global("CollisionRule"), fv);
-    RELEASE(fv);
-    fv = make_vector(7, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":rule-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
-    vector_conj_inplace(&fv, intern_symbol_global(":a-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":b-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":phase"));
-    vector_conj_inplace(&fv, intern_symbol_global(":snapshot-gen"));
-    vector_conj_inplace(&fv, intern_symbol_global(":ts-ms"));
-    record_register_descriptor(intern_symbol_global("CollisionEvent"), fv);
-    RELEASE(fv);
-    fv = make_vector(7, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
-    vector_conj_inplace(&fv, intern_symbol_global(":kind"));
-    vector_conj_inplace(&fv, intern_symbol_global(":self"));
-    vector_conj_inplace(&fv, intern_symbol_global(":other"));
-    vector_conj_inplace(&fv, intern_symbol_global(":radius"));
-    vector_conj_inplace(&fv, intern_symbol_global(":channel"));
-    record_register_descriptor(intern_symbol_global("SpatialRule"), fv);
-    RELEASE(fv);
-    fv = make_vector(4, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":min-x"));
-    vector_conj_inplace(&fv, intern_symbol_global(":min-y"));
-    vector_conj_inplace(&fv, intern_symbol_global(":max-x"));
-    vector_conj_inplace(&fv, intern_symbol_global(":max-y"));
-    record_register_descriptor(intern_symbol_global("Aabb"), fv);
-    RELEASE(fv);
-    fv = make_vector(17, STRONG);
-    vector_conj_inplace(&fv, intern_symbol_global(":source"));
-    vector_conj_inplace(&fv, intern_symbol_global(":id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":slot-id"));
-    vector_conj_inplace(&fv, intern_symbol_global(":kind"));
-    vector_conj_inplace(&fv, intern_symbol_global(":phase"));
-    vector_conj_inplace(&fv, intern_symbol_global(":self"));
-    vector_conj_inplace(&fv, intern_symbol_global(":other"));
-    vector_conj_inplace(&fv, intern_symbol_global(":self-entity"));
-    vector_conj_inplace(&fv, intern_symbol_global(":other-entity"));
-    vector_conj_inplace(&fv, intern_symbol_global(":rule"));
-    vector_conj_inplace(&fv, intern_symbol_global(":snapshot-gen"));
-    vector_conj_inplace(&fv, intern_symbol_global(":self-aabb"));
-    vector_conj_inplace(&fv, intern_symbol_global(":other-aabb"));
-    vector_conj_inplace(&fv, intern_symbol_global(":self-prototype"));
-    vector_conj_inplace(&fv, intern_symbol_global(":other-prototype"));
-    vector_conj_inplace(&fv, intern_symbol_global(":radius"));
-    vector_conj_inplace(&fv, intern_symbol_global(":channel"));
-    record_register_descriptor(intern_symbol_global("SpatialEvent"), fv);
-    RELEASE(fv);
 }
 
 bool tiny_fx_gfx_ensure_schema(EvalState *st) {
@@ -332,23 +170,7 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     CljRecordDescriptor *d_scene = record_descriptor_lookup(g_record_schema.t_scene);
     if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
         !d_timeline || !d_frame || !d_scene) {
-        register_builtin_gfx_records();
-        
-        d_transform = record_descriptor_lookup(g_record_schema.t_transform);
-        d_style = record_descriptor_lookup(g_record_schema.t_style);
-        d_group = record_descriptor_lookup(g_record_schema.t_group);
-        d_line = record_descriptor_lookup(g_record_schema.t_line);
-        d_poly = record_descriptor_lookup(g_record_schema.t_polyline);
-        d_rect = record_descriptor_lookup(g_record_schema.t_rect);
-        d_tri = record_descriptor_lookup(g_record_schema.t_tri);
-        d_text = record_descriptor_lookup(g_record_schema.t_vtext);
-        d_timeline = record_descriptor_lookup(g_record_schema.t_timeline);
-        d_frame = record_descriptor_lookup(g_record_schema.t_frame_scene);
-        d_scene = record_descriptor_lookup(g_record_schema.t_scene);
-        if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
-            !d_timeline || !d_frame || !d_scene) {
-            return false;
-        }
+        return false;
     }
 
     g_record_schema.d_transform = d_transform;
@@ -447,6 +269,8 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     g_record_schema.text_text = descriptor_index_of(d_text, g_record_keys.k_text);
     g_record_schema.timeline_keyframes = descriptor_index_of(d_timeline, g_record_keys.k_keyframes);
     g_record_schema.timeline_loop = descriptor_index_of(d_timeline, g_record_keys.k_loop);
+    g_record_schema.timeline_end_event = descriptor_index_of(d_timeline, g_record_keys.k_end_event);
+    g_record_schema.timeline_event_id = descriptor_index_of(d_timeline, g_record_keys.k_event_id);
     g_record_schema.frame_root = descriptor_index_of(d_frame, g_record_keys.k_root);
     g_record_schema.frame_index = descriptor_index_of(d_frame, g_record_keys.k_index);
     g_record_schema.frame_clip_rect = descriptor_index_of(d_frame, g_record_keys.k_clip_rect);
@@ -481,6 +305,7 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
         g_record_schema.text_x < 0 || g_record_schema.text_y < 0 || g_record_schema.text_scale < 0 ||
         g_record_schema.text_rot < 0 || g_record_schema.text_text < 0 ||
         g_record_schema.timeline_keyframes < 0 || g_record_schema.timeline_loop < 0 ||
+        g_record_schema.timeline_end_event < 0 || g_record_schema.timeline_event_id < 0 ||
         g_record_schema.frame_root < 0 || g_record_schema.frame_index < 0 ||
         g_record_schema.frame_clip_rect < 0 || g_record_schema.frame_z < 0 || g_record_schema.frame_visible < 0 ||
         g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_color < 0 || g_record_schema.frame_guard_px < 0 ||

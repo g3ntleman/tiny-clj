@@ -470,11 +470,11 @@ The separated parse/eval API provides better control and performance measurement
 #### Usage Examples
 ```c
 // Before (verbose):
-char *result_str = pr_str(result);
+char *result_str = make_string_description(result);
 mu_assert("result should be (1 2 3)", strcmp(result_str, "(1 2 3)") == 0);
 
 // After (clean):
-char *result_str = pr_str(result);
+char *result_str = make_string_description(result);
 mu_assert_string_eq(result_str, "(1 2 3)");
 ```
 
@@ -495,19 +495,19 @@ Instead of repeating similar code patterns, extract them into well-named local h
 #### Example: Test Code Optimization
 ```c
 // Before (repetitive):
-char *result_str = pr_str(eval_list(parse("(list 42)", &st), NULL));
+char *result_str = make_string_description(eval_list(parse("(list 42)", &st), NULL));
 mu_assert("list function should work", result_str != NULL);
 mu_assert_string_eq(result_str, "(42)");
 free(result_str);
 
-char *multi_str = pr_str(eval_list(parse("(list 1 2 3)", &st), NULL));
+char *multi_str = make_string_description(eval_list(parse("(list 1 2 3)", &st), NULL));
 mu_assert("multi list function should work", multi_str != NULL);
 mu_assert_string_eq(multi_str, "(1 2 3)");
 free(multi_str);
 
 // After (DRY with helper):
 static char* test_list_eval(EvalState *st, const char *expr, const char *expected) {
-  char *result_str = pr_str(eval_list(parse(expr, st), NULL));
+  char *result_str = make_string_description(eval_list(parse(expr, st), NULL));
   mu_assert("list function should work", result_str != NULL);
   mu_assert_string_eq(result_str, expected);
   free(result_str);
@@ -566,7 +566,7 @@ char* test_function(void) {
 ```c
 // Helper functions should follow the same pattern:
 static char* test_list_eval(EvalState *st, const char *expr, const char *expected) {
-  char *result_str = pr_str(eval_list(parse(expr, st), NULL));
+  char *result_str = make_string_description(eval_list(parse(expr, st), NULL));
   if (!result_str) return "list function failed - no result";
   if (strcmp(result_str, expected) != 0) {
     free(result_str);

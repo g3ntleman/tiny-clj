@@ -2,7 +2,7 @@
  * Native string functions for Tiny-CLJ
  * 
  * Provides: str, subs, trim, upper-case, lower-case, pad-left,
- * index-of, last-index-of, reverse (string), format
+ * last-index-of, reverse (string), format
  */
 
 #ifndef TINY_CLJ_BUILTINS_STRINGS_H
@@ -30,9 +30,6 @@ ID native_lower_case(ID *args, unsigned int argc);
 
 // Pad left: (pad-left s width pad-char)
 ID native_pad_left(ID *args, unsigned int argc);
-
-// Index of: (index-of s value) or (index-of s value from-index)
-ID native_index_of(ID *args, unsigned int argc);
 
 // Last index of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc);

@@ -52,14 +52,21 @@ through scheduler/runloop ingress and ignores callback return values."}
 ^#^{:doc "Invokes the configured spatial callback with one event payload.
 Direct Clojure invocation returns the callback value; host C dispatch path ignores return values.
 Returns nil when no callback is configured."}
+(def dispatch-spatial-watchers!
+  (fn dispatch-spatial-watchers! [event]
+    (let [watcher (get @spatial-watchers* (event-id event))]
+      (when watcher
+        (watcher event))
+      nil)))
+
+^#^{:doc "Invokes the configured spatial callback with one event payload.
+Direct Clojure invocation returns the callback value; host C dispatch path ignores return values.
+Also dispatches spatial watchers for the event id."}
 (def invoke-collision-callback!
   (fn invoke-collision-callback! [event]
     (let [f (deref collision-callback*)
           result (if f
                    (f event)
-                   nil)
-          watcher (get @spatial-watchers* (event-id event))]
-      (when watcher
-        (watcher event))
+                   nil)]
+      (dispatch-spatial-watchers! event)
       result)))
-

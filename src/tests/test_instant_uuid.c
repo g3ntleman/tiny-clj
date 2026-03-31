@@ -22,9 +22,9 @@ TEST(test_instant_equality_and_hash) {
     TEST_ASSERT_EQUAL_UINT32(clj_hash_full(a), clj_hash_full(b));
 }
 
-TEST(test_instant_pr_str_shape) {
+TEST(test_instant_make_string_description_shape) {
     ID a = AUTORELEASE(make_instant(1, 2));
-    CljString *s = pr_str(a);
+    CljString *s = make_string_description(a);
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("#inst \"1970-01-02T00:00:00.002Z\"", clj_string_data(s));
 }
@@ -40,7 +40,7 @@ TEST(test_uuid_parse_print_equal) {
     TEST_ASSERT_FALSE(clj_equal(u1, u3));
     TEST_ASSERT_EQUAL_UINT32(clj_hash_full(u1), clj_hash_full(u2));
 
-    CljString *s = pr_str(u1);
+    CljString *s = make_string_description(u1);
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"", clj_string_data(s));
 }

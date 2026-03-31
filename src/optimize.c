@@ -30,6 +30,11 @@ typedef struct RecordSlotFrame {
   unsigned int slot_count;
 } RecordSlotFrame;
 
+static ID g_optimize_sym_record_get_index = NULL;
+static const IdSymbolCacheEntry g_optimize_symbol_cache[] = {
+    {&g_optimize_sym_record_get_index, "record-get-index"},
+};
+
 // Check if expr is the last element in list (single traversal)
 static bool is_last_in_list(CljObject *expr, CljList *list) {
   if (!list)
@@ -223,7 +228,12 @@ static bool rewrite_record_lookup_call(CljASTCall *call,
   vector_conj_inplace(&new_args, fixnum(index));
   vector_conj_inplace(&new_args, default_expr);
 
-  CljSymbol *fast_op = intern_symbol_global("record-get-index");
+  if (!id_symbol_cache_init_global(g_optimize_symbol_cache,
+                                   sizeof(g_optimize_symbol_cache) / sizeof(g_optimize_symbol_cache[0]))) {
+    RELEASE(new_args);
+    return false;
+  }
+  CljSymbol *fast_op = g_optimize_sym_record_get_index;
   if (!fast_op) {
     RELEASE(new_args);
     return false;
@@ -297,6 +307,23 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
           return true;
       }
       return false;
+    } else if (head == SYM_CASE) {
+      if (argc <= 1)
+        return false;
+      unsigned int forms = argc - 1;
+      bool has_default = (forms & 1u) != 0;
+      unsigned int pair_forms = has_default ? (forms - 1) : forms;
+      for (unsigned int i = 2; i < 1 + pair_forms; i += 2) {
+        ID branch = vector_nth(args, i);
+        if (branch == expr || is_tail_position(expr, branch))
+          return true;
+      }
+      if (has_default) {
+        ID default_expr = vector_nth(args, argc - 1);
+        if (default_expr == expr || is_tail_position(expr, default_expr))
+          return true;
+      }
+      return false;
     }
 
     return expr == body;
@@ -356,6 +383,25 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
         return true;
       rest = as_list(rest->rest);
       is_test = !is_test;
+    }
+  } else if (head == SYM_CASE) {
+    // (case expr test expr ... default?) - each branch/default is tail
+    CljList *forms = as_list(rest->rest); // Skip case expression.
+    unsigned int count = 0;
+    for (CljList *n = forms; n; n = as_list(n->rest))
+      count++;
+    bool has_default = (count & 1u) != 0;
+    unsigned int pair_forms = has_default ? (count - 1) : count;
+    unsigned int idx = 0;
+    for (CljList *n = forms; n; n = as_list(n->rest), idx++) {
+      if (idx < pair_forms) {
+        if ((idx & 1u) == 1u && (n->first == expr || is_tail_position(expr, n->first)))
+          return true;
+        continue;
+      }
+      if (has_default && idx == count - 1 &&
+          (n->first == expr || is_tail_position(expr, n->first)))
+        return true;
     }
   }
 

@@ -57,7 +57,9 @@ set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/to_string.c"
   "${TINYCLJ_SRC_DIR}/macro.c"
   "${TINYCLJ_SRC_DIR}/file_utils.c"
+  "${TINYCLJ_SRC_DIR}/fx_collision.c"
   "${TINYCLJ_SRC_DIR}/source_resolver.c"
+  "${TINYCLJ_SRC_DIR}/startup_pipeline.c"
   "${TINYCLJ_SRC_DIR}/embedded_sources.c"
   "${TINYCLJ_SRC_DIR}/fs_layer.c"
   "${TINYCLJ_SRC_DIR}/lockfree_spsc_queue.c"
@@ -74,11 +76,13 @@ set(TINYCLJ_FX_SRCS
   "${TINYCLJ_SRC_DIR}/sound_tick_scheduler.c"
   "${TINYCLJ_SRC_DIR}/gfx.c"
   "${TINYCLJ_SRC_DIR}/scene.c"
+  "${TINYCLJ_SRC_DIR}/panel.c"
+  "${TINYCLJ_SRC_DIR}/panel_esp_lcd.c"
+  "${TINYCLJ_SRC_DIR}/panel_backend.c"
   "${TINYCLJ_SRC_DIR}/tiny_fx_gfx.c"
   "${TINYCLJ_SRC_DIR}/vector_scene_graph.c"
   "${TINYCLJ_SRC_DIR}/renderer_lifecycle.c"
   "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
-  "${TINYCLJ_SRC_DIR}/render_backend.c"
   "${TINYCLJ_SRC_DIR}/sound_engine.c"
   "${TINYCLJ_SRC_DIR}/sound_backend_esp32.c"
 )
@@ -116,6 +120,7 @@ idf_component_register(
     esp_adc
     esp_timer
     esp_partition
+    esp_lcd
 )
 
 if(NOT CMAKE_SCRIPT_MODE_FILE)
@@ -129,13 +134,6 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
   add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
   add_dependencies(${COMPONENT_LIB} tinyclj_embedded_clojure_sources)
 
-  target_compile_definitions(${COMPONENT_LIB} PUBLIC
-    ESP32_BUILD=1
-    TINYCLJ_WITH_TINY_FX=$<BOOL:${TINYCLJ_WITH_TINY_FX}>
-    TINYCLJ_RAM_BACKEND_ENABLED=0
-    LINE_EDITING_ENABLED=1
-    MEMORY_PROFILING_ENABLED=0
-    META_ENABLED=0
-  )
+  # ESP32_BUILD, TINYCLJ_*: set globally in cmake/tinyclj_idf_compile_flags.cmake (before project()).
   target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
 endif()

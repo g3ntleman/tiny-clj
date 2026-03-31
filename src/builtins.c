@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <math.h>
 #include <ctype.h>
 #include "object.h"
@@ -56,6 +57,7 @@
 #include "builtins_gpio.h"
 #include "builtins_sound.h"
 #include "builtins_tiny_fx_gfx.h"
+#include "fx_collision.h"
 
 #ifndef TINYCLJ_WITH_TINY_FX
 #define TINYCLJ_WITH_TINY_FX 1
@@ -94,16 +96,31 @@ static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) 
   return *slot;
 }
 
+static void builtins_reset_gensym_state(void);
+
 static ID g_concat_thunk_fn_obj = NULL;
 static ID g_map_thunk_fn_obj = NULL;
 static ID g_mapcat_thunk_fn_obj = NULL;
 static ID g_range_inf_thunk_fn_obj = NULL;
 
 void builtins_reset_cached_funcs(void) {
+  if (g_concat_thunk_fn_obj && !IS_IMMEDIATE(g_concat_thunk_fn_obj)) {
+    RELEASE(g_concat_thunk_fn_obj);
+  }
+  if (g_map_thunk_fn_obj && !IS_IMMEDIATE(g_map_thunk_fn_obj)) {
+    RELEASE(g_map_thunk_fn_obj);
+  }
+  if (g_mapcat_thunk_fn_obj && !IS_IMMEDIATE(g_mapcat_thunk_fn_obj)) {
+    RELEASE(g_mapcat_thunk_fn_obj);
+  }
+  if (g_range_inf_thunk_fn_obj && !IS_IMMEDIATE(g_range_inf_thunk_fn_obj)) {
+    RELEASE(g_range_inf_thunk_fn_obj);
+  }
   g_concat_thunk_fn_obj = NULL;
   g_map_thunk_fn_obj = NULL;
   g_mapcat_thunk_fn_obj = NULL;
   g_range_inf_thunk_fn_obj = NULL;
+  builtins_reset_gensym_state();
   builtins_tiny_fx_gfx_reset_cached_state();
 }
 
@@ -159,6 +176,7 @@ ID native_mark_private_bang(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
+ID native_inc(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
 ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
@@ -287,6 +305,7 @@ ID native_eval(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_now(ID *args, unsigned int argc);
 ID native_get_macro(ID *args, unsigned int argc);
+ID native_macroexpand_1(ID *args, unsigned int argc);
 ID native_apply(ID *args, unsigned int argc);
 // (declarations in builtins_strings.h)
 ID native_source(ID *args, unsigned int argc);
@@ -1442,10 +1461,22 @@ ID native_destructure(ID *args, unsigned int argc) {
   return AUTORELEASE(result);
 }
 
-// gensym: Generate unique symbol names
-ID native_gensym(ID *args, unsigned int argc) {
-  static unsigned long counter = 0;
+// gensym: scoped counter so macro expansions reuse symbol names → O(1) interned symbols.
+static unsigned long g_gensym_fallback = 0;
+static unsigned long *g_gensym_active = &g_gensym_fallback;
 
+static void builtins_reset_gensym_state(void) {
+  g_gensym_fallback = 0;
+  g_gensym_active = &g_gensym_fallback;
+}
+
+unsigned long *gensym_use_local(unsigned long *counter) {
+  unsigned long *prev = g_gensym_active;
+  g_gensym_active = counter;
+  return prev;
+}
+
+ID native_gensym(ID *args, unsigned int argc) {
   const char *prefix = (argc >= 1 && args[0] && TAG(args[0]) == CLJ_STRING)
                            ? clj_string_data(as_clj_string(args[0]))
                            : "G__";
@@ -1453,7 +1484,7 @@ ID native_gensym(ID *args, unsigned int argc) {
   char name[256];
   size_t pos = 0;
   pos = format_append(name, pos, sizeof(name), prefix);
-  pos = format_append_ulong(name, pos, sizeof(name), ++counter);
+  pos = format_append_ulong(name, pos, sizeof(name), ++(*g_gensym_active));
   return intern_symbol_global(name);
 }
 
@@ -2910,7 +2941,7 @@ static CljRecordDescriptor *lookup_record_descriptor_with_schema(ID type_symbol)
 #if TINYCLJ_WITH_TINY_FX
   if (!desc) {
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    if (tiny_fx_gfx_ensure_schema(st)) {
+    if (tiny_fx_gfx_require_records_namespace(st) && tiny_fx_gfx_ensure_schema(st)) {
       desc = record_descriptor_lookup(type_symbol);
     }
   }
@@ -3063,6 +3094,8 @@ ID native_type(ID *args, unsigned int argc) {
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
   case CLJ_RECORD:
     return intern_symbol(SYM_CLOJURE_LANG, "Record");
+  case CLJ_NAMESPACE:
+    return intern_symbol(SYM_CLOJURE_LANG, "Namespace");
   case CLJ_LIST:
     return intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
   case CLJ_FUNC:
@@ -3214,16 +3247,77 @@ ID native_vec(ID *args, unsigned int argc) {
   return AUTORELEASE(vec);
 }
 
+/**
+ * @brief (with-pool f) — call f inside a nested autorelease pool.
+ *
+ * Autoreleased temporaries created by f are freed on return.
+ * The return value of f is transferred to the outer pool.
+ */
+ID native_with_pool(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 1, "with-pool"))
+    return NULL;
+  ID fn = args[0];
+  unsigned char tag = TAG(fn);
+  if (tag != CLJ_FUNC && tag != CLJ_CLOSURE) {
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
+                              "with-pool expects a function, got %s", clj_type_name(tag));
+    return NULL;
+  }
+  EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+  ID result = NULL;
+  uint32_t mark = autorelease_pool_depth();
+  result = eval_function_call(fn, NULL, 0, NULL, st);
+  if (!IS_IMMEDIATE(result))
+    RETAIN(result);
+  autorelease_pool_drain_to_depth(mark);
+  if (!IS_IMMEDIATE(result))
+    return AUTORELEASE(result);
+  return result;
+}
+
+static void builtin_prepare_task_eval_state(EvalState *shared_state,
+                                            EvalState *task_state) {
+  if (!task_state) {
+    return;
+  }
+  memset(task_state, 0, sizeof(*task_state));
+  if (!shared_state) {
+    return;
+  }
+
+  task_state->current_ns = shared_state->current_ns;
+  task_state->resolve_ns = shared_state->resolve_ns ? shared_state->resolve_ns
+                                                    : shared_state->current_ns;
+  task_state->dynamic_bindings = shared_state->dynamic_bindings;
+}
+
+static void builtin_merge_task_eval_state(EvalState *shared_state,
+                                          const EvalState *task_state) {
+  if (!shared_state || !task_state) {
+    return;
+  }
+
+  shared_state->current_ns = task_state->current_ns;
+  shared_state->resolve_ns = task_state->resolve_ns ? task_state->resolve_ns
+                                                    : task_state->current_ns;
+}
+
 // Event-loop: run-next-task builtin
 ID native_run_next_task(ID *args, unsigned int argc) {
   (void)args;
   if (argc != 0)
     return NULL;
-  EvalState *st = get_global_eval_state();
+  EvalState *shared_state = get_global_eval_state();
+  EvalState task_state;
+  EvalThreadStateSnapshot eval_snapshot;
+  EvalState *saved_override = NULL;
+  builtin_prepare_task_eval_state(shared_state, &task_state);
+  eval_capture_thread_state(&eval_snapshot);
+  saved_override = evalstate_set_global_override(&task_state);
   CljPersistentMap *env = NULL;
   bool ran = false;
   TRY {
-    ran = event_loop_run_next(env, st);
+    ran = event_loop_run_next(env, shared_state ? &task_state : NULL);
   }
   CATCH(ex) {
     // Exception occurred - return false (no task was executed)
@@ -3231,22 +3325,63 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     ran = false;
   }
   END_TRY
+  (void)evalstate_set_global_override(saved_override);
+  eval_restore_thread_state(&eval_snapshot);
+  builtin_merge_task_eval_state(shared_state, &task_state);
   return ran ? clj_true : clj_false;
 }
 
-static CljSymbol *g_timer_kw_id = NULL;
-static CljSymbol *g_timer_kw_period_ms = NULL;
+static ID g_timer_kw_id = NULL;
+static ID g_timer_kw_period_ms = NULL;
+static const IdSymbolCacheEntry g_timer_kw_cache[] = {
+    {&g_timer_kw_id, ":id"},
+    {&g_timer_kw_period_ms, ":period-ms"},
+};
+static ID g_stats_kw_build_time = NULL;
+static ID g_stats_kw_gpio_event_drops = NULL;
+static ID g_stats_kw_sound_cmd_drop_count = NULL;
+static ID g_stats_kw_sound_tick_overrun_count = NULL;
+static ID g_stats_kw_sound_queue_high_watermark = NULL;
+static ID g_stats_kw_sound_sfx_drop_count = NULL;
+static ID g_stats_kw_sound_finished_drop_count = NULL;
+static ID g_stats_kw_event_loop_ingress_accepted_count = NULL;
+static ID g_stats_kw_event_loop_ingress_rejected_count = NULL;
+static ID g_stats_kw_event_loop_ingress_drained_count = NULL;
+static ID g_stats_kw_event_loop_ingress_high_watermark = NULL;
+static ID g_stats_kw_event_loop_ingress_pending_count = NULL;
+static ID g_stats_kw_event_loop_ingress_closed = NULL;
+static ID g_stats_kw_heap_limit_bytes = NULL;
+static ID g_stats_kw_heap_bytes_free = NULL;
+static ID g_stats_kw_heap_bytes_total = NULL;
+static ID g_stats_kw_memory_stats = NULL;
+static const IdSymbolCacheEntry g_runtime_stats_kw_cache[] = {
+    {&g_stats_kw_build_time, ":build-time"},
+    {&g_stats_kw_gpio_event_drops, ":gpio-event-drops"},
+    {&g_stats_kw_sound_cmd_drop_count, ":sound-cmd-drop-count"},
+    {&g_stats_kw_sound_tick_overrun_count, ":sound-tick-overrun-count"},
+    {&g_stats_kw_sound_queue_high_watermark, ":sound-queue-high-watermark"},
+    {&g_stats_kw_sound_sfx_drop_count, ":sound-sfx-drop-count"},
+    {&g_stats_kw_sound_finished_drop_count, ":sound-finished-drop-count"},
+    {&g_stats_kw_event_loop_ingress_accepted_count, ":event-loop-ingress-accepted-count"},
+    {&g_stats_kw_event_loop_ingress_rejected_count, ":event-loop-ingress-rejected-count"},
+    {&g_stats_kw_event_loop_ingress_drained_count, ":event-loop-ingress-drained-count"},
+    {&g_stats_kw_event_loop_ingress_high_watermark, ":event-loop-ingress-high-watermark"},
+    {&g_stats_kw_event_loop_ingress_pending_count, ":event-loop-ingress-pending-count"},
+    {&g_stats_kw_event_loop_ingress_closed, ":event-loop-ingress-closed"},
+    {&g_stats_kw_heap_limit_bytes, ":heap-limit-bytes"},
+    {&g_stats_kw_heap_bytes_free, ":heap-bytes-free"},
+    {&g_stats_kw_heap_bytes_total, ":heap-bytes-total"},
+    {&g_stats_kw_memory_stats, ":memory-stats"},
+};
 
-static inline CljSymbol *timer_kw_id(void) {
-  if (!g_timer_kw_id)
-    g_timer_kw_id = intern_symbol_global(":id");
-  return g_timer_kw_id;
+static inline bool timer_keywords_ready(void) {
+  return id_symbol_cache_init_global(g_timer_kw_cache,
+                                     sizeof(g_timer_kw_cache) / sizeof(g_timer_kw_cache[0]));
 }
 
-static inline CljSymbol *timer_kw_period_ms(void) {
-  if (!g_timer_kw_period_ms)
-    g_timer_kw_period_ms = intern_symbol_global(":period-ms");
-  return g_timer_kw_period_ms;
+static inline bool runtime_stats_keywords_ready(void) {
+  return id_symbol_cache_init_global(g_runtime_stats_kw_cache,
+                                     sizeof(g_runtime_stats_kw_cache) / sizeof(g_runtime_stats_kw_cache[0]));
 }
 
 static bool parse_timer_fn_or_opts(ID arg,
@@ -3291,11 +3426,17 @@ static bool parse_timer_fn_or_opts(ID arg,
   if (out_fn_obj)
     *out_fn_obj = fn_obj;
 
-  ID key_obj = map_get_sentinel(opts, timer_kw_id(), NOT_FOUND);
+  if (!timer_keywords_ready()) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "%s failed to initialize timer option keywords", fn_name);
+    return false;
+  }
+
+  ID key_obj = map_get_sentinel(opts, g_timer_kw_id, NOT_FOUND);
   if (key_obj != NOT_FOUND && out_timer_key)
     *out_timer_key = key_obj;
 
-  ID period_obj = map_get_sentinel(opts, timer_kw_period_ms(), NOT_FOUND);
+  ID period_obj = map_get_sentinel(opts, g_timer_kw_period_ms, NOT_FOUND);
   if (period_obj != NOT_FOUND) {
     if (!period_obj || TAG(period_obj) != CLJ_INT) {
       throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -3460,7 +3601,7 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
   // Print all arguments separated by spaces
   for (unsigned int i = 0; i < argc; i++) {
     if (args[i]) {
-      CljString *str = readable ? pr_str(args[i]) : print_str(args[i]);
+      CljString *str = readable ? make_string_description(args[i]) : print_str(args[i]);
       if (str) {
         platform_put_string(NULL, string_data(str));
       }
@@ -3709,8 +3850,7 @@ ID native_bound_p(ID *args, unsigned int argc) {
 
 // all-ns: Returns a list of all namespace objects
 // Usage: (all-ns)
-ID native_all_ns(ID *args, unsigned int argc) {
-  (void)args;
+ID native_all_ns(__attribute__((unused)) ID *args, unsigned int argc) {
   if (argc != 0) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "all-ns expects no arguments, got %u", argc);
@@ -3723,12 +3863,12 @@ ID native_all_ns(ID *args, unsigned int argc) {
 
   ID result = NULL;
   MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
-    (void)key;
-    if (!val) {
+    /* Registry stores clojure.core twice (name key + NULL key for ns_find_by_symbol); list once. */
+    if (!key || !val) {
       continue;
     }
-    CljList *old_result = (CljList *)result;
-    result = make_list(val, (CljList *)result);
+    CljList *old_result = as_list(result);
+    result = make_list(val, as_list(result));
     RELEASE(old_result);
   }
 
@@ -3783,22 +3923,7 @@ ID native_ns_unload(ID *args, unsigned int argc) {
 
   // Explicitly release namespace-owned maps so objects stored in mappings are released
   // immediately (tests assert that function objects are released after ns-unload).
-  if (ns->mappings) {
-    RELEASE(ns->mappings);
-    ns->mappings = make_map(0);
-  }
-  if (ns->private_mappings) {
-    RELEASE(ns->private_mappings);
-    ns->private_mappings = NULL;
-  }
-  if (ns->aliases) {
-    RELEASE(ns->aliases);
-    ns->aliases = make_map(0);
-  }
-  if (ns->macro_mappings) {
-    RELEASE(ns->macro_mappings);
-    ns->macro_mappings = NULL;
-  }
+  ns_release_owned_state(ns, true);
 
   // Remove from registry; releasing the old registry map releases the namespace object.
   map_dissoc(g_runtime.ns_registry, name_sym);
@@ -4173,6 +4298,23 @@ static StaticSymbolData sym_tinyclj_runtime_renderer_timeline_progress_qualified
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.runtime/renderer-timeline-progress"}};
+static StaticSymbolData sym_tinyfx_gfx_color_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.gfx/color"}};
+
+static StaticSymbolData sym_fx_sweep_aabb_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "fx/sweep-aabb"}};
+
+static StaticSymbolData sym_fx_interpolate_segment_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "fx/interpolate-segment"}};
 
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4370,8 +4512,10 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_instant_days, "instant-days"),
     NATIVE_ENTRY_BOOT_CNAME(native_instant_ms, "instant-ms"),
     NATIVE_ENTRY_BOOT_CNAME(native_get_macro, "get-macro"),
+    NATIVE_ENTRY_BOOT_CNAME(native_macroexpand_1, "macroexpand-1"),
     NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
+    NATIVE_ENTRY_BOOT_CNAME(native_run_next_task, "run-next-task-native"),
 
     // tiny-clj.datetime functions
     NATIVE_ENTRY(&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days),
@@ -4401,6 +4545,11 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_renderer_timeline_progress_qualified_data.sym,
                       native_tinyclj_runtime_renderer_timeline_progress,
                       "tiny-clj.runtime/renderer-timeline-progress"),
+    NATIVE_ENTRY(&sym_tinyfx_gfx_color_qualified_data.sym, native_tinyfx_color_color),
+    NATIVE_ENTRY_BOOT(&sym_fx_sweep_aabb_qualified_data.sym, native_fx_sweep_aabb, "fx/sweep-aabb"),
+    NATIVE_ENTRY_BOOT(&sym_fx_interpolate_segment_qualified_data.sym,
+                      native_fx_interpolate_segment,
+                      "fx/interpolate-segment"),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
@@ -4438,6 +4587,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_meta_data.sym, native_meta, "meta"),
     NATIVE_ENTRY_BOOT(&sym_with_meta_data.sym, native_with_meta, "with-meta"),
     NATIVE_ENTRY(&sym_reduce_data.sym, native_reduce),
+    NATIVE_ENTRY_BOOT_CNAME(native_inc, "inc"),
     NATIVE_ENTRY_BOOT(&sym_list_data.sym, native_list, "list"),
     NATIVE_ENTRY(&sym_destructure_data.sym, native_destructure),
     NATIVE_ENTRY(&sym_map_data.sym, native_map),
@@ -4495,7 +4645,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_some_data.sym, native_some),
     NATIVE_ENTRY_BOOT(&sym_cons_data.sym, native_cons, "cons"),
     NATIVE_ENTRY(&sym_count_data.sym, native_count),
-    NATIVE_ENTRY(&sym_nilp_data.sym, native_nilp),
+    NATIVE_ENTRY_BOOT(&sym_nilp_data.sym, native_nilp, "nil?"),
     NATIVE_ENTRY(&sym_reverse_data.sym, native_reverse),
     NATIVE_ENTRY(&sym_assoc_data.sym, native_assoc),
     NATIVE_ENTRY(&sym_dissoc_data.sym, native_dissoc),
@@ -4554,6 +4704,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_alength_data.sym, native_alength),
     NATIVE_ENTRY(&sym_aclone_data.sym, native_aclone),
     NATIVE_ENTRY(&sym_run_next_task_data.sym, native_run_next_task),
+    NATIVE_ENTRY(&sym_with_pool_data.sym, native_with_pool),
     NATIVE_ENTRY(&sym_schedule_data.sym, native_schedule),
     NATIVE_ENTRY(&sym_schedule_periodic_data.sym, native_schedule_periodic),
     NATIVE_ENTRY(&sym_cancel_timer_data.sym, native_cancel_timer),
@@ -4562,10 +4713,9 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_reset_bang_data.sym, native_reset_bang),
     NATIVE_ENTRY(&sym_swap_bang_data.sym, native_swap_bang),
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
+    NATIVE_ENTRY(&sym_slurp_bytes_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
-    NATIVE_ENTRY(&sym_sound_load_track_data.sym, native_sound_load_track),
-    NATIVE_ENTRY(&sym_sound_unload_track_data.sym, native_sound_unload_track),
     NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
     NATIVE_ENTRY(&sym_sound_stop_track_data.sym, native_sound_stop_track),
     NATIVE_ENTRY(&sym_sound_stop_music_data.sym, native_sound_stop_music),
@@ -4751,6 +4901,19 @@ ID native_get_macro(ID *args, unsigned int argc) {
     return NULL;
   CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
   return (ID)macro;
+}
+
+// One macro step using the same path as AST canonicalization (not Clojure apply).
+ID native_macroexpand_1(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "macroexpand-1");
+  EvalState *st = g_current_eval_state;
+  if (!st) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "macroexpand-1 requires active evaluation context");
+    return NULL;
+  }
+  ID out = ast_canon_macroexpand_1(st, args[0]);
+  return out ? AUTORELEASE(out) : NULL;
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)
@@ -4963,6 +5126,28 @@ static char *namespace_to_relpath(const char *ns_name) {
   return buf;
 }
 
+static int require_trace_enabled(void) {
+  static int debug_require_trace = -1;
+  if (debug_require_trace == -1) {
+    const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_TRACE");
+    debug_require_trace = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
+  }
+  return debug_require_trace;
+}
+
+static void require_trace_log(const char *fmt, ...) {
+  if (!require_trace_enabled()) {
+    return;
+  }
+  va_list ap;
+  va_start(ap, fmt);
+  fprintf(stderr, "[require-trace] ");
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
+  fflush(stderr);
+  va_end(ap);
+}
+
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st) {
   if (!src || !st)
     return false;
@@ -4993,7 +5178,12 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
   }
   const bool trace_require_heap =
       (debug_require_heap != 0) &&
-      src_name && strstr(src_name, "sound-demos.clj") != NULL;
+      src_name &&
+      (strstr(src_name, "sound-demos.clj") != NULL ||
+       strstr(src_name, "tiny-clj/deployment.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/runtime.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/scene.clj") != NULL ||
+       strstr(src_name, "tiny-breakout/core.clj") != NULL);
   Reader reader;
   reader_init_with_length(&reader, src_data, src_len);
   if (src_name && src_name[0]) {
@@ -5090,31 +5280,14 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
  * @param symbols Vector of symbols to copy
  */
 static inline CljSymbol *refer_mapping_key_for_target_ns(CljNamespace *target_ns, CljSymbol *symbol) {
-  if (!target_ns || !symbol || !symbol->cname) {
+  (void)target_ns;
+  if (!symbol || !symbol->cname) {
     return NULL;
   }
 
-  // clojure.core stores symbols unqualified to match JVM behavior.
-  if (target_ns->name == SYM_CLOJURE_CORE) {
-    return intern_symbol_global(symbol->cname);
-  }
-
-  // Already qualified to this namespace.
-  if (symbol->ns_name && target_ns->name && symbol->ns_name == target_ns->name) {
-    return symbol;
-  }
-
-  // Keep explicitly qualified symbol as-is.
-  if (symbol->ns_name && symbol->ns_name->cname) {
-    return symbol;
-  }
-
-  // Qualify unqualified symbol for target namespace.
-  if (target_ns->name && target_ns->name->cname) {
-    return intern_symbol(target_ns->name, symbol->cname);
-  }
-
-  return symbol;
+  // Keep refer-bindings unqualified in the target namespace.
+  // This avoids creating one target-qualified symbol per referred var.
+  return intern_symbol_global(symbol->cname);
 }
 
 static inline bool refer_assoc_into_namespace(CljNamespace *target_ns, CljSymbol *symbol, ID value) {
@@ -5278,7 +5451,14 @@ static bool parse_require_option_keyword(ID elem, RequireOptions *options) {
 }
 
 void ns_register_init(const char *ns_name, NsInitFn init_fn) {
-  if (!ns_name || !init_fn || g_ns_init_count >= NS_INIT_TABLE_MAX) return;
+  if (!ns_name || !init_fn) return;
+  for (unsigned int i = 0; i < g_ns_init_count; i++) {
+    if (strcmp(g_ns_init_table[i].ns_name, ns_name) == 0 &&
+        g_ns_init_table[i].fn == init_fn) {
+      return;
+    }
+  }
+  if (g_ns_init_count >= NS_INIT_TABLE_MAX) return;
   g_ns_init_table[g_ns_init_count++] = (typeof(g_ns_init_table[0])){ns_name, init_fn};
 }
 
@@ -5293,6 +5473,9 @@ static NsInitFn ns_lookup_init(const char *ns_name) {
 static inline bool bootstrap_register_cname_allowed(const char *cname) {
   if (!cname || !cname[0]) {
     return false;
+  }
+  if (strncmp(cname, "fx/", 3) == 0) {
+    return true;
   }
   // Keep bootstrap minimal: only unqualified core names are eagerly registered.
   if (cname[0] == '/' && cname[1] == '\0') {
@@ -5325,6 +5508,11 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     RELEASE(held_bytes);
     return true;
   }
+  if (target_ns->loading) {
+    RELEASE(held_bytes);
+    return true;
+  }
+  target_ns->loading = true;
   st->current_ns = target_ns;
   st->resolve_ns = target_ns;
   // Namespace source loading performs many def/defn operations; coalesce invalidate
@@ -5346,6 +5534,7 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     RETAIN(pending_ex);
   }
   END_TRY
+  target_ns->loading = false;
   ns_end_resolve_cache_batch();
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
@@ -5459,6 +5648,13 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   if (!ns_name)
     return false;
 
+  require_trace_log("spec_tag=%u ns=%s current_ns=%s",
+                    (unsigned int)TAG(spec),
+                    ns_name ? ns_name : "<nil>",
+                    (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
+                        ? st->current_ns->name->cname
+                        : "<nil>");
+
   bool force_reload = options.reload || options.reload_all;
   if (strcmp(ns_name, "clojure.core") == 0) {
     force_reload = false;
@@ -5469,10 +5665,16 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
   CljNamespace *existing = ns_find(ns_name);
   if (existing) {
+    require_trace_log("existing ns=%s loaded=%d loading=%d force_reload=%d",
+                      ns_name,
+                      existing->loaded ? 1 : 0,
+                      existing->loading ? 1 : 0,
+                      force_reload ? 1 : 0);
     // Generic idempotence: if namespace source has been loaded once, don't re-evaluate.
     if (existing->loaded) {
       if (force_reload) {
         existing->loaded = false;
+        existing->loading = false;
       } else {
       NsInitFn init_fn = ns_lookup_init(ns_name);
       if (init_fn && !init_fn(st)) {
@@ -5502,6 +5704,15 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
       // ns_name is from autoreleased CljString - no free needed
       return true;
       }
+    }
+    if (existing->loading) {
+      if (st && st->current_ns && alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
+        ID ns_name_sym = intern_symbol_global(ns_name);
+        if (ns_name_sym) {
+          ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+        }
+      }
+      return true;
     }
     // Fall through to load Clojure code even though namespace exists
   }
@@ -5557,6 +5768,7 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
     return false;
   }
   bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
+  require_trace_log("load ns=%s ok=%d source=%s", ns_name, ok ? 1 : 0, source_path ? source_path : "<nil>");
   CLJ_FREE(rel);
   if (!ok) {
     return false;
@@ -5843,6 +6055,12 @@ ID native_add_variadic(ID *args, unsigned int argc) {
   }
 
   return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
+}
+
+ID native_inc(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "inc");
+  ID add_args[2] = {args[0], fixnum(1)};
+  return native_add_variadic(add_args, 2);
 }
 
 ID native_mul_variadic(ID *args, unsigned int argc) {
@@ -6518,6 +6736,7 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_get_thread_bindings ||
          fn == native_meta ||
          fn == native_get_macro ||
+         fn == native_macroexpand_1 ||
          fn == native_apply ||
          fn == native_load_file ||
          fn == native_require ||
@@ -7414,12 +7633,13 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   ID v_os = make_string(os_name);
   ID v_ver = make_string("0.5");
+  (void)runtime_stats_keywords_ready();
 
   CljPersistentMap *m;
 #if defined(BUILD_EPOCH_SECONDS)
   int32_t days = (int32_t)(BUILD_EPOCH_SECONDS / 86400);
   uint32_t millis = (uint32_t)((BUILD_EPOCH_SECONDS % 86400) * 1000);
-  ID k_build_time = intern_symbol_global(":build-time");
+  ID k_build_time = g_stats_kw_build_time;
   ID v_build_time = make_instant(days, millis);
   m = make_map_from_kv(3, SYM_KW_OS, v_os, SYM_KW_VERSION, v_ver, k_build_time, v_build_time);
   RELEASE(v_os);
@@ -7446,7 +7666,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-    CljSymbol *k_gpio_event_drops = intern_symbol_global(":gpio-event-drops");
+    ID k_gpio_event_drops = g_stats_kw_gpio_event_drops;
     int32_t drops = 0;
     uint32_t raw_drops = gpio_get_event_drop_count();
     drops = (raw_drops > (uint32_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_drops;
@@ -7457,11 +7677,11 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   {
 #if TINYCLJ_WITH_TINY_FX
-    CljSymbol *k_sound_cmd_drop_count = intern_symbol_global(":sound-cmd-drop-count");
-    CljSymbol *k_sound_tick_overrun_count = intern_symbol_global(":sound-tick-overrun-count");
-    CljSymbol *k_sound_queue_high_watermark = intern_symbol_global(":sound-queue-high-watermark");
-    CljSymbol *k_sound_sfx_drop_count = intern_symbol_global(":sound-sfx-drop-count");
-    CljSymbol *k_sound_finished_drop_count = intern_symbol_global(":sound-finished-drop-count");
+    ID k_sound_cmd_drop_count = g_stats_kw_sound_cmd_drop_count;
+    ID k_sound_tick_overrun_count = g_stats_kw_sound_tick_overrun_count;
+    ID k_sound_queue_high_watermark = g_stats_kw_sound_queue_high_watermark;
+    ID k_sound_sfx_drop_count = g_stats_kw_sound_sfx_drop_count;
+    ID k_sound_finished_drop_count = g_stats_kw_sound_finished_drop_count;
 
     int32_t cmd_drops = (g_sound_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
@@ -7498,12 +7718,12 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-    CljSymbol *k_event_loop_ingress_accepted_count = intern_symbol_global(":event-loop-ingress-accepted-count");
-    CljSymbol *k_event_loop_ingress_rejected_count = intern_symbol_global(":event-loop-ingress-rejected-count");
-    CljSymbol *k_event_loop_ingress_drained_count = intern_symbol_global(":event-loop-ingress-drained-count");
-    CljSymbol *k_event_loop_ingress_high_watermark = intern_symbol_global(":event-loop-ingress-high-watermark");
-    CljSymbol *k_event_loop_ingress_pending_count = intern_symbol_global(":event-loop-ingress-pending-count");
-    CljSymbol *k_event_loop_ingress_closed = intern_symbol_global(":event-loop-ingress-closed");
+    ID k_event_loop_ingress_accepted_count = g_stats_kw_event_loop_ingress_accepted_count;
+    ID k_event_loop_ingress_rejected_count = g_stats_kw_event_loop_ingress_rejected_count;
+    ID k_event_loop_ingress_drained_count = g_stats_kw_event_loop_ingress_drained_count;
+    ID k_event_loop_ingress_high_watermark = g_stats_kw_event_loop_ingress_high_watermark;
+    ID k_event_loop_ingress_pending_count = g_stats_kw_event_loop_ingress_pending_count;
+    ID k_event_loop_ingress_closed = g_stats_kw_event_loop_ingress_closed;
 
     EventLoopIngressStats ingress_stats = {0};
     if (event_loop_ingress_stats(&ingress_stats)) {
@@ -7540,6 +7760,19 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       }
       if (k_event_loop_ingress_closed) {
         MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_closed, ingress_stats.closed ? clj_true : clj_false));
+      }
+    }
+  }
+
+  {
+    size_t heap_limit = memory_get_heap_limit_bytes();
+    if (heap_limit < SIZE_MAX) {
+      ID k_heap_limit_bytes = g_stats_kw_heap_limit_bytes;
+      if (k_heap_limit_bytes) {
+        int32_t heap_limit_fixnum = (heap_limit > (size_t)FIXNUM_MAX)
+                                        ? (int32_t)FIXNUM_MAX
+                                        : (int32_t)heap_limit;
+        MAP_REASSIGN(m, map_assoc(m, k_heap_limit_bytes, fixnum(heap_limit_fixnum)));
       }
     }
   }
@@ -7610,7 +7843,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       size_t heap_free = platform_heap_bytes_free();
       if (heap_free != (size_t)-1) {
         int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
-        CljSymbol *kw = intern_symbol_global(":heap-bytes-free");
+        ID kw = g_stats_kw_heap_bytes_free;
         if (kw)
           MAP_REASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
       }
@@ -7637,13 +7870,13 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       CljPersistentMap *ms = make_map(2);
       if (ms) {
         int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
-        CljSymbol *kw_free = intern_symbol_global(":heap-bytes-free");
+        ID kw_free = g_stats_kw_heap_bytes_free;
         if (kw_free)
           MAP_REASSIGN(ms, map_assoc(ms, kw_free, fixnum(hf)));
         size_t heap_total = platform_heap_bytes_total();
         if (heap_total != (size_t)-1) {
           int32_t ht = (heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total;
-          CljSymbol *kw_total = intern_symbol_global(":heap-bytes-total");
+          ID kw_total = g_stats_kw_heap_bytes_total;
           if (kw_total)
             MAP_REASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
         }
@@ -7652,7 +7885,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
           int32_t er = (ext_ram > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ext_ram;
           MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_EXTERNAL_RAM_TOTAL, fixnum(er)));
         }
-        CljSymbol *kw_ms = intern_symbol_global(":memory-stats");
+        ID kw_ms = g_stats_kw_memory_stats;
         if (kw_ms)
           MAP_REASSIGN(m, map_assoc(m, kw_ms, ms));
         RELEASE(ms);
@@ -8007,6 +8240,9 @@ static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len)
   if (!cname) {
     return false;
   }
+  if (ns_len == 2 && cname[0] == 'f' && cname[1] == 'x') {
+    return true;
+  }
   if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
     return true;
   }
@@ -8065,6 +8301,15 @@ static void register_builtin(const char *cname, BuiltinFn func) {
   } else {
     symbol = intern_symbol_global(symbol_name);
   }
+  if (symbol && target_ns->mappings) {
+    // Keep existing namespace bindings untouched.
+    // This makes repeated register_builtins() idempotent and avoids clobbering
+    // Clojure-level defs (and their metadata) with raw native registrations.
+    ID existing = map_get_sentinel((CljValue)target_ns->mappings, symbol, NULL);
+    if (existing) {
+      return;
+    }
+  }
   ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), native_cfunc_flags(func));
   if (symbol && func_obj) {
     ns_define(target_ns, symbol, func_obj);
@@ -8075,7 +8320,7 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     init_special_symbols();
 
     // Create metadata map with :name and :ns
-    CljPersistentMap *meta_map = make_map(2);
+    CljPersistentMap *meta_map = make_map(3);
     if (meta_map) {
       // Add :name (function name as symbol for Clojure compatibility)
       if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
@@ -8089,6 +8334,10 @@ static void register_builtin(const char *cname, BuiltinFn func) {
       if (SYM_KW_NS && target_ns && target_ns->name) {
         ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, target_ns->name));
       }
+      // Native functions have no parser location; expose a stable synthetic line.
+      if (SYM_KW_LINE) {
+        ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_LINE, fixnum(1)));
+      }
 
       // Set metadata on function object
       meta_set(func_obj, meta_map);
@@ -8099,6 +8348,10 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Builtin registered successfully
   } else {
     // Failed to register builtin
+  }
+
+  if (func_obj && !IS_IMMEDIATE(func_obj)) {
+    RELEASE(func_obj);
   }
 }
 

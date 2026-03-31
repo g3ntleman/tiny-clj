@@ -93,6 +93,29 @@ TEST(test_button_watch_emits_hold_event) {
     TEST_ASSERT_NOT_NULL(strstr(data, ":button/hold"));
 }
 
+TEST(test_button_watch_does_not_use_periodic_gpio_input_timer) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID canceled = NULL;
+    TRY {
+        canceled = eval_string(
+            "(do "
+            BUTTON_REQ
+            "  (tiny-clj.button/watch :demo/launch (fn [_] nil)) "
+            "  (let [v (cancel-timer :gpio-input-runtime)] "
+            "    (tiny-clj.button/watch :demo/launch nil) "
+            "    v))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("button/watch should not require the periodic :gpio-input-runtime timer");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL(canceled);
+    TEST_ASSERT_TRUE(is_special(canceled));
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(canceled));
+}
+
 TEST(test_sensor_watch_emits_change_events) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -161,6 +184,30 @@ TEST(test_sensor_watch_emits_threshold_active_and_inactive_events) {
     TEST_ASSERT_NOT_NULL(strstr(data, ":sensor/threshold-crossed"));
     TEST_ASSERT_NOT_NULL(strstr(data, ":sensor/active"));
     TEST_ASSERT_NOT_NULL(strstr(data, ":sensor/inactive"));
+}
+
+TEST(test_sensor_watch_uses_periodic_gpio_input_timer) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID canceled = NULL;
+    TRY {
+        canceled = eval_string(
+            "(do "
+            SENSOR_REQ
+            "  (tiny-clj.gpio/simulate-analog! 35 1000) "
+            "  (tiny-clj.sensor/watch :battery (fn [_] nil) {:sample-period-ms 5}) "
+            "  (let [v (cancel-timer :gpio-input-runtime)] "
+            "    (tiny-clj.sensor/watch :battery nil) "
+            "    v))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("sensor/watch should keep using periodic :gpio-input-runtime timer");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL(canceled);
+    TEST_ASSERT_TRUE(is_special(canceled));
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(canceled));
 }
 
 TEST(test_event_on_button_descriptor_subscription_receives_button_events) {

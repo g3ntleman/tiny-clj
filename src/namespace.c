@@ -204,16 +204,16 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     ns->mappings = make_map(mappings_cap);
     ns->private_mappings = NULL;
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
-    ns->aliases = make_map(4);
+    ns->aliases = NULL;  // Lazy initialization in ns_set_alias()
 
     ns->loaded = false;
+    ns->loading = false;
 
 
     ns->filename = file ? clj_strdup(file) : NULL;
     if (file && !ns->filename) {
         // strdup failed - OOM
         RELEASE(ns->mappings);
-        RELEASE(ns->aliases);
         free(ns);
         return NULL;
     }
@@ -247,6 +247,9 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     if (ns->name == SYM_CLOJURE_CORE) {
         map_conj(g_runtime.ns_registry, NULL, ns);
     }
+
+    // ns_registry owns the created namespace entries; return a borrowed pointer.
+    RELEASE(ns);
 
     return ns;
 }
@@ -504,6 +507,12 @@ void ns_cleanup() {
     if (g_runtime.ns_registry) {
         CljTransientMap *registry_to_free = g_runtime.ns_registry;
         g_runtime.ns_registry = NULL;
+        MAP_FOR_EACH(registry_to_free, key, val) {
+            (void)key;
+            if (val && !IS_IMMEDIATE(val) && TAG(val) == CLJ_NAMESPACE) {
+                ns_release_owned_state((CljNamespace *)val, false);
+            }
+        }
         RELEASE(registry_to_free);
     }
 }
@@ -511,9 +520,13 @@ void ns_cleanup() {
 // Thread-local global EvalState (zero-initialized)
 _Thread_local EvalState g_eval_state = {0};
 _Thread_local bool g_eval_state_initialized = false;
+_Thread_local EvalState *g_eval_state_override = NULL;
 
 // Get the global EvalState (lazy init)
 EvalState* get_global_eval_state(void) {
+    if (g_eval_state_override) {
+        return g_eval_state_override;
+    }
     if (!g_eval_state_initialized) {
         g_eval_state.current_ns = ns_get_or_create("user", NULL);
         if (!g_eval_state.current_ns) {
@@ -532,6 +545,12 @@ EvalState* get_global_eval_state(void) {
         g_eval_state_initialized = true;
     }
     return &g_eval_state;
+}
+
+EvalState* evalstate_set_global_override(EvalState *override_state) {
+    EvalState *previous = g_eval_state_override;
+    g_eval_state_override = override_state;
+    return previous;
 }
 
 // Reset for test isolation
@@ -580,6 +599,34 @@ void evalstate_ensure_builtins_ready(void) {
     meta_registry_init();
     register_builtins();
     g_runtime.builtins_registered = true;
+}
+
+static inline void ns_release_map_slot(CljPersistentMap **slot, bool replace_with_empty_map) {
+    if (!slot || !*slot) {
+        return;
+    }
+
+    CljPersistentMap *owned = *slot;
+    *slot = NULL;
+    RELEASE(owned);
+
+    if (replace_with_empty_map) {
+        *slot = make_map(0);
+    }
+}
+
+void ns_release_owned_state(CljNamespace *ns, bool keep_empty_shell) {
+    if (!ns) {
+        return;
+    }
+
+    ns->loaded = false;
+    ns->loading = false;
+
+    ns_release_map_slot(&ns->mappings, keep_empty_shell);
+    ns_release_map_slot(&ns->private_mappings, false);
+    ns_release_map_slot(&ns->macro_mappings, false);
+    ns_release_map_slot(&ns->aliases, keep_empty_shell);
 }
 
 EvalState* evalstate_new(bool load_core) {
@@ -733,7 +780,9 @@ void ns_end_resolve_cache_batch(void) {
     g_resolve_cache_batch_depth--;
     if (g_resolve_cache_batch_depth == 0 && g_resolve_cache_batch_dirty) {
         g_resolve_cache_batch_dirty = false;
+#if !MEMORY_PROFILING_ENABLED
         g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
+#endif
     }
 }
 
@@ -745,8 +794,10 @@ void ns_invalidate_resolve_cache(void) {
         g_resolve_cache_batch_dirty = true;
         return;
     }
+#if !MEMORY_PROFILING_ENABLED
     // Invalidate callsite caches by bumping the global epoch counter.
     g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
+#endif
 }
 
 /**
@@ -967,7 +1018,7 @@ void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name) {
 
     // Create or update aliases map
     if (!ns->aliases) {
-        ns->aliases = make_map(16);
+        ns->aliases = make_map(4);
     }
 
     // Store alias-namespace binding (overwrites existing). Key = unqualified symbol for lookup.

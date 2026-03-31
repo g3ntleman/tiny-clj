@@ -3,7 +3,7 @@
  * @brief String conversion functions for Clojure values
  * 
  * This file provides functions for converting Clojure values to their
- * string representations, including pr_str (readable) and print_str
+ * string representations, including make_string_description (readable) and print_str
  * (human-readable) variants.
  */
 
@@ -359,7 +359,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 len += strlen(name) + 1; // "name>"
                 return len;
             }
-            return 20; // "#<Clojure function>"
+            return 29; // "#<Clojure function anonymous>"
         }
 
         case CLJ_SEQ: {
@@ -794,8 +794,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 append_cstr(buffer, offset, name);
                 append_char(buffer, offset, '>');
             } else {
-                memcpy(buffer + *offset, "#<Clojure function>", 19);
-                *offset += 19;
+                memcpy(buffer + *offset, "#<Clojure function anonymous>", 29);
+                *offset += 29;
             }
             return;
         }
@@ -1001,7 +1001,7 @@ CljString* to_string_with_escape(ID v, bool escape_strings) {
     return result;
 }
 
-CljString* pr_str(ID v) {
+CljString* make_string_description(ID v) {
     return to_string_with_escape(v, true);
 }
 

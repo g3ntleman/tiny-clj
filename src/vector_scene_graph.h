@@ -250,6 +250,18 @@ bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pix
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);
 void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color);
 uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
+bool vg_text_local_bounds(const VgTextData *txt, VgRectData *out_bounds);
+
+/*
+ * Plans dirty rect render passes under a pixel budget.
+ * Overlapping leaves form connected clusters; oversized unions fall back to
+ * child rects and, for oversized leaves, geometric splits.
+ */
+size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
+                                 size_t leaf_count,
+                                 uint32_t pixel_budget,
+                                 VgClipRect *out_rects,
+                                 size_t out_capacity);
 
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb);
 void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect);

@@ -39,6 +39,18 @@
 #include <stdarg.h>
 #include <limits.h>
 
+static ID g_parser_sym_fn = NULL;
+static ID g_parser_sym_percent = NULL;
+static const IdSymbolCacheEntry g_parser_symbol_cache[] = {
+    {&g_parser_sym_fn, "fn"},
+    {&g_parser_sym_percent, "%"},
+};
+
+static inline bool parser_symbols_ready(void) {
+  return id_symbol_cache_init_global(g_parser_symbol_cache,
+                                     sizeof(g_parser_symbol_cache) / sizeof(g_parser_symbol_cache[0]));
+}
+
 static size_t format_append_hex_byte(char *dest, size_t offset, size_t capacity, unsigned char value) {
   static const char digits[] = "0123456789abcdef";
   offset = format_append_char(dest, offset, capacity, digits[(value >> 4) & 0x0F]);
@@ -392,6 +404,7 @@ static bool skip_form_no_alloc(Reader *reader) {
   }
 }
 
+#if !(defined(META_ENABLED) && META_ENABLED)
 static ID parse_after_skipping_meta_payload(Reader *reader, EvalState *st) {
   if (!skip_form_no_alloc(reader)) {
     return NULL;
@@ -399,6 +412,7 @@ static ID parse_after_skipping_meta_payload(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   return parse_expr(reader, st);
 }
+#endif
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -471,11 +485,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       reader_consume(reader); // 'n'
       reader_consume(reader); // 'i'
       reader_consume(reader); // 'l'
-      CljSymbol *nil_sym = intern_symbol_global("nil");
-      if (nil_sym == SYM_NIL) {
-        return SYM_NIL;
-      }
-      return AUTORELEASE(nil_sym);
+      return SYM_NIL;
     }
     break;
 
@@ -703,11 +713,7 @@ static ID parse_expr_with_stack(Reader *reader, EvalState *st, CljTransientVecto
       reader_consume(reader);
       reader_consume(reader);
       reader_consume(reader);
-      CljSymbol *nil_sym = intern_symbol_global("nil");
-      if (nil_sym == SYM_NIL) {
-        return SYM_NIL;
-      }
-      return AUTORELEASE(nil_sym);
+      return SYM_NIL;
     }
     break;
 
@@ -1083,8 +1089,8 @@ static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector
   unsigned int end_index = vector_count(backing);
   unsigned int pair_count = (end_index - base_index) / 2;
 
-  // Erstelle die Map mit exakter Kapazität - use 0 for empty singleton
-  CljPersistentMap *map = make_map(pair_count > 0 ? pair_count * 2 : 0, STRONG);
+  // Keep parsed map literals tight: no extra headroom in retained map objects.
+  CljPersistentMap *map = make_map(pair_count > 0 ? (int)pair_count : 0, STRONG);
 
   // Kopiere die Key-Value-Paare
   for (unsigned int i = 0; i < pair_count; i++) {
@@ -2297,7 +2303,11 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   if (!body) {
     // Empty function body - return (fn [] ())
-    CljSymbol *fn_sym = intern_symbol_global("fn");
+    if (!parser_symbols_ready()) {
+      RELEASE(body);
+      return NULL;
+    }
+    CljSymbol *fn_sym = g_parser_sym_fn;
     CljValue empty_vec = AUTORELEASE(make_vector(0, false));
     ID empty_list_val = (ID)empty_list();
     return AUTORELEASE(make_ast_list(fn_sym,
@@ -2315,8 +2325,12 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   // Simple approach: create (fn [%] body) for #(...)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
-  CljSymbol *fn_sym = intern_symbol_global("fn");
-  CljSymbol *percent_sym = intern_symbol_global("%");
+  if (!parser_symbols_ready()) {
+    RELEASE(body);
+    return NULL;
+  }
+  CljSymbol *fn_sym = g_parser_sym_fn;
+  CljSymbol *percent_sym = g_parser_sym_percent;
   CljPersistentVector *param_vec = AUTORELEASE(make_vector(1, false));
   vector_conj_inplace(&param_vec, percent_sym);
 

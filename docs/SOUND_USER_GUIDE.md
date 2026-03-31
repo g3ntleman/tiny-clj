@@ -75,9 +75,10 @@ The important idea is that `:melody` carries the lead line, while `:backing` sup
 
 ## Writing Your Own Track
 
-Start with a small step vector and play it immediately from the REPL:
+Start with a small step vector, compile it, and then hand the bytes to the runtime:
 
 ```clojure
+(require 'tiny-fx.trk1)
 (require 'tiny-fx.sound)
 
 (def my-steps
@@ -92,7 +93,11 @@ Start with a small step vector and play it immediately from the REPL:
    :tempo-bpm 120
    :gate-percent 78})
 
-(tiny-fx.sound/play-steps! :my-track my-steps my-opts)
+(let [prepared (tiny-fx.trk1/prepare-track my-steps my-opts)]
+  {:status (if (tiny-fx.sound/sound-play-music! :my-track (:track-bytes prepared) 1)
+             :playing
+             :stopped)
+   :duration-ms (:duration-ms prepared)})
 ```
 
 Recommended workflow:

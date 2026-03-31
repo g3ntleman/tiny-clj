@@ -101,9 +101,11 @@ bool is_pointer_in_data_segment(const void *ptr);
  */
 bool is_pointer_on_stack(const void *ptr);
 
-/** @brief Throw out-of-memory exception (never returns)
+/** @brief Throw out-of-memory exception on the main thread, or log and return on a background thread.
+ *  After a background-thread return, raw allocators (CLJ_MALLOC, etc.) call abort() — the heap cannot be
+ *  left in a partially allocated state across arbitrary call sites.
  */
-void throw_oom(void) __attribute__((noreturn));
+void throw_oom(void);
 
 // -----------------------------------------------------------------------------
 // Raw heap allocation helpers (trackable by memory profiler)
@@ -120,17 +122,20 @@ void throw_oom(void) __attribute__((noreturn));
 static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
     (void)file; (void)line;
     if (n != 0 && memory_heap_limit_would_exceed(0, n)) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     void *p = malloc(n);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     if (p && n != 0) {
         size_t actual = memory_actual_allocation_size(p, n);
         if (memory_heap_limit_would_exceed(0, actual)) {
             free(p);
-            throw_oom(); // never returns
+            throw_oom();
+            abort();
         }
     }
     memory_profiler_track_raw_alloc(p, n, file, line);
@@ -141,21 +146,25 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
     (void)file; (void)line;
     // Best-effort overflow guard.
     if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     size_t n = nmemb * size;
     if (n != 0 && memory_heap_limit_would_exceed(0, n)) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     void *p = calloc(nmemb, size);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     if (p && n != 0) {
         size_t actual = memory_actual_allocation_size(p, n);
         if (memory_heap_limit_would_exceed(0, actual)) {
             free(p);
-            throw_oom(); // never returns
+            throw_oom();
+            abort();
         }
     }
     memory_profiler_track_raw_alloc(p, n, file, line);
@@ -166,12 +175,14 @@ static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, 
     (void)file; (void)line;
     size_t old_size = old_ptr ? memory_tracked_raw_allocation_size(old_ptr) : 0;
     if (n != 0 && memory_heap_limit_would_exceed(old_size, n)) {
-        throw_oom(); // never returns; old_ptr remains valid
+        throw_oom();
+        abort();
     }
     uintptr_t old_ptr_addr = (uintptr_t)old_ptr;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
-        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+        throw_oom();
+        abort();
     }
     // Only track if realloc succeeded or if n==0 (free semantics).
     if (new_ptr || n == 0) {
@@ -197,7 +208,8 @@ static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
     (void)file; (void)line;
     void *p = malloc(n);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     return p;
 }
@@ -205,12 +217,14 @@ static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
 static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file, int line) {
     (void)file; (void)line;
     if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     size_t n = nmemb * size;
     void *p = calloc(nmemb, size);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     return p;
 }
@@ -219,7 +233,8 @@ static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, 
     (void)file; (void)line;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
-        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+        throw_oom();
+        abort();
     }
     return new_ptr;
 }
@@ -234,19 +249,22 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 static inline void* clj_host_malloc_impl(size_t n) {
     void *p = malloc(n);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     return p;
 }
 
 static inline void* clj_host_calloc_impl(size_t nmemb, size_t size) {
     if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     size_t n = nmemb * size;
     void *p = calloc(nmemb, size);
     if (!p && n != 0) {
-        throw_oom(); // never returns
+        throw_oom();
+        abort();
     }
     return p;
 }
@@ -254,7 +272,8 @@ static inline void* clj_host_calloc_impl(size_t nmemb, size_t size) {
 static inline void* clj_host_realloc_impl(void *old_ptr, size_t n) {
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
-        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+        throw_oom();
+        abort();
     }
     return new_ptr;
 }
@@ -324,6 +343,11 @@ void autorelease_pool_free(void);
  * @return True if pool is active
  */
 bool is_autorelease_pool_active(void);
+
+/** @brief Check whether autorelease pool is currently draining.
+ * @return True while drain_to_depth() is releasing pool entries.
+ */
+bool is_autorelease_pool_draining(void);
 
 /** @brief Mark current autorelease pool depth for later restoration
  * @return Current pool depth marker
@@ -520,7 +544,7 @@ void autorelease_pool_peak_reset(void);
  * @param type_size Size of each object
  * @param count Number of objects
  * @param obj_type Type tag for the object
- * @return Non-NULL allocated memory. On OOM, throws and never returns.
+ * @return Non-NULL allocated memory. On OOM, throws on the main thread and never returns.
  */
 void* alloc(size_t type_size, size_t count, CljType obj_type)
 #if defined(__GNUC__) || defined(__clang__)

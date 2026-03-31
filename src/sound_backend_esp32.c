@@ -101,6 +101,10 @@ static void sound_timer_callback(void *arg) {
      * - no locks
      * - no I/O/logging
      * - no VM/eval calls
+     * - no retain/release or event payload construction
+     *
+     * Finished notifications stay POD-only here; the interpreter thread drains
+     * them later into event-loop ingress callbacks from the sound thread.
      */
     if (atomic_exchange_explicit(&g_sound_tick_in_callback, true, memory_order_acq_rel)) {
         g_sound_engine.telemetry.tick_overrun_count++;
@@ -109,7 +113,9 @@ static void sound_timer_callback(void *arg) {
 
     int64_t start_us = esp_timer_get_time();
     uint32_t due = atomic_exchange_explicit(&g_sound_scheduled_ticks, 0u, memory_order_acq_rel);
-    sound_engine_advance_ticks(due);
+    for (uint32_t i = 0; i < due; i++) {
+        sound_engine_tick();
+    }
     int64_t elapsed_us = esp_timer_get_time() - start_us;
     int64_t budget_us = (int64_t)SOUND_TICK_BUDGET_US * (due > 0u ? (int64_t)due : 1ll);
     if (elapsed_us > budget_us) {
@@ -203,6 +209,17 @@ void sound_tick_stop(void) {
     atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
     sound_engine_tick_mark_stopped();
     sound_backend_silence_pwm_voices();
+}
+
+void sound_tick_sleep(void) {
+    if (!sound_engine_tick_is_running()) {
+        return;
+    }
+    if (g_sound_timer) {
+        esp_timer_stop(g_sound_timer);
+    }
+    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
+    sound_engine_tick_mark_stopped();
 }
 
 void sound_tick_kick(void) {

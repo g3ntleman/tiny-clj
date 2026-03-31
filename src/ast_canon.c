@@ -26,8 +26,8 @@
 #include "meta.h"   // For meta_get and meta_set
 #include "symbol_token.h"
 #include "eval.h"  // For eval_function_call
-#include "builtins.h" // For require_namespace_by_name (macro ns lazy-load)
-#include "macro.h" // For lookup_macro_resolve
+#include "macro.h"    // For lookup_macro_resolve
+#include "builtins.h" // For gensym_use_local
 #include "debug.h" // For print_ast
 // is_special_symbol is in symbol.h (already included)
 #include <string.h>
@@ -45,13 +45,86 @@ static INLINE void move_meta(ID src, ID dst) {
 #if defined(META_ENABLED) && META_ENABLED
   ID meta = meta_get(src);
   if (meta) {
-    meta_set(dst, meta);
+    if (dst && !IS_IMMEDIATE(dst)) {
+      meta_set(dst, meta);
+    }
     meta_clear(src);
   }
 #else
   (void)src;
   (void)dst;
 #endif
+}
+
+// Minimal bootstrap fallback for defn when clojure.core macros are not loaded yet.
+// Supports: (defn name [params] body...) and skips optional docstring/attr-map.
+static ID expand_defn_without_macro(CljList *form) {
+  if (!form) {
+    return NULL;
+  }
+
+  CljList *cursor = list_rest_normalized(form); // after defn symbol
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID name = LIST_FIRST(cursor);
+  if (!name || TAG(name) != CLJ_SYMBOL || IS_KEYWORD(name)) {
+    return NULL;
+  }
+
+  cursor = list_rest_normalized(cursor);
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID head = LIST_FIRST(cursor);
+  if (head && TAG(head) == CLJ_STRING) {
+    cursor = list_rest_normalized(cursor); // optional docstring
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  head = LIST_FIRST(cursor);
+  if (head && is_map(head)) {
+    cursor = list_rest_normalized(cursor); // optional attr-map
+  }
+  if (!cursor) {
+    return NULL;
+  }
+
+  ID params = LIST_FIRST(cursor);
+  if (!params) {
+    return NULL;
+  }
+  CljList *body = list_rest_normalized(cursor);
+  if (!body) {
+    return NULL;
+  }
+
+  ID fn_rest = AUTORELEASE(make_list(name,
+                                     AUTORELEASE(make_list(params, body))));
+  if (!fn_rest) {
+    return NULL;
+  }
+  ID fn_form = AUTORELEASE(make_list(SYM_FN, as_list(fn_rest)));
+  if (!fn_form) {
+    return NULL;
+  }
+
+  ID def_rest = AUTORELEASE(make_list(name,
+                                      AUTORELEASE(make_list(fn_form, NULL))));
+  if (!def_rest) {
+    return NULL;
+  }
+  ID def_form = AUTORELEASE(make_list(SYM_DEF, as_list(def_rest)));
+  if (!def_form) {
+    return NULL;
+  }
+
+  move_meta((ID)form, def_form);
+  return def_form;
 }
 
 static ID make_ast_call_with_body(ID op,
@@ -94,6 +167,14 @@ static ID make_ast_call_with_body(ID op,
 
 static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljPersistentVector **scope_stack);
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
+
+static INLINE bool should_lookup_macro_for_head_symbol(CljSymbol *head_sym) {
+  if (!head_sym) {
+    return false;
+  }
+  bool is_qualified = head_sym->ns_name != NULL;
+  return !is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified);
+}
 
 // Canonicalize a list tail (rest chain) into plain CLJ_LIST cons cells.
 // Important: This must NOT run macro expansion / destructuring on the tail itself.
@@ -177,7 +258,7 @@ static bool macro_expansion_seq_needs_fallback(ID expanded_first, bool in_quote,
   if (TAG(expanded_first) != CLJ_SYMBOL)
     return false;
 
-  CljSymbol *head_sym = as_symbol(expanded_first);
+  CljSymbol *head_sym = symbol_normalize_core_dispatch_symbol(as_symbol(expanded_first));
   if (!head_sym)
     return true;
   if (is_special_symbol(head_sym))
@@ -282,6 +363,14 @@ static bool lexical_lookup(CljPersistentVector *scope_stack, CljSymbol *sym, uin
 
 // Cached destructure function (resolved once after bootstrap)
 static ID destructure_fn = NULL;
+static unsigned long param_gensym_counter = 0;
+static unsigned long loop_gensym_counter = 0;
+
+void ast_canon_reset_caches(void) {
+  destructure_fn = NULL;
+  param_gensym_counter = 0;
+  loop_gensym_counter = 0;
+}
 
 // Call Clojure (destructure bindings), returns NULL if not available (bootstrap)
 static CljPersistentVector *destructure(EvalState *st, CljPersistentVector *bindings) {
@@ -296,9 +385,6 @@ static CljPersistentVector *destructure(EvalState *st, CljPersistentVector *bind
   ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
   return (TAG(result) == CLJ_VECTOR_PERSISTENT) ? as_vector(result) : NULL;
 }
-
-// Gensym counter for fn/defn/loop param destructuring
-static unsigned long param_gensym_counter = 0;
 
 // Transform params with destructuring, returns new_params and let_bindings
 // Returns NULL for let_bindings if no destructuring needed
@@ -328,7 +414,8 @@ static CljPersistentVector *transform_params(EvalState *st, CljPersistentVector 
   } else {
     *out_let_bindings = NULL;
   }
-  return new_params;
+  RELEASE(let_bindings);
+  return AUTORELEASE(new_params);
 }
 
 /**
@@ -401,10 +488,6 @@ static CljSymbol *canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
     }
     if (!ns_name_sym && ns_buf[0] != '\0') {
       // Fall back to literal namespace symbol (e.g. clojure.core)
-      ns_name_sym = intern_symbol_global(ns_buf);
-    }
-
-    if (!ns_name_sym && ns_buf[0] != '\0') {
       ns_name_sym = intern_symbol_global(ns_buf);
     }
 
@@ -498,8 +581,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     return expr; // Actual string literal, leave unchanged
   }
 
-  // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
-  // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
+  // Lexical addressing: rewrite symbol references in lexical scope to (depth, slot).
   if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
     // Keywords evaluate to themselves and must never be rewritten.
     if (!IS_KEYWORD(expr)) {
@@ -512,11 +594,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
       if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
         uint8_t depth = 0, slot = 0;
         if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
-          if (depth == 0) {
-            ID ref = (ID)make_slot_ref(sym, 0, slot);
-            // Canonicalizer returns pool-safe heap values; SlotRef must match.
-            return AUTORELEASE(ref);
-          }
+          ID ref = (ID)make_slot_ref(sym, depth, slot);
+          // Canonicalizer returns pool-safe heap values; SlotRef must match.
+          return AUTORELEASE(ref);
         }
       }
     }
@@ -529,29 +609,26 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     CLJ_ASSERT(list != NULL);
 
     ID first = canonicalize_expr_with_scope(list->first, st, in_quote, scope_stack);
+    CljSymbol *first_sym = (first && TAG(first) == CLJ_SYMBOL) ? as_symbol(first) : NULL;
+    CljSymbol *dispatch_head_sym = symbol_normalize_core_dispatch_symbol(first_sym);
+    ID dispatch_head = (ID)dispatch_head_sym;
 
     // Check if we're entering a quote-like expression
     // Treat (quote ...) and (quasiquote ...) as data contexts for canonicalization.
-    bool is_quote_form = (first == SYM_QUOTE || first == SYM_QUASIQUOTE);
+    bool is_quote_form = (dispatch_head == (ID)SYM_QUOTE || dispatch_head == (ID)SYM_QUASIQUOTE);
     bool child_in_quote = in_quote || is_quote_form;
+    if (!in_quote && first_sym && dispatch_head_sym && dispatch_head_sym != first_sym) {
+      first = dispatch_head;
+    }
 
     // ========== MACRO EXPANSION (compile-time) ==========
     // Expand macros before destructuring and other transformations
     // Skip macro lookup for special forms and native functions (they can't be macros)
-    if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
-      CljSymbol *head_sym = as_symbol(first);
+    if (!in_quote && dispatch_head_sym) {
+      CljSymbol *head_sym = dispatch_head_sym;
       CljFunction *macro = NULL;
-      bool is_qualified = head_sym && head_sym->ns_name;
-      if (!is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified)) {
+      if (should_lookup_macro_for_head_symbol(head_sym)) {
         macro = lookup_macro_resolve(st, head_sym);
-        if (!macro && is_qualified && head_sym->ns_name && head_sym->ns_name->cname) {
-          const char *macro_ns_name = head_sym->ns_name->cname;
-          if (ns_find(macro_ns_name) == NULL) {
-            if (require_namespace_by_name(st, macro_ns_name)) {
-              macro = lookup_macro_resolve(st, head_sym);
-            }
-          }
-        }
       }
       if (macro) {
         // Collect unevaluated arguments for macro call
@@ -576,7 +653,11 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
           st->current_ns = ((CljFunction *)macro)->ns;
         }
 
+        unsigned long macro_gensym = 0;
+        unsigned long *prev_gensym = gensym_use_local(&macro_gensym);
         ID expanded = eval_function_call((CljObject *)macro, args, argc, NULL, st);
+        gensym_use_local(prev_gensym);
+
         free_obj_array(args, args_stack);
         if (st) {
           st->current_ns = saved_ns;
@@ -662,12 +743,19 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         RELEASE(macro_expanded);
         return result;
       }
+
+      if (head_sym == SYM_DEFN) {
+        ID expanded_def = expand_defn_without_macro(list);
+        if (expanded_def) {
+          return canonicalize_expr_with_scope(expanded_def, st, in_quote, scope_stack);
+        }
+      }
     }
 
     // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
     // Transform let/loop bindings and fn/defn params
-    if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
-      CljSymbol *head_sym = as_symbol(first);
+    if (!in_quote && dispatch_head_sym) {
+      CljSymbol *head_sym = dispatch_head_sym;
 
       // (let [bindings] body...) - expand bindings using Clojure destructure
       if (head_sym == SYM_LET) {
@@ -695,7 +783,6 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
           CljPersistentVector *bindings = as_vector(rest1->first);
           if (bindings_need_destructuring(bindings)) {
-            static unsigned long gensym_counter = 0;
             unsigned int count = vector_count(bindings);
             CljPersistentVector *loop_bindings = make_vector(count, STRONG);
             CljPersistentVector *let_bindings = make_vector(count, STRONG);
@@ -708,7 +795,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
               if (TAG(binding_form) != CLJ_SYMBOL) {
                 // Destructuring binding - create gensym
                 char name[64];
-                mini_snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                mini_snprintf(name, sizeof(name), "loop__%lu", ++loop_gensym_counter);
                 CljSymbol *gsym = intern_symbol_global(name);
                 ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
                 ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
@@ -782,13 +869,19 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
             if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
               ID body = body_rest ? body_rest->first : NULL;
-              CljList *let_form = make_list(SYM_LET,
-                                            make_list(expanded_let_bindings,
-                                                      make_list(body, NULL)));
-              ID new_form = named
-                                ? (ID)make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
-                                : (ID)make_list(first, make_list(new_params, make_list(let_form, NULL)));
-              return canonicalize_expr_with_scope(AUTORELEASE(new_form), st, in_quote, scope_stack);
+              ID let_form = AUTORELEASE(make_list(SYM_LET,
+                                                  AUTORELEASE(make_list(expanded_let_bindings,
+                                                                        AUTORELEASE(make_list(body, NULL))))));
+              ID new_form =
+                  named
+                      ? AUTORELEASE(make_list(first,
+                                              AUTORELEASE(make_list(second,
+                                                                    AUTORELEASE(make_list(new_params,
+                                                                                          AUTORELEASE(make_list(let_form, NULL))))))))
+                      : AUTORELEASE(make_list(first,
+                                              AUTORELEASE(make_list(new_params,
+                                                                    AUTORELEASE(make_list(let_form, NULL))))));
+              return canonicalize_expr_with_scope(new_form, st, in_quote, scope_stack);
             }
           }
         }
@@ -801,7 +894,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // Lexical addressing for `let`: the body runs with a fresh CallFrame containing the let-bindings.
     // We canonicalize the bindings vector without lexical rewrite (init exprs should not see later bindings),
     // then push a scope of the let binding names for the body.
-    if (!in_quote && first == SYM_LET && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_LET && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         // Canonicalize bindings vector without lexical rewrite.
@@ -847,7 +940,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // IMPORTANT: Inside a loop, depth=0 refers to the loop frame. If we don't push a loop scope here,
     // outer function parameters (like `n`) can be incorrectly rewritten to (depth=0, slot=0) and
     // then read from the loop frame instead of the parent function frame.
-    if (!in_quote && first == SYM_LOOP && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_LOOP && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         // Canonicalize bindings vector without lexical rewrite.
@@ -892,7 +985,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // Lexical addressing for `dotimes`: the body runs with a fresh CallFrame binding the loop var.
     // We canonicalize the binding vector without lexical rewrite (name + count expr),
     // then push a scope with just the loop var for the body.
-    if (!in_quote && first == SYM_DOTIMES && scope_stack) {
+    if (!in_quote && dispatch_head == (ID)SYM_DOTIMES && scope_stack) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
         ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
@@ -929,7 +1022,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
     // Lexical addressing (step 1): rewrite references to fn-parameters inside the fn body.
     // IMPORTANT: Do NOT lexicalize the fn name or parameter declarations themselves.
-    if (!in_quote && first == SYM_FN) {
+    if (!in_quote && dispatch_head == (ID)SYM_FN) {
       CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
       if (rest1) {
         ID second = rest1->first;  // name OR params
@@ -977,20 +1070,22 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
               vector_conj_inplace(&param_scope, p);
             }
 
-            // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
-            // This prevents accidentally rewriting free variables (depth>0) before
-            // closure-capture support exists.
+            // Extend existing lexical scope (if any) so nested fn bodies can
+            // resolve both local params (depth=0) and free vars (depth>0).
             CljPersistentVector *fn_scope_stack = NULL;
-            scope_stack_push_inplace(&fn_scope_stack, param_scope);
+            CljPersistentVector **active_scope_stack = scope_stack ? scope_stack : &fn_scope_stack;
+            scope_stack_push_inplace(active_scope_stack, param_scope);
             RELEASE(param_scope);
 
             // Canonicalize body with param scope active.
             CljList *canon_body = body_rest
-                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
+                                      ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, active_scope_stack)
                                       : NULL;
 
-            scope_stack_pop_inplace(&fn_scope_stack);
-            RELEASE(fn_scope_stack);
+            scope_stack_pop_inplace(active_scope_stack);
+            if (!scope_stack) {
+              RELEASE(fn_scope_stack);
+            }
 
             ID prefix_args[2] = {NULL, NULL};
             unsigned int prefix_count = named ? 2 : 1;
@@ -1153,8 +1248,17 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
   CljPersistentVector *scope_stack = NULL;
+  unsigned long prev_param_gensym_counter = param_gensym_counter;
+  unsigned long prev_loop_gensym_counter = loop_gensym_counter;
+  unsigned long local_builtin_gensym = 0;
+  unsigned long *prev_builtin_gensym = gensym_use_local(&local_builtin_gensym);
+  param_gensym_counter = 0;
+  loop_gensym_counter = 0;
   ID out = canonicalize_expr_with_scope(expr, st, in_quote, &scope_stack);
   RELEASE(scope_stack);
+  param_gensym_counter = prev_param_gensym_counter;
+  loop_gensym_counter = prev_loop_gensym_counter;
+  gensym_use_local(prev_builtin_gensym);
   return out;
 }
 
@@ -1175,4 +1279,75 @@ ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st) {
   CLJ_ASSERT(st != NULL);
   // Treat lists as data (quoted) but still canonicalize symbol tokens.
   return canonicalize_expr(parsed_expr, st, true);
+}
+
+ID ast_canon_macroexpand_1(EvalState *st, ID form) {
+  CLJ_ASSERT(st != NULL);
+  if (!form) {
+    RETAIN(form);
+    return form;
+  }
+  unsigned char tag = TAG(form);
+  if (!is_list_type(tag)) {
+    RETAIN(form);
+    return form;
+  }
+  CljList *list = as_list(form);
+  CLJ_ASSERT(list != NULL);
+  ID first_raw = list->first;
+  CljSymbol *head_sym = NULL;
+  ID converted_head = NULL;
+  if (first_raw && TAG(first_raw) == CLJ_SYMBOL_TOKEN) {
+    head_sym = canonicalize_symbol_token((CljSymbolToken *)first_raw, st);
+    if (!head_sym) {
+      RETAIN(form);
+      return form;
+    }
+    converted_head = (ID)head_sym;
+  } else if (first_raw && TAG(first_raw) == CLJ_SYMBOL) {
+    head_sym = as_symbol(first_raw);
+  } else {
+    RETAIN(form);
+    return form;
+  }
+
+  CljSymbol *dispatch_head_sym = symbol_normalize_core_dispatch_symbol(head_sym);
+  if (!should_lookup_macro_for_head_symbol(dispatch_head_sym)) {
+    if (converted_head)
+      RELEASE(converted_head);
+    RETAIN(form);
+    return form;
+  }
+  CljFunction *macro = lookup_macro_resolve(st, dispatch_head_sym);
+  if (converted_head)
+    RELEASE(converted_head);
+  if (!macro) {
+    RETAIN(form);
+    return form;
+  }
+
+  CljList *rest = list_or_null(as_list(LIST_REST(list)));
+  int argc = rest ? list_count(rest) : 0;
+  ID args_stack[16];
+  ID *args = alloc_obj_array(argc, args_stack);
+  int i = 0;
+  LIST_FOR_EACH(rest, arg) {
+    args[i++] = arg;
+  }
+
+  CljNamespace *saved_ns = st->current_ns;
+  if (macro->ns) {
+    st->current_ns = macro->ns;
+  }
+  unsigned long macro_gensym = 0;
+  unsigned long *prev_gensym = gensym_use_local(&macro_gensym);
+  ID expanded = eval_function_call((ID)macro, args, argc, NULL, st);
+  gensym_use_local(prev_gensym);
+  free_obj_array(args, args_stack);
+  st->current_ns = saved_ns;
+  if (!expanded)
+    return NULL;
+  move_meta(list, expanded);
+  RETAIN(expanded);
+  return expanded;
 }

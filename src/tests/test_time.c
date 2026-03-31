@@ -10,7 +10,6 @@
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
-ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +120,7 @@ TEST_SHARED(test_time_with_too_many_arguments) {
     CljObject *expr1 = fixnum(1);
     CljObject *expr2 = fixnum(2);
     
-    // Create (time 1 2) with too many arguments
+    // Create [1 2] args with too many arguments
     CljPersistentVector *time_args = make_vector(2, STRONG);
     vector_conj_inplace(&time_args, expr1);
     vector_conj_inplace(&time_args, expr2);
@@ -159,19 +158,12 @@ TEST_SHARED(test_time_no_double_evaluation) {
 }
 
 TEST_SHARED(test_time_with_dotimes) {
-    // Test that time works correctly with dotimes.
-    // Build canonical expression to match runtime path (no raw list fallback).
-    ID dotimes_call = parse_canonicalized("(dotimes [i 1000] (+ 1 2 3 4 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(dotimes_call);
+    // Test that time works correctly with dotimes
+    // (time (dotimes [i 1000] (+ 1 2 3 4 5))) should return nil
+    CljValue result = eval_string("(time (dotimes [i 1000] (+ 1 2 3 4 5)))", g_test_eval_state);
 
-    CljPersistentVector *time_args = make_vector(1, STRONG);
-    vector_conj_inplace(&time_args, dotimes_call);
-    CljObject *result = eval_time(time_args, NULL, g_test_eval_state, NULL);
-    RELEASE(time_args);
-    
-    // time should return the result of the evaluated expression
-    // Since dotimes returns nil, time should also return nil
-    TEST_ASSERT_TRUE(result == NULL); // dotimes returns nil, so time returns nil
+    // dotimes returns nil, so time should also return nil
+    TEST_ASSERT_TRUE(result == NULL);
 }
 
 TEST_SHARED(test_time_preserves_lexical_context) {

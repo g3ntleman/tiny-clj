@@ -4,12 +4,13 @@
             [tiny-fx.gfx-scene :refer [edn->scene]]
             [tiny-fx.gfx-collision :as collision]
             [tiny-fx.assets :as assets]
-            [tiny-fx.sound-native :as sound]
+            [tiny-fx.sound :as sound]
             [tiny-clj.gpio :as gpio]))
 
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
+(def root-entity-id :tiny-fx.scene/root)
 (def starwars-title-track-id :starwars-title-2v)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-data* (atom nil))
@@ -45,8 +46,7 @@ and game-demo startup."
   []
   (let [data (load-demo-data!)
         bytes (byte-array (:starwars-title-bytes data))]
-    (sound/sound-load-track! starwars-title-track-id bytes)
-    {:status (if (sound/sound-play-music! starwars-title-track-id 1) :playing :stopped)
+    {:status (if (sound/sound-play-music! starwars-title-track-id bytes 1) :playing :stopped)
      :duration-ms 8925}))
 
 (defn player-jump-timeline-for-state
@@ -73,17 +73,29 @@ and game-demo startup."
         ;; Keep scene as FrameScene record so native viewer accepts atom updates.
         (record-from-map 'FrameScene (assoc game-scene :index next-index))))))
 
-(defn- ensure-frame-scene-root-index
+(defn- canonicalize-frame-scene
   [scene]
-  (let [root (:root scene)]
-    (if (and (nil? (:index scene))
-             (map? root)
-             (contains? root 'root))
+  (let [root (:root scene)
+        index (:index scene)]
+    (cond
+      (and (map? index) (= root root-entity-id) (contains? index root-entity-id))
       (record-from-map 'FrameScene
                        (assoc scene
-                              :root (get root 'root)
-                              :index (dissoc root 'root)))
-      scene)))
+                              :index (assoc index root-entity-id (assoc (get index root-entity-id) :id root-entity-id))))
+
+      (and (map? index) root)
+      (record-from-map 'FrameScene
+                       (assoc scene
+                              :root root-entity-id
+                              :index (assoc index root-entity-id (assoc root :id root-entity-id))))
+
+      (and (nil? index) (map? root) (contains? root root-entity-id))
+      (record-from-map 'FrameScene
+                       (assoc scene
+                              :root root-entity-id
+                              :index (assoc root root-entity-id (assoc (get root root-entity-id) :id root-entity-id))))
+
+      :else scene)))
 
 (defn- event->player-small-state
   [event]
@@ -120,8 +132,7 @@ return values."
         (swap! demo-melody-trigger-count* inc)
         (let [data (load-demo-data!)
               bytes (byte-array (:demo-melody-bytes data))]
-          (sound/sound-load-track! demo-melody-track-id bytes)
-          (sound/sound-play-music! demo-melody-track-id 1)))
+          (sound/sound-play-music! demo-melody-track-id bytes 1)))
       (not pressed?)
       (reset! demo-launch-pressed* false)
       :else nil))
@@ -160,15 +171,16 @@ Index layout:
 2 game-scene"
   []
   (let [data (load-demo-data!)
-        deco-scene (ensure-frame-scene-root-index (:deco-scene-template data))
-        score-scene (ensure-frame-scene-root-index (:score-scene-template data))
+        deco-scene (canonicalize-frame-scene (:deco-scene-template data))
+        score-scene (canonicalize-frame-scene (:score-scene-template data))
         game-entities (assoc (:game-entities-static data)
+                        root-entity-id (assoc (get (:game-entities-static data) root-entity-id) :id root-entity-id)
                         obstacle-entity-id (:rocket-body-instance data)
                         3005 (:rocket-nose-instance data)
                         player-collision-entity-id (:game-player-collision data)
                         player-entity-id (:game-player data))
-        game-scene (record-create 'FrameScene [(get game-entities 'root)
-                                                   (dissoc game-entities 'root)
+        game-scene (record-create 'FrameScene [root-entity-id
+                                                   game-entities
                                                    [0 40 320 136]
                                                    2
                                                    true

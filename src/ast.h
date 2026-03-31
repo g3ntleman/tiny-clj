@@ -57,7 +57,6 @@ typedef struct CljCallsiteCache {
     ID resolved;          // cached resolution (fn, macro, etc.)
     uint16_t epoch;       // validity epoch (env/namespace version)
     uint8_t epoch_generation; // wrap-generation for 16-bit epoch matching
-    uint8_t lookup_hint_index; // map/record keyword lookup hint (UINT8_MAX = no hint)
 } CljCallsiteCache;
 
 CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint16_t epoch);

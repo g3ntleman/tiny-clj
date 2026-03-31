@@ -19,6 +19,7 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
+#if MEMORY_PROFILING_ENABLED
 static ID parse_from_reader_once(const char *input, EvalState *st) {
   Reader reader;
   reader_init(&reader, input);
@@ -60,6 +61,7 @@ static void build_wilhelm_tell_like_vector(char *buffer, size_t buffer_size, uns
   buffer[written++] = ']';
   buffer[written] = '\0';
 }
+#endif
 
 TEST(test_parse_basic_types) {
   EvalState *eval_state = evalstate_new(false);
@@ -116,6 +118,18 @@ TEST(test_parse_collections) {
   CljPersistentMap *map_result = (CljPersistentMap *)parse("{:a 1 :b 2}", eval_state);
   TEST_ASSERT_NOT_NULL(map_result);
   TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
+
+  evalstate_free(eval_state);
+}
+
+TEST(test_parse_map_capacity_is_tight) {
+  EvalState *eval_state = evalstate_new(false);
+
+  CljPersistentMap *map_result = (CljPersistentMap *)parse("{:a 1 :b 2 :c 3}", eval_state);
+  TEST_ASSERT_NOT_NULL(map_result);
+  TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
+  TEST_ASSERT_EQUAL_INT(3, map_result->count);
+  TEST_ASSERT_EQUAL_INT(3, map_result->capacity);
 
   evalstate_free(eval_state);
 }

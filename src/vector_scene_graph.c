@@ -79,6 +79,203 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb) {
     return h;
 }
 
+static uint32_t clip_rect_area_px(VgClipRect r) {
+    if (vg_clip_rect_is_empty(r)) {
+        return 0u;
+    }
+    return (uint32_t)r.w * (uint32_t)r.h;
+}
+
+static bool clip_rects_overlap(VgClipRect a, VgClipRect b) {
+    return vg_clip_rect_intersect(a, b, NULL);
+}
+
+static bool dirty_union_area_within_merge_factor(uint32_t union_area, uint32_t separate_area) {
+    /*
+     * Keep this comparison division-free and overflow-safe:
+     *   union_area / separate_area <= 5 / 4
+     * becomes
+     *   union_area * 4 <= separate_area * 5
+     *
+     * A slightly stricter threshold keeps skinny overlap clusters split when
+     * the merged union would introduce too much redraw padding around the
+     * actual dirty leaves.
+     */
+    const uint64_t lhs = (uint64_t)union_area * 4u;
+    const uint64_t rhs = (uint64_t)separate_area * 5u;
+    return lhs <= rhs;
+}
+
+static bool split_rect_to_budget(VgClipRect rect,
+                                 uint32_t pixel_budget,
+                                 VgClipRect *out_rects,
+                                 size_t out_capacity,
+                                 size_t *io_out_count) {
+    if (vg_clip_rect_is_empty(rect)) {
+        return true;
+    }
+    uint32_t area = clip_rect_area_px(rect);
+    if (area <= pixel_budget || (rect.w <= 1 && rect.h <= 1)) {
+        if (*io_out_count >= out_capacity) {
+            return false;
+        }
+        out_rects[(*io_out_count)++] = rect;
+        return true;
+    }
+
+    bool split_x = (rect.w >= rect.h && rect.w > 1) || rect.h <= 1;
+    if (split_x && rect.w > 1) {
+        size_t before = *io_out_count;
+        int16_t w_left = (int16_t)(rect.w / 2);
+        int16_t w_right = (int16_t)(rect.w - w_left);
+        VgClipRect left = {.x = rect.x, .y = rect.y, .w = w_left, .h = rect.h};
+        VgClipRect right = {.x = (int16_t)(rect.x + w_left), .y = rect.y, .w = w_right, .h = rect.h};
+        if (split_rect_to_budget(left, pixel_budget, out_rects, out_capacity, io_out_count) &&
+            split_rect_to_budget(right, pixel_budget, out_rects, out_capacity, io_out_count)) {
+            return true;
+        }
+        *io_out_count = before;
+        return false;
+    }
+    if (rect.h > 1) {
+        size_t before = *io_out_count;
+        int16_t h_top = (int16_t)(rect.h / 2);
+        int16_t h_bottom = (int16_t)(rect.h - h_top);
+        VgClipRect top = {.x = rect.x, .y = rect.y, .w = rect.w, .h = h_top};
+        VgClipRect bottom = {.x = rect.x, .y = (int16_t)(rect.y + h_top), .w = rect.w, .h = h_bottom};
+        if (split_rect_to_budget(top, pixel_budget, out_rects, out_capacity, io_out_count) &&
+            split_rect_to_budget(bottom, pixel_budget, out_rects, out_capacity, io_out_count)) {
+            return true;
+        }
+        *io_out_count = before;
+        return false;
+    }
+    return false;
+}
+
+size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
+                                 size_t leaf_count,
+                                 uint32_t pixel_budget,
+                                 VgClipRect *out_rects,
+                                 size_t out_capacity) {
+    if (!dirty_leaves || !out_rects || out_capacity == 0 || leaf_count == 0) {
+        return 0u;
+    }
+    if (pixel_budget == 0u) {
+        return 0u;
+    }
+
+    VgClipRect merged = {0};
+    bool has_any = false;
+    for (size_t i = 0; i < leaf_count; i++) {
+        if (vg_clip_rect_is_empty(dirty_leaves[i])) {
+            continue;
+        }
+        merged = has_any ? vg_clip_rect_union(merged, dirty_leaves[i]) : dirty_leaves[i];
+        has_any = true;
+    }
+    if (!has_any) {
+        return 0u;
+    }
+
+    bool assigned[leaf_count];
+    for (size_t i = 0; i < leaf_count; i++) {
+        assigned[i] = false;
+    }
+
+    size_t out_i = 0u;
+    for (size_t i = 0; i < leaf_count; i++) {
+        if (assigned[i] || vg_clip_rect_is_empty(dirty_leaves[i])) {
+            continue;
+        }
+
+        size_t cluster_members[leaf_count];
+        size_t cluster_count = 0u;
+        assigned[i] = true;
+        cluster_members[cluster_count++] = i;
+
+        /*
+         * Build connected components from actual leaf overlaps so we do not
+         * merge a rect that only happens to lie inside the cluster union bbox.
+         */
+        for (size_t cursor = 0; cursor < cluster_count; cursor++) {
+            size_t member_index = cluster_members[cursor];
+            for (size_t j = 0; j < leaf_count; j++) {
+                if (assigned[j] || vg_clip_rect_is_empty(dirty_leaves[j])) {
+                    continue;
+                }
+                if (clip_rects_overlap(dirty_leaves[member_index], dirty_leaves[j])) {
+                    assigned[j] = true;
+                    cluster_members[cluster_count++] = j;
+                }
+            }
+        }
+
+        VgClipRect cluster_union = dirty_leaves[cluster_members[0]];
+        uint32_t cluster_leaf_area_sum = clip_rect_area_px(cluster_union);
+        for (size_t m = 1; m < cluster_count; m++) {
+            cluster_union = vg_clip_rect_union(cluster_union, dirty_leaves[cluster_members[m]]);
+            cluster_leaf_area_sum += clip_rect_area_px(dirty_leaves[cluster_members[m]]);
+        }
+
+        uint32_t cluster_union_area = clip_rect_area_px(cluster_union);
+        bool cluster_union_fits_budget = cluster_union_area <= pixel_budget;
+        bool cluster_union_is_worth_it =
+            dirty_union_area_within_merge_factor(cluster_union_area, cluster_leaf_area_sum);
+
+        if (cluster_union_fits_budget && cluster_union_is_worth_it) {
+            if (out_i >= out_capacity) {
+                out_rects[0] = merged;
+                return 1u;
+            }
+            out_rects[out_i++] = cluster_union;
+            continue;
+        }
+
+        bool cluster_leaves_fit = true;
+        for (size_t m = 0; m < cluster_count; m++) {
+            if (clip_rect_area_px(dirty_leaves[cluster_members[m]]) > pixel_budget) {
+                cluster_leaves_fit = false;
+                break;
+            }
+        }
+
+        if (cluster_leaves_fit) {
+            if (out_i + cluster_count > out_capacity) {
+                out_rects[0] = merged;
+                return 1u;
+            }
+            for (size_t m = 0; m < cluster_count; m++) {
+                out_rects[out_i++] = dirty_leaves[cluster_members[m]];
+            }
+            continue;
+        }
+
+        for (size_t m = 0; m < cluster_count; m++) {
+            VgClipRect leaf = dirty_leaves[cluster_members[m]];
+            uint32_t area = clip_rect_area_px(leaf);
+            if (area <= pixel_budget) {
+                if (out_i >= out_capacity) {
+                    out_rects[0] = merged;
+                    return 1u;
+                }
+                out_rects[out_i++] = leaf;
+                continue;
+            }
+            if (!split_rect_to_budget(leaf,
+                                      pixel_budget,
+                                      out_rects,
+                                      out_capacity,
+                                      &out_i)) {
+                out_rects[0] = merged;
+                return 1u;
+            }
+        }
+    }
+
+    return out_i;
+}
+
 #define VG_FP_SHIFT CLJ_FIXED_FRAC_BITS
 #define VG_FP_ONE CLJ_FIXED_SCALE
 
@@ -545,6 +742,72 @@ static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFix
         fill_polygon_scanline(fb, vx, vy, 3, style.fill_color);
     }
     draw_stroke_polyline_xy(fb, vx, vy, 3, true, style);
+}
+
+static int vg_text_glyph_advance(char c) {
+    switch (c) {
+        case ' ': return 5;
+        case '.':
+        case ',':
+        case ':':
+        case ';':
+        case '!':
+        case '(':
+        case ')':
+            return 4;
+        case '?':
+            return 6;
+        case '%':
+            return 7;
+        default:
+            return 8;
+    }
+}
+
+bool vg_text_local_bounds(const VgTextData *txt, VgRectData *out_bounds) {
+    if (!txt || !out_bounds || !txt->text || txt->text[0] == '\0') {
+        return false;
+    }
+    int pen_x = 0;
+    bool have_visible_glyph = false;
+    int min_x = 0;
+    int max_x = 0;
+    size_t len = strlen(txt->text);
+    for (size_t i = 0; i < len; i++) {
+        unsigned char uc = (unsigned char)txt->text[i];
+        char c = (char)toupper((int)uc);
+        bool is_hv_mono_alnum = ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
+        int adv = is_hv_mono_alnum ? 10 : vg_text_glyph_advance(c);
+        bool visible_glyph = (c != ' ');
+        if (visible_glyph) {
+            int glyph_min_x = pen_x + (is_hv_mono_alnum ? 1 : 0);
+            int glyph_max_x = pen_x + adv - 1;
+            if (!have_visible_glyph) {
+                min_x = glyph_min_x;
+                max_x = glyph_max_x;
+                have_visible_glyph = true;
+            } else {
+                if (glyph_min_x < min_x) {
+                    min_x = glyph_min_x;
+                }
+                if (glyph_max_x > max_x) {
+                    max_x = glyph_max_x;
+                }
+            }
+        }
+        pen_x += adv;
+        if (pen_x < 0) {
+            pen_x = 0;
+        }
+    }
+    if (!have_visible_glyph || max_x < min_x) {
+        return false;
+    }
+    out_bounds->x = (int16_t)min_x;
+    out_bounds->y = 0;
+    out_bounds->w = (int16_t)((max_x - min_x) + 1);
+    out_bounds->h = 11;
+    return true;
 }
 
 static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransformFixed parent_t, VgStyle style) {

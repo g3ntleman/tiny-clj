@@ -103,9 +103,9 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
         return NULL;
     }
 
-    // Allocate CljRegex object using alloc (handles type and profiling)
+    // Allocate CljRegex object using alloc (handles type and profiling).
     CljRegex *re = (CljRegex *)alloc(sizeof(CljRegex), 1, CLJ_REGEX);
-    // alloc() throws on OOM, so no NULL check needed
+    // alloc() never returns on OOM, so no NULL check needed.
 
     // Copy pattern
     memcpy(re->pattern, pattern, len + 1);

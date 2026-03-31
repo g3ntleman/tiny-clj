@@ -1,7 +1,8 @@
 (ns tiny-clj.event
   (:require [tiny-clj.button :as button]
             [tiny-clj.sensor :as sensor]
-            [tiny-fx.gfx-collision :as collision]))
+            [tiny-fx.gfx-collision :as collision]
+            [tiny-fx.gfx-timeline :as timeline]))
 
 (defn- subscribe [descriptor callback opts]
   (let [source (get descriptor :source)
@@ -14,6 +15,9 @@
       (= source :button) (button/watch id callback opts)
       (= source :sensor) (sensor/watch id callback opts)
       (= source :spatial) (collision/watch id callback opts)
+      (= source :timeline) (if (or (nil? opts) (empty? opts))
+                             (timeline/watch id callback)
+                             (throw "event/on: :timeline does not support options"))
       :else (throw (str "event/on: unsupported :source " source)))))
 
 (defn on
@@ -28,8 +32,10 @@ Supported sources:
   :button  -> semantic button events
   :sensor  -> semantic sensor events
   :spatial -> semantic spatial/collision events
+  :timeline -> semantic timeline-end events
 
-Options are forwarded to the underlying source-specific runtime."
+Options are forwarded for :button/:sensor/:spatial.
+:timeline currently does not accept source options."
   [& args]
   (let [argc (count args)]
     (cond
@@ -47,3 +53,25 @@ Options are forwarded to the underlying source-specific runtime."
 
       :else
       (throw "event/on expects 2, 3, or 4 arguments"))))
+
+(defn dispatch-timeline-watch!
+  "Pushes one timeline progress sample into a specific watcher.
+
+Returns true when the watcher exists and was dispatched, else false."
+  [watch-id progress]
+  (if watch-id
+    (timeline/dispatch-watch! watch-id progress)
+    false))
+
+(defn dispatch-timeline-progress!
+  "Pushes one timeline progress sample that contains :event-id.
+
+Returns true when a watcher for :event-id exists and was dispatched, else false."
+  [progress]
+  (timeline/dispatch-progress! progress))
+
+(defn rearm-timeline-watch-edge!
+  [watch-id]
+  (when watch-id
+    (timeline/reset-watch-edge! watch-id))
+  nil)

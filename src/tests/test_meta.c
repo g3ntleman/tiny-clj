@@ -223,6 +223,19 @@ TEST(test_meta_resolves_symbols) {
 }
 
 // ============================================================================
+// TEST: defn works without loading clojure.core in test setup
+// ============================================================================
+TEST(test_meta_defn_available_without_core_load) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = eval_string("(do (defn test-meta-defn-fallback [] 1) (test-meta-defn-fallback))",
+                            g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "defn should be available without explicit clojure.core load");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "defn fallback call should return an integer");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(result), "defn fallback function should return 1");
+}
+
+// ============================================================================
 // TEST: metadata is transferred from defn form to function
 // ============================================================================
 TEST(test_metadata_transferred_from_defn_to_function) {
@@ -390,7 +403,7 @@ TEST(test_meta_qualified_symbol) {
                              ":name should be a symbol");
     if (TAG(name_value) == CLJ_SYMBOL) {
         CljSymbol *name_sym = (CljSymbol *)name_value;
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", clj_symbol_name(name_sym),
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", name_sym->cname,
                                          ":name should be symbol trim");
     }
 }

@@ -62,7 +62,7 @@ extern volatile sig_atomic_t g_clojure_core_last_form;
 static void __attribute__((unused)) repl_sigtrap_handler(int signo) {
   fprintf(stderr, "REPL SIGTRAP (signal %d) during core load; last form=%d\n",
           signo, (int)g_clojure_core_last_form);
-  exception_print_native_backtrace();
+  exception_print_native_backtrace_symbolized();
   _exit(128 + signo);
 }
 #endif
@@ -431,7 +431,7 @@ static void print_result(CljObject *v) {
     platform_put_char(NULL, '\n');
     return;
   }
-  CljString *s = pr_str(v);
+  CljString *s = make_string_description(v);
   if (s) {
     platform_put_string(NULL, string_data(s));
     platform_put_char(NULL, '\n');
@@ -1525,7 +1525,7 @@ int main(int argc, char **argv) {
   };
   if (repl_should_launch_tiny_fx_host_app(&bundle_launch)) {
 #if defined(TINYCLJ_TINY_FX_HOST_APP_AVAILABLE) && TINYCLJ_TINY_FX_HOST_APP_AVAILABLE
-    cleanup_and_exit(cli.eval_args, tinyclj_tiny_fx_host_app_run());
+    cleanup_and_exit(cli.eval_args, fx_host_app_run());
 #else
     cleanup_and_exit(cli.eval_args, 1);
 #endif

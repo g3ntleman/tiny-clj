@@ -7,10 +7,10 @@ todos:
     status: completed
   - id: design-clojure-domain-split
     content: Die Breakout-Clojure-Module in Reducer, Collision-Uebersetzung, Szene und Audio sauber aufteilen
-    status: in_progress
+    status: completed
   - id: extract-generic-c-runtime
     content: Generische Viewer-/Spatial-/Animations-Infrastruktur aus `src/game_demo_minifb.c` in breakout-unabhaengige C-Library-Schichten ueberfuehren
-    status: pending
+    status: in_progress
   - id: adapt-deployment-contract
     content: "`libs/tiny-clj/deployment.clj` auf generische Host-Callbacks und Clojure-autoritative Breakout-Verarbeitung ausrichten"
     status: completed
@@ -35,23 +35,77 @@ Breakout wird in zwei klar getrennte Schichten geschnitten:
 ## Aktueller Stand
 
 - Breakout laeuft inzwischen Clojure-autoritativ ueber `tiny-breakout.core`, `tiny-breakout.scene`, `tiny-breakout.runtime` und `tiny-breakout.audio`.
-- `libs/tiny-clj/deployment.clj` bootstrapt den Host direkt ueber `tiny-breakout.runtime/reset-runtime!`, liefert die Slot-/Callback-Config und haelt keinen nativen Breakout-Sondervertrag mehr offen.
+- `libs/tiny-clj/deployment.clj` bootstrapt den Host direkt ueber `tiny-breakout.runtime/bootstrap-runtime!`, liefert die generische Slot-/Callback-Config und haelt keinen nativen Breakout-Sondervertrag mehr offen.
 - `:fire`, `:left`, `:right` und `:pause` werden ueber generische Button-Events in den Clojure-Reducer gespeist; der erste Ball startet wieder direkt aus dem Titelbildschirm.
-- Breakout-Audio ist jetzt ueber Clojure-Domain-Events an `tiny-fx.sound` verdrahtet.
+- Breakout-Audio ist jetzt ueber Clojure-Domain-Events an den nativen Sound-Adapter `tiny-fx.sound-native` verdrahtet.
+- Die Runtime-Schichten sind weiter geschnitten: `tiny-breakout.runtime` haelt State-/Scene-Publishing und Timeline-/Timer-Verkabelung, `tiny-breakout.runtime-play` kapselt Input-Normalisierung, Paddle-Motion und die unmittelbare Runtime-Reaktion auf Host-/Spatial-Events.
+- Der GFX-Record-Schema-Pfad ist jetzt explizit: `tiny-fx.gfx-records` definiert die kanonischen Records in Clojure, und die C-Seite validiert/deserialisiert nur noch dagegen statt Records selbst zu registrieren.
 - Runloop-/Deferred-Callback-Exceptions werden jetzt auch ausserhalb von Debug-Builds nach `stderr` gedruckt, statt still zu verschwinden.
 
 ## Was heute noch falsch geschnitten ist
 
 - [src/game_demo_minifb.c](src/game_demo_minifb.c) traegt noch zu viel generische Host-/Viewer-/Input-Infrastruktur in einer Datei und sollte weiter in breakout-unabhaengige C-Library-Schichten zerlegt werden.
 - [src/tests/test_breakout_runtime_startup.c](src/tests/test_breakout_runtime_startup.c) deckt noch einen Teil der historischen Host-Verkabelung ab und sollte weiter auf generische Startup-/Viewer-Contracts reduziert werden.
-- `tiny-breakout.runtime` enthaelt neben Runtime-Verkabelung weiterhin etwas Event-Normalisierung (`button-down-event?`, Segment-Timer, Audio-Dispatch), das bei weiterer Schaerfung der Modulgrenzen noch expliziter getrennt werden kann.
+- `tiny-breakout.runtime-play` enthaelt noch Breakout-spezifische Runtime-Glue-Logik wie Paddle-Motion, gerenderte Positions-Synchronisierung und Event-Normalisierung. Das ist in Clojure richtig aufgehoben, aber noch nicht die sauberste Endgrenze zwischen Domain-Reducer und Host-Verkabelung.
+- Die C-Seite hat noch Breakout-benannte Host-Verkabelung, z. B. direkte Aufloesung von `tiny-breakout.runtime/apply-input!` in [src/game_demo_minifb.c](src/game_demo_minifb.c) und breakout-benannte Symbol-/Config-Pfade in [src/viewer_host_slots.c](src/viewer_host_slots.c). Diese Pfade sollten weiter auf generische Viewer-/Deployment-Begriffe reduziert werden.
+- `:game-scene-atom` ist weiterhin Teil des Deployment-/Viewer-Vertrags. Das ist funktional generisch nutzbar, aber der Plan sollte weiter auf einen moeglichst kleinen, breakout-unabhaengigen Host-Contract zielen.
+
+## Naechster konkreter Schritt
+
+Der naechste Umbau sollte `extract-generic-c-runtime` praktisch beginnen und zwei Dinge gleichzeitig erreichen:
+
+1. Breakout-spezifische C-Verkabelung hinter einen generischen Viewer-/Deployment-Vertrag schieben.
+2. Den generischen Charakter auch in C-Datei- und API-Namen sichtbar machen.
+
+### Ziel des naechsten Schnitts
+
+- [src/game_demo_minifb.c](src/game_demo_minifb.c) darf danach nicht mehr als impliziter Breakout-Host gelten, sondern als generische Host-App fuer den Viewer.
+- [src/viewer_host_slots.c](src/viewer_host_slots.c) darf keine breakout-benannte Fast-Path-API mehr exponieren.
+- Breakout-spezifische Tests sollen den generischen Host-Vertrag konsumieren, nicht private Breakout-C-Helfer.
+
+### Konkrete Rename-Richtung fuer C-Dateien
+
+Diese Umbenennungen sollen den naechsten Schnitt begleiten:
+
+- `src/game_demo_minifb.c` -> `src/fx_host_app.c`
+- `src/viewer_host_slots.c` -> `src/fx_config_loader.c`
+- `src/viewer_host_slots.h` -> `src/fx_config_loader.h`
+- `src/viewer_collision_bridge.h` -> `src/fx_spatial_bridge.h`
+- `src/viewer_collision_scene_bridge.c` -> `src/fx_spatial_scene_bridge.c`
+- `src/viewer_collision_dispatch.c` -> `src/fx_spatial_dispatch.c`
+
+Bewusste Nicht-Ziele fuer diesen Schritt:
+
+- `src/fx_collision.c` muss nicht sofort umbenannt werden, solange dort bereits klar generische Spatial-/Collision-Infrastruktur liegt.
+- `src/fx_host_runloop.c` kann vorerst bleiben; der groesste irrefuehrende Name ist aktuell `game_demo_minifb.c`.
+
+### Konkrete inhaltliche Schritte im selben PR-Slice
+
+1. `game_demo_minifb` in generischen Host-App-Namen ueberfuehren.
+   Die Datei soll nur noch Viewer-Host-App-/Window-/Renderloop-Semantik tragen. Breakout-spezifische Begriffe in Funktionsnamen, Kommentaren und Fehlermeldungen werden auf generische Viewer-/Deployment-Begriffe umgestellt.
+
+2. `viewer_load_breakout_host_config_fast()` generisch umbenennen und verallgemeinern.
+   Zielname: `viewer_load_deployment_config_fast()` oder `viewer_load_runtime_config_fast()`.
+   Der Fast-Path soll ueber den generischen Deployment-Vertrag sprechen (Scene-Atom, Prepare-/Startup-/Spatial-Callback), nicht ueber Breakout-Begriffe.
+
+3. Breakout-spezifische String-Lookups in C auf generische Deployment-Begriffe reduzieren.
+   Direkte `tiny-breakout.runtime/...`-Aufloesungen in C bleiben nur dann temporaer bestehen, wenn sie klar als Zwischenzustand dokumentiert sind; bevorzugt wird die Aufloesung ueber den Deployment-Config-Pfad.
+
+4. `test_breakout_runtime_startup.c` sprachlich und strukturell in Richtung generischer Startup-/Viewer-Contracts schieben.
+   Breakout-spezifische Assertions bleiben nur dort, wo wirklich Domain-Verhalten getestet wird.
+
+### Review-Gate fuer den naechsten Schritt
+
+- Keine zentralen generischen Host-Dateien tragen noch `game_demo` oder `breakout` im Dateinamen, wenn sie breakout-unabhaengige Infrastruktur enthalten.
+- Der Haupt-Config-Lader in C ist generisch benannt und beschreibt einen Viewer-/Deployment-Vertrag statt einen Breakout-Sonderfall.
+- Ein Leser kann aus Dateinamen und Top-Level-APIs erkennen, welche Teile generische Viewer-Infrastruktur sind und welche Teile echte Breakout-Domaene bleiben.
 
 ## Zielgrenzen der Module
 
 - Breakout-spezifisch in Clojure:
-[libs/tiny-breakout/core.clj](libs/tiny-breakout/core.clj), [libs/tiny-breakout/runtime.clj](libs/tiny-breakout/runtime.clj), [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj), [libs/tiny-breakout/audio.clj](libs/tiny-breakout/audio.clj) plus optional spaeter ein explizites Modul fuer Collision-Event-Uebersetzung.
+[libs/tiny-breakout/core.clj](libs/tiny-breakout/core.clj), [libs/tiny-breakout/runtime.clj](libs/tiny-breakout/runtime.clj), [libs/tiny-breakout/runtime-play.clj](libs/tiny-breakout/runtime-play.clj), [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj), [libs/tiny-breakout/audio.clj](libs/tiny-breakout/audio.clj) plus optional spaeter ein explizites Modul fuer Collision-Event-Uebersetzung.
 - Generisch in C:
-[src/scene.c](src/scene.c), [src/vector_scene_graph.c](src/vector_scene_graph.c), [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c), [src/viewer_collision.c](src/viewer_collision.c), [src/event_loop.c](src/event_loop.c), [src/renderer_lifecycle.c](src/renderer_lifecycle.c) und die generischen Teile aus [src/game_demo_minifb.c](src/game_demo_minifb.c), die in Host-/Viewer-/Spatial-Library-Code ueberfuehrt werden.
+[src/scene.c](src/scene.c), [src/vector_scene_graph.c](src/vector_scene_graph.c), [src/rendered_state_snapshot.c](src/rendered_state_snapshot.c), [src/fx_collision.c](src/fx_collision.c), [src/event_loop.c](src/event_loop.c), [src/renderer_lifecycle.c](src/renderer_lifecycle.c) und die generischen Teile aus [src/game_demo_minifb.c](src/game_demo_minifb.c), die in Host-/Viewer-/Spatial-Library-Code ueberfuehrt werden.
 
 ```mermaid
 flowchart LR
@@ -76,7 +130,8 @@ flowchart LR
 3. Breakout-Domaene in Clojure sauber aufteilen.
   Die Breakout-Clojure-Seite in klare Rollen schneiden:
   - `tiny-breakout.core` oder `tiny-breakout.state`: autoritativer Reducer
-  - `tiny-breakout.runtime`: Host-/Timer-/Input-Verkabelung
+  - `tiny-breakout.runtime`: State-/Scene-Publishing, Segment-Watches, Timer-/Timeline-Verkabelung
+  - `tiny-breakout.runtime-play`: Input-Normalisierung und unmittelbare Runtime-Reaktion auf Host-/Spatial-Events
   - optional neues Modul fuer Collision-Event -> Domain-Event, falls `tiny-breakout.runtime` weiter schrumpfen soll
   - [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj): reine Projektion `state -> FrameScene`
   - [libs/tiny-breakout/audio.clj](libs/tiny-breakout/audio.clj): reine Cue-Ableitung
@@ -100,6 +155,7 @@ flowchart LR
 - Persistente, abgeleitete Runtime-Daten in Clojure nur dann global halten, wenn sie wirklich wiederverwendet werden.
 - Generische C-APIs ohne Breakout-Begriffe benennen und testen.
 - Keine zweite Source of Truth in C mehr zulassen.
+- Namespace-/Schema-Ladepfade explizit halten; keine impliziten Breakout- oder GFX-Initialisierungen aus beliebigen C-Threads.
 - Snapshot-Events muessen die beteiligten Objekte im Kollisionszustand tragen.
 - Animation-End-Events bleiben Opt-in, damit unmarkierte Timelines keinen Overhead erzeugen.
 - Runloop-/Deferred-Callback-Exceptions duerfen nicht still verschwinden; sie muessen mindestens nach `stderr` sichtbar werden.

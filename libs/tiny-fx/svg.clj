@@ -1,5 +1,6 @@
 (ns tiny-fx.svg
   (:require [clojure.string :as str]
+            [tiny-fx.gfx :as gfx]
             [tiny-fx.gfx-scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style ->VText]]))
 
 ;; tiny-fx.svg
@@ -137,48 +138,6 @@
         default-value
         (read-string token)))))
 
-(defn- hex-digit-value
-  [c]
-  (cond
-    (or (= c \0) (= c 48)) 0
-    (or (= c \1) (= c 49)) 1
-    (or (= c \2) (= c 50)) 2
-    (or (= c \3) (= c 51)) 3
-    (or (= c \4) (= c 52)) 4
-    (or (= c \5) (= c 53)) 5
-    (or (= c \6) (= c 54)) 6
-    (or (= c \7) (= c 55)) 7
-    (or (= c \8) (= c 56)) 8
-    (or (= c \9) (= c 57)) 9
-    (or (= c \a) (= c 97)) 10
-    (or (= c \b) (= c 98)) 11
-    (or (= c \c) (= c 99)) 12
-    (or (= c \d) (= c 100)) 13
-    (or (= c \e) (= c 101)) 14
-    (or (= c \f) (= c 102)) 15
-    (or (= c \A) (= c 65)) 10
-    (or (= c \B) (= c 66)) 11
-    (or (= c \C) (= c 67)) 12
-    (or (= c \D) (= c 68)) 13
-    (or (= c \E) (= c 69)) 14
-    (or (= c \F) (= c 70)) 15
-    :else -1))
-
-(defn- parse-hex2
-  [s offset]
-  (let [c1 (hex-digit-value (nth s offset))
-        c2 (hex-digit-value (nth s (+ offset 1)))]
-    (if (or (< c1 0) (< c2 0))
-      nil
-      (+ (* c1 16) c2))))
-
-(defn- rgb888->rgb565
-  [r g b]
-  (let [r5 (quot (* r 31) 255)
-        g6 (quot (* g 63) 255)
-        b5 (quot (* b 31) 255)]
-    (+ (* r5 2048) (* g6 32) b5)))
-
 (defn- parse-color-rgb565
   [s]
   (if (nil? s)
@@ -187,12 +146,11 @@
       (cond
         (or (= t "") (= t "none")) nil
         (and (= (count t) 7) (= (subs t 0 1) "#"))
-        (let [r (parse-hex2 t 1)
-              g (parse-hex2 t 3)
-              b (parse-hex2 t 5)]
-          (if (or (nil? r) (nil? g) (nil? b))
-            nil
-            (rgb888->rgb565 r g b)))
+        (if (every? (fn [ch]
+                      (not (nil? (str/index-of "0123456789abcdef" (str ch) 0))))
+                    (subs t 1))
+          (gfx/color (read-string (str "0x" (subs t 1))))
+          nil)
         :else nil))))
 
 (defn- style-from-svg

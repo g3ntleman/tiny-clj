@@ -383,6 +383,7 @@ static inline bool gpio_event_ring_pop(GpioEvent *out) {
 /** ISR-side signal only: request one drain in thread context. */
 static inline void gpio_request_drain_from_isr(void) {
     atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
+    event_loop_wake();
 }
 
 /** Promote pending ISR events into C callbacks and Clojure watches. */

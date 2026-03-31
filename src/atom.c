@@ -8,6 +8,24 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#if CLJ_ATOM_USE_MUTEX
+static inline void atom_lock(CljAtom *atom) {
+  (void)pthread_mutex_lock(&atom->mutex);
+}
+
+static inline void atom_unlock(CljAtom *atom) {
+  (void)pthread_mutex_unlock(&atom->mutex);
+}
+#else
+static inline void atom_lock(CljAtom *atom) {
+  (void)atom;
+}
+
+static inline void atom_unlock(CljAtom *atom) {
+  (void)atom;
+}
+#endif
+
 /** Create an atom with initial value.
  * @param value Initial value (can be NULL/nil or immediate)
  * @return New atom object with RC=1 (caller must release)
@@ -16,6 +34,9 @@ CljAtom *make_atom(ID value) {
   CljAtom *atom = ALLOC(CljAtom, 1);
 
   atom->base.type = CLJ_ATOM;
+#if CLJ_ATOM_USE_MUTEX
+  (void)pthread_mutex_init(&atom->mutex, NULL);
+#endif
   // RETAIN handles nil and immediates safely (ignores them)
   atom->value = RETAIN(value);
 
@@ -25,19 +46,36 @@ CljAtom *make_atom(ID value) {
 ID atom_deref(CljAtom *atom) {
   if (!atom)
     return NULL;
-  return AUTORELEASE(RETAIN(atom->value));
+  atom_lock(atom);
+  ID value = RETAIN(atom->value);
+  atom_unlock(atom);
+  return AUTORELEASE(value);
+}
+
+ID atom_deref_owned(CljAtom *atom) {
+  if (!atom)
+    return NULL;
+  atom_lock(atom);
+  ID value = RETAIN(atom->value);
+  atom_unlock(atom);
+  return value;
 }
 
 ID atom_peek(CljAtom *atom) {
   if (!atom)
     return NULL;
-  return atom->value;
+  atom_lock(atom);
+  ID value = atom->value;
+  atom_unlock(atom);
+  return value;
 }
 
 void atom_set(CljAtom *atom, ID new_value) {
   if (!atom)
     return;
+  atom_lock(atom);
   ASSIGN(atom->value, new_value);
+  atom_unlock(atom);
 }
 
 /** Internal helper: set atom value and return owned result. */
@@ -93,11 +131,20 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
   }
 
   // Get current value (RETAIN handles nil and immediates safely)
-  ID current_value = RETAIN(atom->value);
+  ID current_value = atom_deref_owned(atom);
 
-  // Prepare function call arguments: [current_value, ...args]
-  // Use malloc instead of calloc - array is immediately filled
-  ID *fn_args = (ID *)CLJ_MALLOC((argc + 1) * sizeof(ID));
+  // Keep the common swap! arities on the stack to avoid hot-path heap churn.
+  ID fn_args_buf[4];
+  ID *fn_args = fn_args_buf;
+  bool fn_args_on_heap = false;
+  if (argc + 1u > (sizeof(fn_args_buf) / sizeof(fn_args_buf[0]))) {
+    fn_args = (ID *)CLJ_MALLOC((argc + 1) * sizeof(ID));
+    if (!fn_args) {
+      RELEASE(current_value);
+      return NULL;
+    }
+    fn_args_on_heap = true;
+  }
 
   fn_args[0] = current_value; // First argument is current atom value
   for (unsigned int i = 0; i < argc; i++) {
@@ -118,7 +165,9 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     for (unsigned int i = 0; i < argc + 1; i++) {
       RELEASE(fn_args[i]);
     }
-    CLJ_FREE(fn_args);
+    if (fn_args_on_heap) {
+      CLJ_FREE(fn_args);
+    }
     return NULL;
   }
   END_TRY
@@ -127,7 +176,9 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
   for (unsigned int i = 0; i < argc + 1; i++) {
     RELEASE(fn_args[i]);
   }
-  CLJ_FREE(fn_args);
+  if (fn_args_on_heap) {
+    CLJ_FREE(fn_args);
+  }
 
   if (!new_value) {
     // Function returned nil or error
@@ -140,4 +191,12 @@ static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
   return AUTORELEASE(atom_swap_owned(atom, fn, args, argc));
+}
+
+void atom_destroy(CljAtom *atom) {
+  if (!atom)
+    return;
+#if CLJ_ATOM_USE_MUTEX
+  (void)pthread_mutex_destroy(&atom->mutex);
+#endif
 }

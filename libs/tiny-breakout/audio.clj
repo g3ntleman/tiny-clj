@@ -1,108 +1,101 @@
 (ns tiny-breakout.audio
   (:require [tiny-fx.sound :as sound]))
 
-(def sfx-library
+;; Runtime audio keeps precompiled TRK1 payloads in namespace defs so gameplay
+;; can reuse them directly without relying on backend-side preloading state.
+;; The DSL compiler lives in tiny-breakout.audio-compiler and is intentionally
+;; not required here.
+(def paddle-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 180 176 16 4 20 20 176 40 5 20 24 32]))
+
+(def brick-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 200 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32]))
+
+(def life-lost-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32]))
+
+(def level-clear-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 210 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32]))
+
+(def game-over-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32]))
+
+(def victory-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32]))
+
+(def wall-hit-track-bytes
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32]))
+
+(def cue-specs
   {:sfx/paddle-hit
    {:track-id :tiny-breakout/paddle-hit
-    :kind :sfx
-    :steps [{:notes [1040] :duration 20}
-            {:notes [1320] :duration 24}]
-    :opts {:channel-count 1
-           :gate-percent 72
-           :volumes [180]}}
+    :track-bytes paddle-hit-track-bytes}
 
    :sfx/brick-hit
    {:track-id :tiny-breakout/brick-hit
-    :kind :sfx
-    :steps [{:notes [1480] :duration 16}
-            {:notes [1720] :duration 16}
-            {:notes [1960] :duration 18}]
-    :opts {:channel-count 1
-           :gate-percent 70
-           :volumes [200]}}
+    :track-bytes brick-hit-track-bytes}
 
    :sfx/life-lost
    {:track-id :tiny-breakout/life-lost
-    :kind :sfx
-    :steps [{:notes [880] :duration 32}
-            {:notes [660] :duration 36}
-            {:notes [440] :duration 54}]
-    :opts {:channel-count 1
-           :gate-percent 78
-           :volumes [220]}}
+    :track-bytes life-lost-track-bytes}
 
    :sfx/level-clear
    {:track-id :tiny-breakout/level-clear
-    :kind :sfx
-    :steps [{:notes [880] :duration 24}
-            {:notes [1320] :duration 24}
-            {:notes [1760] :duration 36}]
-    :opts {:channel-count 1
-           :gate-percent 76
-           :volumes [210]}}
+    :track-bytes level-clear-track-bytes}
 
    :sfx/game-over
    {:track-id :tiny-breakout/game-over
-    :kind :sfx
-    :steps [{:notes [740] :duration 28}
-            {:notes [554] :duration 36}
-            {:notes [392] :duration 60}]
-    :opts {:channel-count 1
-           :gate-percent 80
-           :volumes [220]}}
+    :track-bytes game-over-track-bytes}
 
    :sfx/victory
    {:track-id :tiny-breakout/victory
-    :kind :sfx
-    :steps [{:notes [1040] :duration 20}
-            {:notes [1318] :duration 20}
-            {:notes [1568] :duration 24}
-            {:notes [2093] :duration 48}]
-    :opts {:channel-count 1
-           :gate-percent 74
-           :volumes [210]}}})
+    :track-bytes victory-track-bytes}
 
-(defn event->cue
-  "Maps one normalized gameplay event keyword to a symbolic audio cue."
-  [event-id]
-  (cond
-    (= event-id :paddle-hit) :sfx/paddle-hit
-    (= event-id :brick-hit) :sfx/brick-hit
-    (= event-id :life-lost) :sfx/life-lost
-    (= event-id :level-clear) :sfx/level-clear
-    (= event-id :game-over) :sfx/game-over
-    (= event-id :victory) :sfx/victory
-    :else nil))
+   :sfx/wall-hit
+   {:track-id :tiny-breakout/wall-hit
+    :track-bytes wall-hit-track-bytes}})
 
-(defn sfx-spec
-  "Returns one deterministic mini-SFX descriptor map or nil."
-  [cue-id]
-  (get sfx-library cue-id))
-
-(defn events->cues
-  "Maps a vector/list of event keywords to cue keywords, dropping unknown events."
-  [events]
-  (let [xs (if (vector? events) events (if (list? events) (vec events) []))]
-    (reduce (fn [out e]
-              (let [cue (event->cue e)]
-                (if cue (conj out cue) out)))
-            []
-            xs)))
-
-(defn play-cue!
-  "Plays one symbolic cue when it resolves to a known SFX descriptor."
-  [cue-id]
-  (let [spec (sfx-spec cue-id)]
-    (if (map? spec)
-      (sound/play! spec)
-      nil)))
-
-(defn play-events!
-  "Plays all known audio cues for the given gameplay events."
-  [events]
-  (loop [remaining (events->cues events)
+(defn keep-known-cues
+  "Keeps only known breakout SFX cue ids from a cue list."
+  [cues]
+  (loop [remaining (seq cues)
          out []]
-    (if (empty? remaining)
-      out
-      (recur (rest remaining)
-             (conj out (play-cue! (first remaining)))))))
+    (if (seq remaining)
+      (let [cue-id (first remaining)]
+        (recur (next remaining)
+               (if (contains? cue-specs cue-id) (conj out cue-id) out)))
+      out)))
+
+(defn- play-cue!
+  "Best-effort playback of one breakout cue through tiny-fx sound backend."
+  [cue-id]
+  (let [spec (get tiny-breakout.audio/cue-specs cue-id)]
+    (when (map? spec)
+      (try
+        (sound/sound-stop-track! (:track-id spec))
+        (sound/sound-play-sfx! (:track-id spec) (:track-bytes spec))
+        (catch RuntimeException _
+          nil)
+        (catch Exception _
+          nil)))))
+
+(defn prewarm-engine!
+  "Starts native sound backend + tick path before first gameplay SFX.
+  Avoids a one-frame hitch when the first audible cue is :brick-hit (lazy init
+  otherwise happens inside sound-play-sfx!)."
+  []
+  (try
+    (sound/sound-stop-all!)
+    (catch RuntimeException _ nil)
+    (catch Exception _ nil))
+  nil)
+
+(defn play-cues!
+  "Plays known breakout SFX cue ids as one-shot sounds."
+  [cues]
+  (loop [remaining (seq cues)]
+    (when (seq remaining)
+      (let [cue-id (first remaining)]
+        (when (contains? cue-specs cue-id) (play-cue! cue-id))
+        (recur (next remaining)))))
+  nil)

@@ -307,6 +307,39 @@ TEST(test_map_assoc_direct) {
   }
 }
 
+TEST(test_make_map_from_stack_capacity_is_tight) {
+  CljObject *pairs[6];
+  pairs[0] = (CljObject *)intern_symbol(NULL, ":a");
+  pairs[1] = (CljObject *)fixnum(1);
+  pairs[2] = (CljObject *)intern_symbol(NULL, ":b");
+  pairs[3] = (CljObject *)fixnum(2);
+  pairs[4] = (CljObject *)intern_symbol(NULL, ":c");
+  pairs[5] = (CljObject *)fixnum(3);
+
+  CljPersistentMap *map = AUTORELEASE(make_map_from_stack(pairs, 3));
+  TEST_ASSERT_NOT_NULL(map);
+  TEST_ASSERT_EQUAL_INT(3, map->count);
+  TEST_ASSERT_EQUAL_INT(3, map->capacity);
+}
+
+TEST(test_map_copy_with_additions_capacity_is_tight) {
+  CljPersistentMap *parent = AUTORELEASE(make_map(2));
+  parent = map_assoc(parent, (CljValue)intern_symbol(NULL, ":a"), fixnum(1));
+  TEST_ASSERT_NOT_NULL(parent);
+  TEST_ASSERT_EQUAL_INT(1, parent->count);
+
+  CljObject *additions[4];
+  additions[0] = (CljObject *)intern_symbol(NULL, ":b");
+  additions[1] = (CljObject *)fixnum(2);
+  additions[2] = (CljObject *)intern_symbol(NULL, ":c");
+  additions[3] = (CljObject *)fixnum(3);
+
+  CljPersistentMap *result = AUTORELEASE(map_copy_with_additions(parent, additions, 2));
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_EQUAL_INT(3, result->count);
+  TEST_ASSERT_EQUAL_INT(3, result->capacity);
+}
+
 // ============================================================================
 // Tests for map_transient() - Convert persistent map to transient
 // ============================================================================

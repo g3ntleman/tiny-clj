@@ -35,20 +35,20 @@ if ! command -v clojure &> /dev/null; then
     exit 1
 fi
 
-# Ensure Release build directory exists
-RELEASE_BUILD_DIR="./build-release"
-if [ ! -d "$RELEASE_BUILD_DIR" ]; then
-    echo -e "${YELLOW}⚠️  Release build directory not found. Creating Release build...${NC}"
-    mkdir -p "$RELEASE_BUILD_DIR"
-    (cd "$RELEASE_BUILD_DIR" && cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_LTO=OFF)
+# Ensure canonical build directory exists
+BUILD_DIR="./build"
+if [ ! -d "$BUILD_DIR" ]; then
+    echo -e "${YELLOW}⚠️  Build directory not found. Creating build...${NC}"
 fi
+
+# Configure Release build in canonical build dir
+cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_LTO=OFF
 
 # Build Release version
 echo -e "${YELLOW}🔨 Building Release version of tiny-clj-repl...${NC}"
-(cd "$RELEASE_BUILD_DIR" && cmake --build . --target tiny-clj-repl)
+(cmake --build "$BUILD_DIR" --target tiny-clj-repl)
 
-# Note: CMake sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to ./build, so the binary is in ./build, not build-release
-TINY_CLJ_PATH="./build/tiny-clj-repl"
+TINY_CLJ_PATH="$BUILD_DIR/tiny-clj-repl"
 if [ ! -f "$TINY_CLJ_PATH" ]; then
     echo -e "${RED}❌ Could not build tiny-clj-repl in Release mode${NC}"
     exit 1
@@ -176,4 +176,3 @@ else
     echo "tiny-clj output:"
     [ -f "$RESULTS_DIR/tiny_clj_fibonacci_naive.log" ] && cat "$RESULTS_DIR/tiny_clj_fibonacci_naive.log"
 fi
-

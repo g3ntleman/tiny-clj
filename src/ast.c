@@ -191,7 +191,7 @@ CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint16_t e
     cache->resolved = NULL;
     cache->epoch = epoch;
     cache->epoch_generation = g_runtime.resolve_cache_generation;
-    cache->lookup_hint_index = UINT8_MAX;
+
     ASSIGN(cache->resolved, resolved);
     return cache;
 }
@@ -259,7 +259,7 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
     cache->symbol = symbol;
     cache->epoch = epoch;
     cache->epoch_generation = g_runtime.resolve_cache_generation;
-    cache->lookup_hint_index = UINT8_MAX;
+
     ASSIGN(cache->resolved, resolved);
 }
 
@@ -297,7 +297,7 @@ void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID reso
     cache->symbol = symbol;
     cache->epoch = epoch;
     cache->epoch_generation = g_runtime.resolve_cache_generation;
-    cache->lookup_hint_index = UINT8_MAX;
+
     ASSIGN(cache->resolved, resolved);
 }
 

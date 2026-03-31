@@ -16,6 +16,7 @@
 struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
     bool loaded;              // true once namespace source has been loaded/evaluated
+    bool loading;             // true while namespace source is currently being evaluated
     CljSymbol *name;          // z.B. 'user', 'math'
     CljPersistentMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
     CljPersistentMap *private_mappings; // Set-like map: private Symbol → true
@@ -59,6 +60,7 @@ bool ns_is_private(CljNamespace *ns, CljSymbol *symbol);
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
 void ns_begin_resolve_cache_batch(void); // Coalesce repeated invalidations into one epoch bump
 void ns_end_resolve_cache_batch(void);
+void ns_release_owned_state(CljNamespace *ns, bool keep_empty_shell);
 void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
@@ -68,6 +70,7 @@ void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name);
 
 // EvalState functions
 EvalState* get_global_eval_state(void);  // Get global thread-local EvalState
+EvalState* evalstate_set_global_override(EvalState *override_state);
 void reset_eval_state(void);      // Reset global state for test isolation
 void reset_eval_state_current_ns(void);  // Clear current_ns pointer (for cleanup)
 EvalState* evalstate_new(bool load_core);  // Returns global state (for compatibility)

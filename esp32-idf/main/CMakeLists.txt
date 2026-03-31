@@ -1,16 +1,4 @@
-## Choose which runtime product the firmware should expose.
-if(NOT DEFINED TINYCLJ_PRODUCT)
-  set(TINYCLJ_PRODUCT "tiny-clj" CACHE STRING "tiny-clj product: tiny-clj|tiny-fx")
-endif()
-set_property(CACHE TINYCLJ_PRODUCT PROPERTY STRINGS tiny-clj tiny-fx)
-
-if(TINYCLJ_PRODUCT STREQUAL "tiny-clj")
-  set(TINYCLJ_WITH_TINY_FX OFF CACHE BOOL "Build tiny-fx native feature set" FORCE)
-elseif(TINYCLJ_PRODUCT STREQUAL "tiny-fx")
-  set(TINYCLJ_WITH_TINY_FX ON CACHE BOOL "Build tiny-fx native feature set" FORCE)
-else()
-  message(FATAL_ERROR "Unknown TINYCLJ_PRODUCT='${TINYCLJ_PRODUCT}'. Expected tiny-clj or tiny-fx.")
-endif()
+## TINYCLJ_PRODUCT / TINYCLJ_WITH_TINY_FX: set in esp32-idf/cmake/tinyclj_idf_compile_flags.cmake (before project()).
 
 ## Shared runtime contract: always include the embedded core platform plus
 ## the UART REPL helpers.
@@ -21,6 +9,7 @@ idf_component_register(
   SRCS
     "tinyclj_idf_main.c"
     "tinyclj_idf_run.c"
+    "tinyclj_idf_display.c"
     ${PLATFORM_SRCS}
   INCLUDE_DIRS
     "."
@@ -32,6 +21,9 @@ idf_component_register(
     esp_hw_support
     heap
     log
+    esp_driver_gpio
+    esp_driver_spi
+    esp_lcd
     esp_driver_uart
     spi_flash
     subjective-c
