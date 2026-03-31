@@ -5,28 +5,26 @@
 ;; can reuse them directly without relying on backend-side preloading state.
 ;; The DSL compiler lives in tiny-breakout.audio-compiler and is intentionally
 ;; not required here.
-;; TRK1 header is 20 bytes; byte[21] is the SET_VOL parameter (0..255).
-;; All SFX are kept at volume 60 (~30 % of max) so they are not intrusive.
 (def paddle-hit-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 60 176 16 4 20 20 176 40 5 20 24 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 180 176 16 4 20 20 176 40 5 20 24 32]))
 
 (def brick-hit-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 60 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 200 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32]))
 
 (def life-lost-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 60 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32]))
 
 (def level-clear-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 60 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 210 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32]))
 
 (def game-over-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 60 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32]))
 
 (def victory-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 60 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32]))
 
 (def wall-hit-track-bytes
-  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 60 176 148 2 20 16 176 184 1 20 18 32]))
+  (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32]))
 
 (def cue-specs
   {:sfx/paddle-hit

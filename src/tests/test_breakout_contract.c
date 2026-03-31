@@ -504,7 +504,7 @@ TEST(test_breakout_contract_wall_hit_audio_starts_only_after_deferred_publish_ta
         "                                     :to-x 0 "
         "                                     :to-y 120 "
         "                                     :wall :left})) "
-        "        next-state (tiny-breakout.core/apply-segment-end-at-ms s0 7 20) "
+        "        next-state (:state (tiny-breakout.core/step s0 {:type :game/segment-ended :segment-id 7} 20)) "
         "        before (tiny-fx.sound-debug/host-status!)] "
         "    (tiny-breakout.runtime/publish-state! next-state) "
         "    (let [immediate (tiny-fx.sound-debug/host-status!)] "

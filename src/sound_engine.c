@@ -921,6 +921,12 @@ static void tick_drain_commands(void) {
                 g_sound_engine.music_stream.track_id == cmd.track_id) {
                 g_sound_engine.music_stream.track_volume = (uint8_t)cmd.int_param;
             }
+            for (int i = 0; i < SOUND_MAX_SFX; i++) {
+                if (g_sound_engine.sfx[i].stream.active &&
+                    g_sound_engine.sfx[i].stream.track_id == cmd.track_id) {
+                    g_sound_engine.sfx[i].stream.track_volume = (uint8_t)cmd.int_param;
+                }
+            }
             break;
 
         case SOUND_CMD_SET_MUSIC_VOL:
