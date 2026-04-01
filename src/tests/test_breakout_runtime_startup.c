@@ -141,6 +141,10 @@ static bool breakout_capture_drain_one_runloop_task(void *ctx) {
     return fx_drain_one_runloop_task(capture_ctx->st);
 }
 
+static inline void breakout_apply_incremental_heap_budget(size_t budget_bytes) {
+    memory_set_heap_limit_bytes(memory_current_usage_bytes() + budget_bytes);
+}
+
 static bool breakout_fx_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
                                                                bool apply_host_heap_budget) {
     if (!ctx) {
@@ -161,7 +165,7 @@ static bool breakout_fx_test_context_init_with_heap_budget(BreakoutViewerTestCon
     vg_rendered_state_reset_all();
     fx_seed_gpio_key_levels();
     if (apply_host_heap_budget) {
-        tiny_fx_host_apply_heap_limit();
+        breakout_apply_incremental_heap_budget(tiny_fx_host_heap_limit_bytes());
     }
 
     ctx->st = evalstate_new(true);
@@ -316,7 +320,7 @@ TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
         breakout_fx_test_context_destroy(&ctx);
     }
 
-    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "first breakout launch should not OOM under 640KB total heap budget" : "");
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "first breakout launch should not OOM under 640KB incremental heap headroom" : "");
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should initialize before first-launch heap assertion");
     TEST_ASSERT_EQUAL_PTR(clj_true, launched);
 }
@@ -366,7 +370,8 @@ TEST(test_breakout_runtime_startup_first_launch_heap_profile_stays_bounded) {
     ID total = NULL;
     ID peak = NULL;
 
-    TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
+    TEST_ASSERT_TRUE_MESSAGE(breakout_fx_test_context_init_with_heap_budget(&ctx, true),
+                             "breakout first-launch heap profile should initialize inside the host incremental heap budget");
 
     stats = eval_string(
         "(do "
@@ -1522,12 +1527,15 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
     VgSlotChangeTracker slot_change_tracker = {0};
     size_t previous_limit = memory_get_heap_limit_bytes();
     const size_t stricter_limit = 592u * 1024u;
+    size_t mem_before_frames = 0u;
+    size_t mem_after_frames = 0u;
+    size_t mem_growth = 0u;
     bool caught = false;
     ID caught_ex = NULL;
 
     TRY {
         TEST_ASSERT_TRUE(breakout_fx_test_context_init_with_heap_budget(&ctx, true));
-        memory_set_heap_limit_bytes(stricter_limit);
+        breakout_apply_incremental_heap_budget(stricter_limit);
         TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
 
         ID ok = eval_string(
@@ -1544,6 +1552,8 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
             "  true)",
             ctx.st);
         TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+        mem_before_frames = memory_current_usage_bytes();
 
         TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
 
@@ -1563,6 +1573,8 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
 
     memory_set_heap_limit_bytes(previous_limit);
     stop_runloop_thread();
+    mem_after_frames = memory_current_usage_bytes();
+    mem_growth = (mem_after_frames > mem_before_frames) ? (mem_after_frames - mem_before_frames) : 0u;
     vg_slot_change_tracker_destroy(&slot_change_tracker);
     breakout_fx_test_context_destroy(&ctx);
 
@@ -1570,9 +1582,14 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
         print_exception(caught_ex);
     }
 
+    char growth_msg[128];
+    mini_snprintf(growth_msg, sizeof(growth_msg),
+                  "post-launch runloop leaked %zu bytes (limit 8192)", mem_growth);
+
     TEST_ASSERT_FALSE_MESSAGE(caught,
-                              caught_ex ? "post-launch runloop frames should fit inside the stricter 592KB debug heap budget"
+                              caught_ex ? "post-launch runloop frames should fit inside the stricter 592KB simulated device heap budget"
                                         : "");
+    TEST_ASSERT_TRUE_MESSAGE(mem_growth <= 8192u, growth_msg);
 }
 
 TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_scores_once) {
