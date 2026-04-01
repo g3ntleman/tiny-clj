@@ -47,11 +47,11 @@ TinyClJRuntime g_runtime = {
 };
 
 // Epoch for callsite-cache invalidation events (namespace mutations).
-// Reset on runtime_reset() to start each runtime lifecycle from a clean baseline.
+// Reset on runtime_reset() to start each runtime activation from a clean baseline.
 static uint32_t g_resolve_cache_epoch_counter = 1;
-// Lightweight lifecycle generation for runtime_init activation epochs.
-static uint8_t g_resolve_cache_lifecycle_generation = 0;
-// Monotonic runtime activation id for caches tied to a runtime lifecycle.
+// Activation generation paired with the epoch-1 bootstrap state in runtime_init().
+static uint8_t g_resolve_cache_activation_generation = 0;
+// Monotonic runtime activation id for caches tied to a runtime activation.
 static uint32_t g_runtime_activation_counter = 0;
 static uint32_t g_runtime_activation_id = 0;
 
@@ -85,8 +85,8 @@ static bool runtime_bootstrap_builtins_present(void) {
     return map_get_sentinel((ID)core_ns->mappings, (ID)SYM_PLUS, NULL) != NULL;
 }
 
-static inline uint8_t runtime_next_lifecycle_generation(void) {
-    return runtime_next_nonzero_u8(&g_resolve_cache_lifecycle_generation);
+static inline uint8_t runtime_next_resolve_cache_activation_generation(void) {
+    return runtime_next_nonzero_u8(&g_resolve_cache_activation_generation);
 }
 
 static inline uint32_t runtime_next_activation_id_value(void) {
@@ -158,13 +158,13 @@ void runtime_init(TinyClJRuntime *runtime) {
         hashset_set_max_load_percent(runtime->symbol_table, SYMBOL_TABLE_MAX_LOAD_PERCENT);
     }
     
-    // Activate callsite caching for this runtime lifecycle without attributing
+    // Activate callsite caching for this runtime activation without attributing
     // setup churn to invalidation counters.
     // When memory profiling is enabled, leave caching disabled so that
     // CallsiteCache allocations do not distort heap measurements.
 #if !MEMORY_PROFILING_ENABLED
     runtime->resolve_cache_epoch = 1;
-    runtime->resolve_cache_generation = runtime_next_lifecycle_generation();
+    runtime->resolve_cache_generation = runtime_next_resolve_cache_activation_generation();
 #else
     runtime->resolve_cache_generation = 0;
 #endif
@@ -235,11 +235,11 @@ void runtime_reset(TinyClJRuntime *runtime) {
     
     ASSIGN(runtime->task_queue, NULL);
     // Reset cache epoch to disabled state. runtime_init() re-enables callsite caching
-    // with a fresh monotonic epoch for the next runtime lifecycle.
+    // with a fresh monotonic epoch for the next runtime activation.
     runtime->resolve_cache_epoch = 0;
     runtime->resolve_cache_generation = 0;
     g_resolve_cache_epoch_counter = 1;
-    g_resolve_cache_lifecycle_generation = 0;
+    g_resolve_cache_activation_generation = 0;
     g_runtime_activation_id = 0;
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
