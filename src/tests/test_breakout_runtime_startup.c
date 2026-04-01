@@ -35,6 +35,8 @@ void macos_fx_stop_runloop_watchdog(void) { g_macos_runloop_watchdog_stop_calls+
 #undef main
 #include "../builtins.h"
 #include "../meta.h"
+#include "../strings.h"
+#include "../to_string.h"
 #include "../tiny_clj.h"
 #include "unity/src/unity.h"
 #include "test_registry.h"
@@ -1179,14 +1181,15 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
 
     ID callback = eval_string(
         "(do "
-        "  (def breakout-collision-drain-marker (atom nil)) "
+        "  (def breakout-collision-drain-events (atom [])) "
         "  (fn [event] "
-        "    (reset! breakout-collision-drain-marker [(:phase event) (:id event)]) "
+        "    (swap! breakout-collision-drain-events conj [(:phase event) (:id event)]) "
         "    nil))",
         ctx.st);
     TEST_ASSERT_NOT_NULL(callback);
     RELEASE(ctx.bundle.spatial_callback);
     ctx.bundle.spatial_callback = RETAIN(callback);
+    event_loop_clear();
 
     ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
     ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
@@ -1219,14 +1222,38 @@ TEST(test_breakout_runtime_startup_collision_step_pushes_dispatch_into_ingress_i
     TEST_ASSERT_TRUE(fx_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
     TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
     TEST_ASSERT_TRUE(event_loop_ingress_has_pending());
-    TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
+    ID drained_before = eval_string("(count @breakout-collision-drain-events)", ctx.st);
+    TEST_ASSERT_TRUE(is_fixnum(drained_before));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(drained_before));
 
-    TEST_ASSERT_TRUE(event_loop_run_next(NULL, ctx.st));
-    ID marker = eval_string("@breakout-collision-drain-marker", ctx.st);
-    TEST_ASSERT_NOT_NULL(marker);
-    TEST_ASSERT_TRUE(TAG(marker) == CLJ_VECTOR_PERSISTENT);
-    ID marker_ok = eval_string("(= @breakout-collision-drain-marker [:enter :ball-vs-paddle])", ctx.st);
-    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+    ID marker_ok = NULL;
+    for (int i = 0; i < 64 && event_loop_has_pending_tasks(); i++) {
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, ctx.st));
+        marker_ok = eval_string("(some #(= % [:enter :ball-vs-paddle]) @breakout-collision-drain-events)", ctx.st);
+        if (marker_ok == clj_true) {
+            break;
+        }
+    }
+    ID drained_events = eval_string("@breakout-collision-drain-events", ctx.st);
+    TEST_ASSERT_NOT_NULL(drained_events);
+    TEST_ASSERT_TRUE(TAG(drained_events) == CLJ_VECTOR_PERSISTENT);
+    if (marker_ok != clj_true) {
+        const char *events_text = "<render-failed>";
+        CljString *rendered_events = to_string(drained_events);
+        if (rendered_events) {
+            events_text = clj_string_data(rendered_events);
+        }
+        EventLoopIngressStats ingress_stats = {0};
+        (void)event_loop_ingress_stats(&ingress_stats);
+        char fail_msg[256];
+        mini_snprintf(fail_msg,
+                      sizeof(fail_msg),
+                      "expected [:enter :ball-vs-paddle] in drained events %s (pending ingress=%u)",
+                      events_text,
+                      ingress_stats.pending_count);
+        fprintf(stderr, "[collision-drain-debug] %s\n", fail_msg);
+        TEST_FAIL_MESSAGE(fail_msg);
+    }
     breakout_fx_test_context_destroy(&ctx);
 }
 

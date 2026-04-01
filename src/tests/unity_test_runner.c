@@ -48,6 +48,7 @@ static bool g_batch_mode = false;
 static bool g_quiet_output = false;
 static int g_quiet_saved_stdout_fd = -1;
 static bool g_quiet_stdout_redirect_active = false;
+static FILE *g_quiet_capture_file = NULL;
 
 // Single test mode: enable verbose memory stats when only one test runs
 static bool g_single_test_mode = false;
@@ -178,39 +179,62 @@ static bool group_runs_without_core(const SubjectiveCTestEntry *entry) {
   return false;
 }
 
-static void quiet_output_begin_capture(void) {
+static bool quiet_output_begin_capture(void) {
   if (!g_quiet_output || g_quiet_stdout_redirect_active) {
-    return;
+    return false;
   }
   fflush(stdout);
   int saved = dup(STDOUT_FILENO);
   if (saved < 0) {
-    return;
+    return false;
   }
-  int sink = open("/dev/null", O_WRONLY);
-  if (sink < 0) {
+
+  FILE *capture = tmpfile();
+  if (!capture) {
     close(saved);
-    return;
+    return false;
   }
-  if (dup2(sink, STDOUT_FILENO) < 0) {
-    close(sink);
+
+  if (dup2(fileno(capture), STDOUT_FILENO) < 0) {
+    fclose(capture);
     close(saved);
-    return;
+    return false;
   }
-  close(sink);
+
   g_quiet_saved_stdout_fd = saved;
+  g_quiet_capture_file = capture;
   g_quiet_stdout_redirect_active = true;
+  return true;
 }
 
-static void quiet_output_end_capture(void) {
+static bool quiet_output_end_capture(bool test_failed) {
   if (!g_quiet_stdout_redirect_active) {
-    return;
+    return false;
   }
+
   fflush(stdout);
   (void)dup2(g_quiet_saved_stdout_fd, STDOUT_FILENO);
   close(g_quiet_saved_stdout_fd);
   g_quiet_saved_stdout_fd = -1;
   g_quiet_stdout_redirect_active = false;
+
+  bool had_output = false;
+  if (g_quiet_capture_file) {
+    if (fflush(g_quiet_capture_file) == 0 && fseek(g_quiet_capture_file, 0, SEEK_SET) == 0) {
+      char buffer[512];
+      size_t nread = 0u;
+      while ((nread = fread(buffer, 1u, sizeof(buffer), g_quiet_capture_file)) > 0u) {
+        had_output = true;
+        if (test_failed) {
+          (void)fwrite(buffer, 1u, nread, stderr);
+        }
+      }
+    }
+    fclose(g_quiet_capture_file);
+    g_quiet_capture_file = NULL;
+  }
+
+  return had_output;
 }
 
 static void quiet_output_emit_fail_line(const SubjectiveCTestEntry *entry) {
@@ -536,11 +560,15 @@ static void set_unity_test_file_info(const SubjectiveCTestEntry *entry) {
 // Helper function to run a single test with exception handling
 static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) {
   bool test_failed = false;
+  bool quiet_capture_started = false;
 
   // Save initial failure count to detect if this test failed
   UNITY_COUNTER_TYPE initial_failures = Unity.TestFailures;
 
   g_current_test_entry = entry;
+  if (g_quiet_output) {
+    quiet_capture_started = quiet_output_begin_capture();
+  }
   TRY {
     // Call Unity directly with the line number from the test registry.
     // This avoids using RUN_TEST(__LINE__) from this file, so that the
@@ -580,10 +608,12 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
   END_TRY
   g_current_test_entry = NULL;
 
-  // Quiet mode contract: print ONLY FAIL lines (no PASS lines).
-  // stdout is redirected once per run to avoid per-test tmpfile/dup2 overhead.
-  if (g_quiet_output) {
-    if (test_failed) {
+  // Quiet mode contract: suppress PASS lines and stdout from passing tests,
+  // but preserve Unity assertion output for failing tests by replaying the
+  // captured stdout to stderr after the test finishes.
+  if (quiet_capture_started) {
+    bool had_output = quiet_output_end_capture(test_failed);
+    if (test_failed && !had_output) {
       quiet_output_emit_fail_line(entry);
     }
   }
@@ -677,9 +707,6 @@ void run_tests_by_registry_impl(void) {
   size_t test_count;
   const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
   g_single_test_mode = false;
-  if (g_quiet_output) {
-    quiet_output_begin_capture();
-  }
 
   // Shared tests are explicitly designed to run in batch mode with one heavy
   // setup/teardown per group; this avoids counting fixture/bootstrap costs as
@@ -703,9 +730,6 @@ void run_tests_by_registry_impl(void) {
     }
     END_TRY
   }
-  if (g_quiet_output) {
-    quiet_output_end_capture();
-  }
 }
 
 static bool contains_wildcard(const char *pattern) {
@@ -714,9 +738,6 @@ static bool contains_wildcard(const char *pattern) {
 
 void run_specific_test_impl(const char *test_name_or_pattern) {
   g_single_test_mode = false;
-  if (g_quiet_output) {
-    quiet_output_begin_capture();
-  }
   // Check if it's a wildcard pattern
   if (contains_wildcard(test_name_or_pattern)) {
     // Use pattern matching logic
@@ -813,9 +834,7 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
     }
   }
 done:
-  if (g_quiet_output) {
-    quiet_output_end_capture();
-  }
+  return;
 }
 
 // Set quiet output mode (suppress PASS lines and stdout from passing tests)
