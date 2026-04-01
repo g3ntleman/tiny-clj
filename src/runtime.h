@@ -75,6 +75,7 @@ extern TinyClJRuntime g_runtime;
 void runtime_init(TinyClJRuntime *runtime);
 void runtime_reset(TinyClJRuntime *runtime);
 uint16_t runtime_next_resolve_epoch(uint8_t *out_generation);
+uint32_t runtime_activation_id(void);
 
 // Legacy builtin functions removed - all builtins now use namespace registration
 

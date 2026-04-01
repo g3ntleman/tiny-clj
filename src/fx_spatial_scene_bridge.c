@@ -47,7 +47,7 @@ static IdSymbolCacheEntry g_fx_collision_scene_symbols[] = {
 
 static CljRecordDescriptor *g_fx_collision_desc_aabb = NULL;
 static CljRecordDescriptor *g_fx_collision_desc_spatial_event = NULL;
-static CljHashMap *g_fx_collision_desc_cache_registry = NULL;
+static uint32_t g_fx_collision_desc_activation_id = 0u;
 
 static pthread_once_t g_fx_collision_scene_symbols_once = PTHREAD_ONCE_INIT;
 
@@ -73,34 +73,37 @@ static bool fx_collision_scene_descriptors_ready(void) {
     if (!fx_collision_scene_symbols_ready()) {
         return false;
     }
+    uint32_t activation_id = runtime_activation_id();
 
-    CljHashMap *registry = g_runtime.record_registry;
     if (g_fx_collision_desc_aabb &&
         g_fx_collision_desc_spatial_event &&
-        registry &&
-        g_fx_collision_desc_cache_registry == registry) {
+        activation_id != 0u &&
+        g_fx_collision_desc_activation_id == activation_id) {
         return true;
     }
 
-    // Record descriptors are runtime-lifecycle scoped. Ensure schema is present
-    // and rebind descriptor pointers whenever the registry instance changes.
+    // Record descriptors are scoped to one runtime activation. Ensure schema is
+    // present and rebind descriptor pointers when a new runtime activation starts.
     if (!tiny_fx_gfx_ensure_schema(NULL)) {
         return false;
     }
-    registry = g_runtime.record_registry;
-    if (!registry) {
-        g_fx_collision_desc_cache_registry = NULL;
+    if (!g_runtime.record_registry) {
         g_fx_collision_desc_aabb = NULL;
         g_fx_collision_desc_spatial_event = NULL;
+        g_fx_collision_desc_activation_id = 0u;
         return false;
     }
 
     g_fx_collision_desc_aabb = record_descriptor_lookup(g_fx_collision_sym_aabb);
     g_fx_collision_desc_spatial_event = record_descriptor_lookup(g_fx_collision_sym_spatial_event);
-    if (!g_fx_collision_desc_aabb || !g_fx_collision_desc_spatial_event) {
+    if (!g_fx_collision_desc_aabb || !g_fx_collision_desc_spatial_event ||
+        !g_fx_collision_desc_aabb->field_keys || !g_fx_collision_desc_spatial_event->field_keys) {
+        g_fx_collision_desc_aabb = NULL;
+        g_fx_collision_desc_spatial_event = NULL;
+        g_fx_collision_desc_activation_id = 0u;
         return false;
     }
-    g_fx_collision_desc_cache_registry = registry;
+    g_fx_collision_desc_activation_id = activation_id;
     return true;
 }
 

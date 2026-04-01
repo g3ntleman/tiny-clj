@@ -51,6 +51,26 @@ TinyClJRuntime g_runtime = {
 static uint32_t g_resolve_cache_epoch_counter = 1;
 // Lightweight lifecycle generation for runtime_init activation epochs.
 static uint8_t g_resolve_cache_lifecycle_generation = 0;
+// Monotonic runtime activation id for caches tied to a runtime lifecycle.
+static uint32_t g_runtime_activation_counter = 0;
+static uint32_t g_runtime_activation_id = 0;
+
+static inline uint8_t runtime_next_nonzero_u8(uint8_t *counter) {
+    uint8_t next = (uint8_t)(*counter + 1u);
+    if (next == 0u) {
+        next = 1u;
+    }
+    *counter = next;
+    return next;
+}
+
+static inline uint32_t runtime_next_nonzero_u32(uint32_t *counter) {
+    uint32_t next = ++(*counter);
+    if (next == 0u) {
+        next = ++(*counter);
+    }
+    return next;
+}
 
 static bool runtime_bootstrap_builtins_present(void) {
     if (!SYM_PLUS) {
@@ -65,15 +85,13 @@ static bool runtime_bootstrap_builtins_present(void) {
     return map_get_sentinel((ID)core_ns->mappings, (ID)SYM_PLUS, NULL) != NULL;
 }
 
-#if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_lifecycle_generation(void) {
-    uint8_t next = (uint8_t)(g_resolve_cache_lifecycle_generation + 1u);
-    // Keep 0 reserved for "disabled".
-    if (next == 0u) next = 1u;
-    g_resolve_cache_lifecycle_generation = next;
-    return next;
+    return runtime_next_nonzero_u8(&g_resolve_cache_lifecycle_generation);
 }
-#endif
+
+static inline uint32_t runtime_next_activation_id_value(void) {
+    return runtime_next_nonzero_u32(&g_runtime_activation_counter);
+}
 
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
 static void zombie_log_fn(CljObject *v, bool is_double_free) {
@@ -113,6 +131,10 @@ uint16_t runtime_next_resolve_epoch(uint8_t *out_generation) {
     return epoch;
 }
 
+uint32_t runtime_activation_id(void) {
+    return g_runtime_activation_id;
+}
+
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
     subjective_c_register_main_thread();
@@ -143,7 +165,10 @@ void runtime_init(TinyClJRuntime *runtime) {
 #if !MEMORY_PROFILING_ENABLED
     runtime->resolve_cache_epoch = 1;
     runtime->resolve_cache_generation = runtime_next_lifecycle_generation();
+#else
+    runtime->resolve_cache_generation = 0;
 #endif
+    g_runtime_activation_id = runtime_next_activation_id_value();
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -215,6 +240,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->resolve_cache_generation = 0;
     g_resolve_cache_epoch_counter = 1;
     g_resolve_cache_lifecycle_generation = 0;
+    g_runtime_activation_id = 0;
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     ASSIGN(runtime->record_registry, NULL);
