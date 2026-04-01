@@ -728,8 +728,7 @@ TEST(test_vector_scene_graph_game_demo_player_entity_matches_tri_type_hash) {
     const VgRecordSchema *schema = tiny_fx_gfx_schema();
     TEST_ASSERT_NOT_NULL(schema);
     TEST_ASSERT_TRUE(as_record(player)->descriptor != NULL);
-    uint32_t player_type_hash = clj_hash(as_record(player)->descriptor->type_symbol);
-    TEST_ASSERT_EQUAL_UINT32(schema->h_tri, player_type_hash);
+    TEST_ASSERT_EQUAL_PTR(schema->d_tri, as_record(player)->descriptor);
 }
 
 TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_in_clojure) {

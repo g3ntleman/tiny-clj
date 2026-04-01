@@ -98,6 +98,9 @@ endif()
 # NOTE: Avoid adding the whole 'external/' tree to include paths, so that
 # template/reference subprojects can't be
 # accidentally picked up by includes.
+# Keep the build dir first so generated headers like build_info.h override
+# checked-in fallback copies in the source tree.
+include_directories(BEFORE ${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR} include src ${CMAKE_SOURCE_DIR}/subjective-c/src/subjective-c)
 include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
 
@@ -186,7 +189,6 @@ configure_file(
 )
 
 # Make build_info.h available to all targets
-include_directories(${CMAKE_BINARY_DIR})
 
 # Source files (without main.c - main is target-specific)
 list(APPEND SOURCES

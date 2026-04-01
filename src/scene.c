@@ -162,9 +162,77 @@ static inline bool vg_scene_root_is_canonical(ID root_field) {
     return root_field == (ID)g_kw_root;
 }
 
-static inline uint32_t record_type_hash(ID obj) {
-    CljPersistentRecord *r = (CljPersistentRecord *)obj;
-    return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0;
+static inline CljRecordDescriptor *record_descriptor_of(ID obj) {
+    if (!obj || TAG(obj) != CLJ_RECORD) {
+        return NULL;
+    }
+    return as_record(obj)->descriptor;
+}
+
+typedef struct {
+    ID id;
+    ID t;
+    ID style;
+    ID visible;
+} VgSceneNodeCommonFields;
+
+static bool scene_node_common_fields(ID node_obj,
+                                     CljRecordDescriptor *desc,
+                                     const VgRecordSchema *s,
+                                     VgSceneNodeCommonFields *out_fields) {
+    if (!node_obj || !desc || !s || !out_fields) {
+        return false;
+    }
+
+    if (desc == s->d_group) {
+        Group *group = (Group *)node_obj;
+        out_fields->id = group->id;
+        out_fields->t = group->t;
+        out_fields->style = group->style;
+        out_fields->visible = group->visible;
+        return true;
+    }
+    if (desc == s->d_rect) {
+        Rect *rect = (Rect *)node_obj;
+        out_fields->id = rect->id;
+        out_fields->t = rect->t;
+        out_fields->style = rect->style;
+        out_fields->visible = rect->visible;
+        return true;
+    }
+    if (desc == s->d_line) {
+        Line *line = (Line *)node_obj;
+        out_fields->id = line->id;
+        out_fields->t = line->t;
+        out_fields->style = line->style;
+        out_fields->visible = line->visible;
+        return true;
+    }
+    if (desc == s->d_vtext) {
+        VText *text = (VText *)node_obj;
+        out_fields->id = text->id;
+        out_fields->t = text->t;
+        out_fields->style = text->style;
+        out_fields->visible = text->visible;
+        return true;
+    }
+    if (desc == s->d_polyline) {
+        Polyline *polyline = (Polyline *)node_obj;
+        out_fields->id = polyline->id;
+        out_fields->t = polyline->t;
+        out_fields->style = polyline->style;
+        out_fields->visible = polyline->visible;
+        return true;
+    }
+    if (desc == s->d_tri) {
+        Tri *tri = (Tri *)node_obj;
+        out_fields->id = tri->id;
+        out_fields->t = tri->t;
+        out_fields->style = tri->style;
+        out_fields->visible = tri->visible;
+        return true;
+    }
+    return false;
 }
 
 static uint32_t slot_change_tracker_snapshot_mask(const VgSlotChangeTracker *tracker,
@@ -708,7 +776,7 @@ static bool timeline_record_fields(ID timeline_obj,
         return false;
     }
 
-    if (record_type_hash(timeline_obj) == sc->h_timeline) {
+    if (record_descriptor_of(timeline_obj) == sc->d_timeline) {
         Timeline *timeline = (Timeline *)timeline_obj;
         *out_keyframes = timeline->keyframes;
         *out_loop = timeline->loop;
@@ -872,7 +940,7 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
     if (!timeline_keyframe_at(keyframes_obj, index, out_time_ms, &value)) {
         return false;
     }
-    if (!value || TAG(value) != CLJ_RECORD || record_type_hash(value) != sc->h_transform) {
+    if (record_descriptor_of(value) != sc->d_transform) {
         return false;
     }
     if (out_transform) {
@@ -1069,40 +1137,10 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
         }
         return decode_transform_record_fixed(prev_transform);
     }
-    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == s->h_transform) {
+    if (record_descriptor_of(obj) == s->d_transform) {
         return decode_transform_record_fixed((Transform *)obj);
     }
     return vg_transform_fixed_identity();
-}
-
-static ID node_style_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
-    if (h == s->h_group)    return ((Group *)node_obj)->style;
-    if (h == s->h_line)     return ((Line *)node_obj)->style;
-    if (h == s->h_polyline) return ((Polyline *)node_obj)->style;
-    if (h == s->h_rect)     return ((Rect *)node_obj)->style;
-    if (h == s->h_tri)      return ((Tri *)node_obj)->style;
-    if (h == s->h_vtext)    return ((VText *)node_obj)->style;
-    return NULL;
-}
-
-static ID node_id_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
-    if (h == s->h_group)    return ((Group *)node_obj)->id;
-    if (h == s->h_line)     return ((Line *)node_obj)->id;
-    if (h == s->h_polyline) return ((Polyline *)node_obj)->id;
-    if (h == s->h_rect)     return ((Rect *)node_obj)->id;
-    if (h == s->h_tri)      return ((Tri *)node_obj)->id;
-    if (h == s->h_vtext)    return ((VText *)node_obj)->id;
-    return NULL;
-}
-
-static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
-    if (h == s->h_group)    return ((Group *)node_obj)->visible;
-    if (h == s->h_line)     return ((Line *)node_obj)->visible;
-    if (h == s->h_polyline) return ((Polyline *)node_obj)->visible;
-    if (h == s->h_rect)     return ((Rect *)node_obj)->visible;
-    if (h == s->h_tri)      return ((Tri *)node_obj)->visible;
-    if (h == s->h_vtext)    return ((VText *)node_obj)->visible;
-    return NULL;
 }
 
 static uintptr_t timeline_event_id_bits(ID event_id) {
@@ -1152,23 +1190,29 @@ static ID resolve_entity_field_value(ID entity_id,
     return resolved;
 }
 
-static VgStyle decode_style(ID node_obj,
+static inline int16_t resolve_entity_field_i16(ID entity_id,
+                                               VgRenderedField field,
+                                               ID raw_value,
+                                               uint32_t now_ms,
+                                               const VgRecordSchema *sc,
+                                               bool *out_has_animation) {
+    return id_to_i16_default(resolve_entity_field_value(entity_id, field, raw_value, now_ms, sc, out_has_animation), 0);
+}
+
+static VgStyle decode_style(ID node_style,
+                            ID node_visible,
                             ID entity_id,
-                            uint32_t node_h,
                             uint32_t now_ms,
                             const VgRecordSchema *sc,
                             bool *out_has_animation) {
     VgStyle st = vg_style_default();
-    if (!node_obj) {
-        return st;
-    }
     ID style_obj = resolve_entity_field_value(entity_id,
                                               VG_RENDERED_FIELD_STYLE,
-                                              node_style_field(node_obj, node_h, sc),
+                                              node_style,
                                               now_ms,
                                               sc,
                                               out_has_animation);
-    if (style_obj && TAG(style_obj) == CLJ_RECORD && record_type_hash(style_obj) == sc->h_style) {
+    if (record_descriptor_of(style_obj) == sc->d_style) {
         Style *sr = style_obj;
         st.stroke_color = id_to_u16_default(resolve_timeline_value(sr->stroke_color, now_ms, sc, out_has_animation),
                                             st.stroke_color);
@@ -1185,14 +1229,14 @@ static VgStyle decode_style(ID node_obj,
         st.visible = id_to_bool_default(resolve_timeline_value(sr->visible, now_ms, sc, out_has_animation),
                                         st.visible);
     }
-    ID node_visible = resolve_entity_field_value(entity_id,
-                                                 VG_RENDERED_FIELD_VISIBLE,
-                                                 node_visible_field(node_obj, node_h, sc),
-                                                 now_ms,
-                                                 sc,
-                                                 out_has_animation);
-    if (node_visible) {
-        st.visible = id_to_bool_default(node_visible, st.visible);
+    ID visible_obj = resolve_entity_field_value(entity_id,
+                                                VG_RENDERED_FIELD_VISIBLE,
+                                                node_visible,
+                                                now_ms,
+                                                sc,
+                                                out_has_animation);
+    if (visible_obj) {
+        st.visible = id_to_bool_default(visible_obj, st.visible);
     }
     if (st.stroke_width == 0) {
         st.stroke_width = 1;
@@ -1225,7 +1269,7 @@ static bool decode_rect(ID obj, VgClipRect *out_rect, const VgRecordSchema *sc) 
         out_rect->h = id_to_i16_default(vector_nth(v, 3), 0);
         return !vg_clip_rect_is_empty(*out_rect);
     }
-    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == sc->h_rect) {
+    if (record_descriptor_of(obj) == sc->d_rect) {
         Rect *r = obj;
         out_rect->x = id_to_i16_default(r->x, 0);
         out_rect->y = id_to_i16_default(r->y, 0);
@@ -1340,21 +1384,17 @@ static bool render_record_node(ID node_obj,
         return false;
     }
     const VgRecordSchema *sc = tiny_fx_gfx_schema();
-    uint32_t h = record_type_hash(node_obj);
-    ID entity_id = node_id_field(node_obj, h, sc);
-
-    ID local_t_obj = NULL;
-    if      (h == sc->h_group)    local_t_obj = ((Group *)node_obj)->t;
-    else if (h == sc->h_line)     local_t_obj = ((Line *)node_obj)->t;
-    else if (h == sc->h_polyline) local_t_obj = ((Polyline *)node_obj)->t;
-    else if (h == sc->h_rect)     local_t_obj = ((Rect *)node_obj)->t;
-    else if (h == sc->h_tri)      local_t_obj = ((Tri *)node_obj)->t;
-    else if (h == sc->h_vtext)    local_t_obj = ((VText *)node_obj)->t;
+    CljRecordDescriptor *desc = record_descriptor_of(node_obj);
+    VgSceneNodeCommonFields common_fields = {0};
+    if (!scene_node_common_fields(node_obj, desc, sc, &common_fields)) {
+        return false;
+    }
+    ID entity_id = common_fields.id;
 
     VgTransformFixed world_t = parent_t;
-    if (local_t_obj) {
+    if (common_fields.t) {
         TimelineResolveInfo t_info;
-        VgTransformFixed local_t = decode_transform_fixed_with_info(local_t_obj, now_ms, sc, &t_info);
+        VgTransformFixed local_t = decode_transform_fixed_with_info(common_fields.t, now_ms, sc, &t_info);
         if (timeline_info_is_animating(&t_info)) {
             mark_has_animation(out_has_animation);
         }
@@ -1364,18 +1404,31 @@ static bool render_record_node(ID node_obj,
     if (entity_id) {
         vg_rendered_state_capture_record_entity((uintptr_t)entity_id, world_t);
     }
-    VgStyle style = decode_style(node_obj, entity_id, h, now_ms, sc, out_has_animation);
+    VgStyle style = decode_style(common_fields.style,
+                                 common_fields.visible,
+                                 entity_id,
+                                 now_ms,
+                                 sc,
+                                 out_has_animation);
     uint32_t style_signature = style_content_signature(style);
     if (entity_id) {
         vg_rendered_state_capture_record_entity_content_signature((uintptr_t)entity_id,
                                                                   style_signature);
     }
 
-    if (h == sc->h_group) {
+    int sw = style.stroke_width ? style.stroke_width : 1;
+    int fb_w = fb->width, fb_h = fb->height;
+
+    VgNode temp;
+    memset(&temp, 0, sizeof(temp));
+    temp.has_transform = false;
+    temp.style = style;
+
+    if (desc == sc->d_group) {
         if (!style.visible) {
             return true;
         }
-        Group *group = node_obj;
+        Group *group = (Group *)node_obj;
         ID children = resolve_entity_field_value(entity_id,
                                                  VG_RENDERED_FIELD_CHILDREN,
                                                  group->children,
@@ -1419,92 +1472,13 @@ static bool render_record_node(ID node_obj,
         }
         return true;
     }
-
-    int sw = style.stroke_width ? style.stroke_width : 1;
-    int fb_w = fb->width, fb_h = fb->height;
-
-    VgNode temp;
-    memset(&temp, 0, sizeof(temp));
-    temp.has_transform = false;
-    temp.style = style;
-
-    if (h == sc->h_line) {
-        temp.type = VG_NODE_LINE;
-        Line *line = node_obj;
-        temp.data.line.x1 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                         VG_RENDERED_FIELD_X1,
-                                                                         line->x1,
-                                                                         now_ms,
-                                                                         sc,
-                                                                         out_has_animation),
-                                              0);
-        temp.data.line.y1 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                         VG_RENDERED_FIELD_Y1,
-                                                                         line->y1,
-                                                                         now_ms,
-                                                                         sc,
-                                                                         out_has_animation),
-                                              0);
-        temp.data.line.x2 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                         VG_RENDERED_FIELD_X2,
-                                                                         line->x2,
-                                                                         now_ms,
-                                                                         sc,
-                                                                         out_has_animation),
-                                              0);
-        temp.data.line.y2 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                         VG_RENDERED_FIELD_Y2,
-                                                                         line->y2,
-                                                                         now_ms,
-                                                                         sc,
-                                                                         out_has_animation),
-                                              0);
-        {
-            VgPoint points[2] = {
-                {.x = temp.data.line.x1, .y = temp.data.line.y1},
-                {.x = temp.data.line.x2, .y = temp.data.line.y2},
-            };
-            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 2u, style.visible)) {
-                return true;
-            }
-        }
-        if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
-                             temp.data.line.x2, temp.data.line.y2, sw,
-                             fb_w, fb_h, use_clip, clip_rect))
-            return true;
-        return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
-    }
-    if (h == sc->h_rect) {
+    if (desc == sc->d_rect) {
         temp.type = VG_NODE_RECT;
-        Rect *rect = node_obj;
-        temp.data.rect.x = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_X,
-                                                                        rect->x,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.rect.y = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_Y,
-                                                                        rect->y,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.rect.w = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_W,
-                                                                        rect->w,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.rect.h = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_H,
-                                                                        rect->h,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
+        Rect *rect = (Rect *)node_obj;
+        temp.data.rect.x = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X, rect->x, now_ms, sc, out_has_animation);
+        temp.data.rect.y = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y, rect->y, now_ms, sc, out_has_animation);
+        temp.data.rect.w = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_W, rect->w, now_ms, sc, out_has_animation);
+        temp.data.rect.h = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_H, rect->h, now_ms, sc, out_has_animation);
         {
             int16_t x_max = (temp.data.rect.w > 0)
                                 ? (int16_t)(temp.data.rect.x + temp.data.rect.w - 1)
@@ -1524,76 +1498,37 @@ static bool render_record_node(ID node_obj,
         }
         if (node_culled_rect(world_t, temp.data.rect.x, temp.data.rect.y,
                              temp.data.rect.w, temp.data.rect.h, sw,
-                             fb_w, fb_h, use_clip, clip_rect))
+                             fb_w, fb_h, use_clip, clip_rect)) {
             return true;
+        }
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (h == sc->h_tri) {
-        temp.type = VG_NODE_TRI;
-        Tri *tri = node_obj;
-        temp.data.tri.x1 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_X1,
-                                                                        tri->x1,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.tri.y1 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_Y1,
-                                                                        tri->y1,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.tri.x2 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_X2,
-                                                                        tri->x2,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.tri.y2 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_Y2,
-                                                                        tri->y2,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.tri.x3 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_X3,
-                                                                        tri->x3,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
-        temp.data.tri.y3 = id_to_i16_default(resolve_entity_field_value(entity_id,
-                                                                        VG_RENDERED_FIELD_Y3,
-                                                                        tri->y3,
-                                                                        now_ms,
-                                                                        sc,
-                                                                        out_has_animation),
-                                             0);
+    if (desc == sc->d_line) {
+        temp.type = VG_NODE_LINE;
+        Line *line = (Line *)node_obj;
+        temp.data.line.x1 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X1, line->x1, now_ms, sc, out_has_animation);
+        temp.data.line.y1 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y1, line->y1, now_ms, sc, out_has_animation);
+        temp.data.line.x2 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X2, line->x2, now_ms, sc, out_has_animation);
+        temp.data.line.y2 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y2, line->y2, now_ms, sc, out_has_animation);
         {
-            VgPoint points[3] = {
-                {.x = temp.data.tri.x1, .y = temp.data.tri.y1},
-                {.x = temp.data.tri.x2, .y = temp.data.tri.y2},
-                {.x = temp.data.tri.x3, .y = temp.data.tri.y3},
+            VgPoint points[2] = {
+                {.x = temp.data.line.x1, .y = temp.data.line.y1},
+                {.x = temp.data.line.x2, .y = temp.data.line.y2},
             };
-            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 3u, style.visible)) {
+            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 2u, style.visible)) {
                 return true;
             }
         }
-        if (node_culled_tri(world_t,
-                            temp.data.tri.x1, temp.data.tri.y1,
-                            temp.data.tri.x2, temp.data.tri.y2,
-                            temp.data.tri.x3, temp.data.tri.y3, sw,
-                            fb_w, fb_h, use_clip, clip_rect))
+        if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
+                             temp.data.line.x2, temp.data.line.y2, sw,
+                             fb_w, fb_h, use_clip, clip_rect)) {
             return true;
+        }
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (h == sc->h_vtext) {
+    if (desc == sc->d_vtext) {
         temp.type = VG_NODE_VTEXT;
-        VText *text = node_obj;
+        VText *text = (VText *)node_obj;
         temp.data.text.x = id_to_i16_default(resolve_entity_field_value(entity_id,
                                                                         VG_RENDERED_FIELD_X,
                                                                         text->x,
@@ -1673,7 +1608,7 @@ static bool render_record_node(ID node_obj,
         }
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (h == sc->h_polyline) {
+    if (desc == sc->d_polyline) {
         return render_polyline_record(node_obj,
                                       entity_id,
                                       world_t,
@@ -1684,6 +1619,34 @@ static bool render_record_node(ID node_obj,
                                       now_ms,
                                       sc,
                                       out_has_animation);
+    }
+    if (desc == sc->d_tri) {
+        temp.type = VG_NODE_TRI;
+        Tri *tri = (Tri *)node_obj;
+        temp.data.tri.x1 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X1, tri->x1, now_ms, sc, out_has_animation);
+        temp.data.tri.y1 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y1, tri->y1, now_ms, sc, out_has_animation);
+        temp.data.tri.x2 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X2, tri->x2, now_ms, sc, out_has_animation);
+        temp.data.tri.y2 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y2, tri->y2, now_ms, sc, out_has_animation);
+        temp.data.tri.x3 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_X3, tri->x3, now_ms, sc, out_has_animation);
+        temp.data.tri.y3 = resolve_entity_field_i16(entity_id, VG_RENDERED_FIELD_Y3, tri->y3, now_ms, sc, out_has_animation);
+        {
+            VgPoint points[3] = {
+                {.x = temp.data.tri.x1, .y = temp.data.tri.y1},
+                {.x = temp.data.tri.x2, .y = temp.data.tri.y2},
+                {.x = temp.data.tri.x3, .y = temp.data.tri.y3},
+            };
+            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 3u, style.visible)) {
+                return true;
+            }
+        }
+        if (node_culled_tri(world_t,
+                            temp.data.tri.x1, temp.data.tri.y1,
+                            temp.data.tri.x2, temp.data.tri.y2,
+                            temp.data.tri.x3, temp.data.tri.y3, sw,
+                            fb_w, fb_h, use_clip, clip_rect)) {
+            return true;
+        }
+        return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
     return false;
 }
@@ -1715,8 +1678,8 @@ static bool resolve_root_node(ID root_field,
 static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID *out_clip, ID *out_erase) {
     if (!scene_record || TAG(scene_record) != CLJ_RECORD) return false;
     const VgRecordSchema *sc = tiny_fx_gfx_schema();
-    uint32_t h = record_type_hash(scene_record);
-    if (h == sc->h_frame_scene) {
+    CljRecordDescriptor *desc = record_descriptor_of(scene_record);
+    if (desc == sc->d_frame_scene) {
         FrameScene *fs = scene_record;
         *out_root = fs->root;
         if (out_index) *out_index = fs->index;
@@ -1724,7 +1687,7 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID
         if (out_erase) *out_erase = fs->erase_color;
         return true;
     }
-    if (h == sc->h_scene) {
+    if (desc == sc->d_scene) {
         Scene *s = scene_record;
         *out_root = s->root;
         if (out_index) *out_index = s->index;
@@ -1850,7 +1813,7 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
         return false;
     }
     const VgRecordSchema *sc = tiny_fx_gfx_schema();
-    if (record_type_hash(frame_scene_record) != sc->h_frame_scene) {
+    if (record_descriptor_of(frame_scene_record) != sc->d_frame_scene) {
         return false;
     }
 

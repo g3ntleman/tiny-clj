@@ -8,10 +8,7 @@
 #include "namespace.h"
 
 typedef struct {
-    ID t_transform, t_style, t_group, t_line, t_polyline, t_rect, t_tri, t_vtext, t_timeline, t_frame_scene, t_scene;
     CljRecordDescriptor *d_transform, *d_style, *d_group, *d_line, *d_polyline, *d_rect, *d_tri, *d_vtext, *d_timeline, *d_frame_scene, *d_scene;
-    uint32_t h_transform, h_style, h_group, h_line, h_polyline, h_rect, h_tri, h_vtext, h_timeline, h_frame_scene, h_scene;
-    unsigned int n_transform, n_style, n_group, n_line, n_polyline, n_rect, n_tri, n_vtext, n_timeline, n_frame_scene, n_scene;
     int transform_tx, transform_ty, transform_sx, transform_sy, transform_rot;
     int style_stroke_color, style_stroke_width, style_visible, style_has_fill, style_fill_color, style_has_bg_color, style_bg_color;
     int group_id, group_t, group_style, group_visible, group_children;

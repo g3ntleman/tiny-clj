@@ -385,29 +385,29 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     (void)st;
     init_record_keys();
 
-    g_record_schema.t_transform = &sym_type_transform_data.sym;
-    g_record_schema.t_style = &sym_type_style_data.sym;
-    g_record_schema.t_group = &sym_type_group_data.sym;
-    g_record_schema.t_line = &sym_type_line_data.sym;
-    g_record_schema.t_polyline = &sym_type_polyline_data.sym;
-    g_record_schema.t_rect = &sym_type_rect_data.sym;
-    g_record_schema.t_tri = &sym_type_tri_data.sym;
-    g_record_schema.t_vtext = &sym_type_vtext_data.sym;
-    g_record_schema.t_timeline = &sym_type_timeline_data.sym;
-    g_record_schema.t_frame_scene = &sym_type_frame_scene_data.sym;
-    g_record_schema.t_scene = &sym_type_scene_data.sym;
+    ID t_transform = &sym_type_transform_data.sym;
+    ID t_style = &sym_type_style_data.sym;
+    ID t_group = &sym_type_group_data.sym;
+    ID t_line = &sym_type_line_data.sym;
+    ID t_polyline = &sym_type_polyline_data.sym;
+    ID t_rect = &sym_type_rect_data.sym;
+    ID t_tri = &sym_type_tri_data.sym;
+    ID t_vtext = &sym_type_vtext_data.sym;
+    ID t_timeline = &sym_type_timeline_data.sym;
+    ID t_frame_scene = &sym_type_frame_scene_data.sym;
+    ID t_scene = &sym_type_scene_data.sym;
 
-    CljRecordDescriptor *d_transform = record_descriptor_lookup(g_record_schema.t_transform);
-    CljRecordDescriptor *d_style = record_descriptor_lookup(g_record_schema.t_style);
-    CljRecordDescriptor *d_group = record_descriptor_lookup(g_record_schema.t_group);
-    CljRecordDescriptor *d_line = record_descriptor_lookup(g_record_schema.t_line);
-    CljRecordDescriptor *d_poly = record_descriptor_lookup(g_record_schema.t_polyline);
-    CljRecordDescriptor *d_rect = record_descriptor_lookup(g_record_schema.t_rect);
-    CljRecordDescriptor *d_tri = record_descriptor_lookup(g_record_schema.t_tri);
-    CljRecordDescriptor *d_text = record_descriptor_lookup(g_record_schema.t_vtext);
-    CljRecordDescriptor *d_timeline = record_descriptor_lookup(g_record_schema.t_timeline);
-    CljRecordDescriptor *d_frame = record_descriptor_lookup(g_record_schema.t_frame_scene);
-    CljRecordDescriptor *d_scene = record_descriptor_lookup(g_record_schema.t_scene);
+    CljRecordDescriptor *d_transform = record_descriptor_lookup(t_transform);
+    CljRecordDescriptor *d_style = record_descriptor_lookup(t_style);
+    CljRecordDescriptor *d_group = record_descriptor_lookup(t_group);
+    CljRecordDescriptor *d_line = record_descriptor_lookup(t_line);
+    CljRecordDescriptor *d_poly = record_descriptor_lookup(t_polyline);
+    CljRecordDescriptor *d_rect = record_descriptor_lookup(t_rect);
+    CljRecordDescriptor *d_tri = record_descriptor_lookup(t_tri);
+    CljRecordDescriptor *d_text = record_descriptor_lookup(t_vtext);
+    CljRecordDescriptor *d_timeline = record_descriptor_lookup(t_timeline);
+    CljRecordDescriptor *d_frame = record_descriptor_lookup(t_frame_scene);
+    CljRecordDescriptor *d_scene = record_descriptor_lookup(t_scene);
     if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
         !d_timeline || !d_frame || !d_scene) {
         return false;
@@ -424,30 +424,6 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     g_record_schema.d_timeline = d_timeline;
     g_record_schema.d_frame_scene = d_frame;
     g_record_schema.d_scene = d_scene;
-
-    g_record_schema.h_transform = clj_hash(g_record_schema.t_transform);
-    g_record_schema.h_style = clj_hash(g_record_schema.t_style);
-    g_record_schema.h_group = clj_hash(g_record_schema.t_group);
-    g_record_schema.h_line = clj_hash(g_record_schema.t_line);
-    g_record_schema.h_polyline = clj_hash(g_record_schema.t_polyline);
-    g_record_schema.h_rect = clj_hash(g_record_schema.t_rect);
-    g_record_schema.h_tri = clj_hash(g_record_schema.t_tri);
-    g_record_schema.h_vtext = clj_hash(g_record_schema.t_vtext);
-    g_record_schema.h_timeline = clj_hash(g_record_schema.t_timeline);
-    g_record_schema.h_frame_scene = clj_hash(g_record_schema.t_frame_scene);
-    g_record_schema.h_scene = clj_hash(g_record_schema.t_scene);
-
-    g_record_schema.n_transform = vector_count(d_transform->field_keys);
-    g_record_schema.n_style = vector_count(d_style->field_keys);
-    g_record_schema.n_group = vector_count(d_group->field_keys);
-    g_record_schema.n_line = vector_count(d_line->field_keys);
-    g_record_schema.n_polyline = vector_count(d_poly->field_keys);
-    g_record_schema.n_rect = vector_count(d_rect->field_keys);
-    g_record_schema.n_tri = vector_count(d_tri->field_keys);
-    g_record_schema.n_vtext = vector_count(d_text->field_keys);
-    g_record_schema.n_timeline = vector_count(d_timeline->field_keys);
-    g_record_schema.n_frame_scene = vector_count(d_frame->field_keys);
-    g_record_schema.n_scene = vector_count(d_scene->field_keys);
 
     g_record_schema.transform_tx = descriptor_index_of(d_transform, g_record_keys.k_tx);
     g_record_schema.transform_ty = descriptor_index_of(d_transform, g_record_keys.k_ty);

@@ -24,6 +24,16 @@ struct CljSymbol {
     const char *cname;
 };
 
+/*
+ * Interned symbols are immutable singleton objects.
+ *
+ * The runtime interns a single canonical CljSymbol per logical symbol identity,
+ * and symbol pointer equality is relied on throughout the codebase. These
+ * singleton symbol objects are intentionally never deallocated; symbol table
+ * cleanup may compact the table structure, but it preserves the existing symbol
+ * instances.
+ */
+
 // Dynamic vars are "earmuffed" symbols: *foo*
 // Implemented in symbol.c to avoid duplicating code in every translation unit.
 bool is_earmuffed_dynamic_symbol(const CljSymbol *sym);

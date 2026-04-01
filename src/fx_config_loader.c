@@ -41,12 +41,11 @@ static const IdSymbolCacheEntry g_fx_host_config_symbol_cache[] = {
     {&g_fx_kw_primary_scene_atom, ":game-scene-atom"},
 };
 
-static inline uint32_t fx_record_type_hash(ID obj) {
+static inline CljRecordDescriptor *fx_record_descriptor(ID obj) {
     if (!obj || TAG(obj) != CLJ_RECORD) {
-        return 0u;
+        return NULL;
     }
-    CljPersistentRecord *r = (CljPersistentRecord *)obj;
-    return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0u;
+    return as_record(obj)->descriptor;
 }
 
 static ID fx_slot_desc_field(ID slot_desc, ID key) {
@@ -71,7 +70,7 @@ FrameScene *fx_frame_scene_from_atom(CljAtom *scene_atom) {
         return NULL;
     }
     const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!schema || fx_record_type_hash(scene) != schema->h_frame_scene) {
+    if (!schema || fx_record_descriptor(scene) != schema->d_frame_scene) {
         return NULL;
     }
     return (FrameScene *)scene;
