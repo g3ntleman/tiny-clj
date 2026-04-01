@@ -1,6 +1,6 @@
 # Plan: Release-Sauberkeit und naechste Verbesserungen
 
-**Stand: 31.03.2026**
+**Stand: 01.04.2026**
 
 ## Ziel
 
@@ -45,8 +45,9 @@ Die aktuell betrachteten FS-, Sound- und Scene-Graph-Themen in zwei Bahnen ordne
   - `./build/unit-tests --test 'test_file_io/*' --quiet` -> `45 Tests, 0 Failures`
   - `./build/unit-tests --test 'test_gpio_architecture_contract/*' --quiet` -> `18 Tests, 0 Failures`
   - `./build/unit-tests --test 'test_sound_engine/*' --quiet` -> `111 Tests, 0 Failures`
-- Noch offen:
-  - Vollsuite-Release-Gate ist nicht gruen; der aktuelle `./build/unit-tests`-Lauf endete in einem breiteren Parse-/OOM-Fall und braucht separate Analyse.
+  - `./build/unit-tests` -> `2034 Tests, 0 Failures, 11 Ignored`
+- Eingeordnet:
+  - Die dabei sichtbaren Parse-/OOM-/`run-next-task`-Meldungen sind aktuell erwartete Ausgaben aus Negativtests bzw. Debugpfaden und kein offener Release-Blocker.
 
 ### Im Plan-/Doku-Stand nachziehen
 
@@ -84,5 +85,6 @@ Die aktuell betrachteten FS-, Sound- und Scene-Graph-Themen in zwei Bahnen ordne
 
 - Oeffentliche FS-API ist konsistent mit Lookup, Doku und Tests.
 - Sound-Backend-Plan ist mit gruenen Gates abgeschlossen.
+- Das Vollsuite-Release-Gate ist gruen.
 - Offene Plaene unterscheiden sauber zwischen implementiert, teilweise implementiert und Wunscharchitektur.
 - Die naechsten Verbesserungen sind priorisiert statt nur gesammelt.

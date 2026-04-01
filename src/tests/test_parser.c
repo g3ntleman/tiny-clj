@@ -11,6 +11,7 @@
 #include "../symbol_token.h"
 #include "../ast_canon.h"
 #include "../repl.h"
+#include <unistd.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -19,6 +20,67 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
+
+static char *capture_eval_multiform_stderr(const char *input, EvalState *st, bool *out_ok) {
+  if (out_ok) {
+    *out_ok = false;
+  }
+
+  FILE *tmp = tmpfile();
+  if (!tmp) {
+    return NULL;
+  }
+
+  int stderr_fd = fileno(stderr);
+  int saved_stderr = dup(stderr_fd);
+  if (saved_stderr < 0) {
+    fclose(tmp);
+    return NULL;
+  }
+
+  fflush(stderr);
+  if (dup2(fileno(tmp), stderr_fd) < 0) {
+    close(saved_stderr);
+    fclose(tmp);
+    return NULL;
+  }
+
+  bool ok = eval_multiform_string(input, st);
+
+  fflush(stderr);
+  (void)dup2(saved_stderr, stderr_fd);
+  close(saved_stderr);
+
+  if (out_ok) {
+    *out_ok = ok;
+  }
+
+  if (fseek(tmp, 0, SEEK_END) != 0) {
+    fclose(tmp);
+    return NULL;
+  }
+  long len = ftell(tmp);
+  if (len < 0) {
+    fclose(tmp);
+    return NULL;
+  }
+  if (fseek(tmp, 0, SEEK_SET) != 0) {
+    fclose(tmp);
+    return NULL;
+  }
+
+  char *buffer = CLJ_HOST_MALLOC((size_t)len + 1u);
+  if (!buffer) {
+    fclose(tmp);
+    return NULL;
+  }
+
+  size_t nread = fread(buffer, 1, (size_t)len, tmp);
+  buffer[nread] = '\0';
+  fclose(tmp);
+  return buffer;
+}
+
 #if MEMORY_PROFILING_ENABLED
 static ID parse_from_reader_once(const char *input, EvalState *st) {
   Reader reader;
@@ -582,13 +644,18 @@ TEST(test_parse_multiple_expressions) {
 
 TEST(test_parse_unclosed_list_recovery_across_calls) {
   EvalState *eval_state = evalstate_new(false);
+  bool first_ok = false;
+  char *stderr_output = NULL;
 
   // Regression: an unclosed list must not corrupt heap state for subsequent parses.
-  bool first_ok = eval_multiform_string("(defn blink [p]", eval_state);
+  stderr_output = capture_eval_multiform_stderr("(defn blink [p]", eval_state, &first_ok);
+  TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "Failed to capture stderr for unclosed-list parse regression");
   TEST_ASSERT_FALSE(first_ok);
 
   bool second_ok = eval_multiform_string("(+ 1 2)", eval_state);
   TEST_ASSERT_TRUE(second_ok);
+
+  CLJ_HOST_FREE(stderr_output);
 
   evalstate_free(eval_state);
 }

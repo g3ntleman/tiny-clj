@@ -167,15 +167,10 @@ TEST(test_go_exception_closes_channel_without_value) {
 
     TEST_ASSERT_NOT_NULL(chan);
 
-    // Run next task using eval_string - high-level approach
-    CljObject *ran_val = NULL;
-    TRY {
-        ran_val = eval_string("(run-next-task)", g_test_eval_state);
-    } CATCH(ex) {
-        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
-        RELEASE(chan);
-        return;
-    } END_TRY
+    // Suppress the expected deferred-task exception log for this negative path.
+    ID ran_val = NULL;
+    char *stderr_output = capture_eval_stderr("(run-next-task)", &ran_val);
+    TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "Failed to capture stderr for run-next-task");
 
     TEST_ASSERT_NOT_NULL(ran_val);
     TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
@@ -193,6 +188,8 @@ TEST(test_go_exception_closes_channel_without_value) {
     // make_result_channel sets :value to NULL, so map_get returns NULL
     // After error, we don't update :value, so it remains NULL
     TEST_ASSERT_NIL(val);
+
+    CLJ_FREE(stderr_output);
 
     // Cleanup
     RELEASE(chan);

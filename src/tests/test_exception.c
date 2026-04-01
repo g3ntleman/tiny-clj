@@ -140,6 +140,66 @@ static char *capture_native_backtrace_output(void (*emit_backtrace)(void), bool 
     return buffer;
 }
 
+typedef void (*stderr_capture_fn)(void *ctx);
+
+static char *capture_stderr_output(stderr_capture_fn fn, void *ctx) {
+    if (!fn) {
+        return NULL;
+    }
+
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+
+    int stderr_fd = fileno(stderr);
+    int saved_stderr = dup(stderr_fd);
+    if (saved_stderr < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    fflush(stderr);
+    if (dup2(fileno(tmp), stderr_fd) < 0) {
+        close(saved_stderr);
+        fclose(tmp);
+        return NULL;
+    }
+
+    fn(ctx);
+
+    fflush(stderr);
+    (void)dup2(saved_stderr, stderr_fd);
+    close(saved_stderr);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    long len = ftell(tmp);
+    if (len < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    char *buffer = CLJ_HOST_MALLOC((size_t)len + 1u);
+    if (!buffer) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    size_t nread = fread(buffer, 1, (size_t)len, tmp);
+    buffer[nread] = '\0';
+    fclose(tmp);
+    return buffer;
+}
+
 typedef struct {
     bool returned;
 } ThrowOomWorkerArgs;
@@ -208,6 +268,22 @@ static void *throw_oom_try_catch_worker_main(void *arg) {
     } END_TRY
     args->returned = true;
     return NULL;
+}
+
+static void run_throw_oom_worker(void *ctx) {
+    ThrowOomWorkerArgs *args = (ThrowOomWorkerArgs *)ctx;
+    pthread_t worker;
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_worker_main, args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+}
+
+static void run_throw_oom_try_catch_worker(void *ctx) {
+    ThrowOomTryCatchWorkerArgs *args = (ThrowOomTryCatchWorkerArgs *)ctx;
+    pthread_t worker;
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_try_catch_worker_main, args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
 }
 
 static void *main_thread_registration_worker_main(void *arg) {
@@ -562,37 +638,41 @@ TEST(test_exception_symbolized_native_backtrace_works_under_finite_heap_budget_o
 #endif
 
 TEST(test_throw_oom_on_background_thread_does_not_cross_thread_longjmp) {
-    pthread_t worker;
     ThrowOomWorkerArgs args = {0};
     bool exception_caught = false;
+    char *stderr_output = NULL;
 
     subjective_c_register_main_thread();
     TEST_ASSERT_TRUE(subjective_c_is_main_thread());
 
     TRY {
-        TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_worker_main, &args));
-        TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+        stderr_output = capture_stderr_output(run_throw_oom_worker, &args);
     } CATCH(ex) {
         (void)ex;
         exception_caught = true;
     } END_TRY
 
+    TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "Failed to capture background-thread OOM stderr output");
     TEST_ASSERT_FALSE_MESSAGE(exception_caught, "background-thread OOM must not longjmp into main-thread TRY");
     TEST_ASSERT_TRUE_MESSAGE(args.returned, "throw_oom should return on background threads");
+
+    CLJ_HOST_FREE(stderr_output);
 }
 
 TEST(test_throw_oom_on_background_thread_with_local_try_catch_is_catchable) {
-    pthread_t worker;
     ThrowOomTryCatchWorkerArgs args = {0};
+    char *stderr_output = NULL;
 
     subjective_c_register_main_thread();
     TEST_ASSERT_TRUE(subjective_c_is_main_thread());
 
-    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_try_catch_worker_main, &args));
-    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+    stderr_output = capture_stderr_output(run_throw_oom_try_catch_worker, &args);
 
+    TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "Failed to capture background-thread TRY/CATCH OOM stderr output");
     TEST_ASSERT_TRUE_MESSAGE(args.returned, "worker thread should complete after local OOM handling");
     TEST_ASSERT_TRUE_MESSAGE(args.caught, "background-thread OOM should be catchable inside local TRY/CATCH");
+
+    CLJ_HOST_FREE(stderr_output);
 }
 
 TEST(test_register_main_thread_does_not_replace_existing_main_thread) {
