@@ -3,6 +3,8 @@
 #include <stdatomic.h>
 #include <string.h>
 
+#include "memory.h"  /* CLJ_HOST_CALLOC / REALLOC / FREE */
+
 typedef struct {
     uintptr_t entity_id_bits;
     VgTransformFixed world_t;
@@ -43,6 +45,71 @@ typedef struct {
 } RenderedCaptureContext;
 
 static RenderedCaptureContext g_capture_ctx = {0};
+
+/* --- Timeline Overlay (dynamic, heap-allocated) --- */
+
+#define OVERLAY_INITIAL_CAPACITY 32u
+
+typedef struct {
+    uintptr_t entity_id_bits;
+    uint8_t field;
+    uint8_t _pad;
+    VgRenderedTimelineSample sample;
+} OverlayTimelineRow;
+
+typedef struct {
+    uint32_t snapshot_generation;
+    uint32_t frame_time_ms;
+    uint16_t count;
+    uint16_t capacity;
+    OverlayTimelineRow *rows;
+} OverlayTimelineBuffer;
+
+typedef struct {
+    OverlayTimelineBuffer buffers[2];
+    atomic_uint active_buffer_index;
+} OverlaySlot;
+
+static OverlaySlot *g_overlay_slots = NULL;
+static uint8_t g_overlay_slot_count = 0;
+
+static OverlayTimelineBuffer *overlay_write_buffer(void) {
+    if (!g_overlay_slots || !g_capture_ctx.active ||
+        g_capture_ctx.slot_index >= g_overlay_slot_count) {
+        return NULL;
+    }
+    OverlaySlot *slot = &g_overlay_slots[g_capture_ctx.slot_index];
+    unsigned int active = atomic_load_explicit(&slot->active_buffer_index, memory_order_acquire);
+    uint8_t write_idx = (active == 0u) ? 1u : 0u;
+    return &slot->buffers[write_idx];
+}
+
+static int overlay_find_timeline_row(const OverlayTimelineBuffer *buf,
+                                     uintptr_t entity_id_bits,
+                                     uint8_t field) {
+    for (uint16_t i = 0; i < buf->count; i++) {
+        if (buf->rows[i].entity_id_bits == entity_id_bits &&
+            buf->rows[i].field == field) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static bool overlay_ensure_capacity(OverlayTimelineBuffer *buf) {
+    if (buf->count < buf->capacity) {
+        return true;
+    }
+    uint16_t new_cap = buf->capacity ? (uint16_t)(buf->capacity * 2u) : OVERLAY_INITIAL_CAPACITY;
+    OverlayTimelineRow *new_rows = (OverlayTimelineRow *)CLJ_HOST_REALLOC(
+        buf->rows, (size_t)new_cap * sizeof(OverlayTimelineRow));
+    if (!new_rows) {
+        return false;
+    }
+    buf->rows = new_rows;
+    buf->capacity = new_cap;
+    return true;
+}
 
 static inline RenderedSlotSnapshot *capture_write_snapshot(void) {
     if (!g_capture_ctx.active || g_capture_ctx.slot_index >= VG_RENDERED_STATE_MAX_SLOTS) {
@@ -167,6 +234,14 @@ void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_gener
     g_capture_ctx.active = true;
     g_capture_ctx.slot_index = slot_index;
     g_capture_ctx.write_buffer_index = write;
+
+    /* Prepare overlay write buffer (if initialised). */
+    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    if (obuf) {
+        obuf->count = 0;
+        obuf->snapshot_generation = snapshot_generation;
+        obuf->frame_time_ms = frame_time_ms;
+    }
 }
 
 void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransformFixed world_t) {
@@ -238,6 +313,21 @@ void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
     snapshot->timelines[idx].entity_id_bits = entity_id_bits;
     snapshot->timelines[idx].field = (uint8_t)field;
     snapshot->timelines[idx].sample = sample;
+
+    /* Mirror into overlay. */
+    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    if (obuf) {
+        int oexisting = overlay_find_timeline_row(obuf, entity_id_bits, (uint8_t)field);
+        if (oexisting >= 0) {
+            obuf->rows[oexisting].sample = sample;
+        } else if (overlay_ensure_capacity(obuf)) {
+            uint16_t oidx = obuf->count++;
+            obuf->rows[oidx].entity_id_bits = entity_id_bits;
+            obuf->rows[oidx].field = (uint8_t)field;
+            obuf->rows[oidx]._pad = 0;
+            obuf->rows[oidx].sample = sample;
+        }
+    }
 }
 
 bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
@@ -417,12 +507,24 @@ void vg_rendered_state_capture_commit(void) {
     if (!g_capture_ctx.active || g_capture_ctx.slot_index >= VG_RENDERED_STATE_MAX_SLOTS) {
         return;
     }
+    /* Commit overlay first (same slot). */
+    if (g_overlay_slots && g_capture_ctx.slot_index < g_overlay_slot_count) {
+        OverlaySlot *oslot = &g_overlay_slots[g_capture_ctx.slot_index];
+        unsigned int oactive = atomic_load_explicit(&oslot->active_buffer_index, memory_order_acquire);
+        uint8_t owrite = (oactive == 0u) ? 1u : 0u;
+        atomic_store_explicit(&oslot->active_buffer_index, owrite, memory_order_release);
+    }
     RenderedSlotStore *store = &g_rendered_slots[g_capture_ctx.slot_index];
     atomic_store_explicit(&store->active_buffer_index, g_capture_ctx.write_buffer_index, memory_order_release);
     g_capture_ctx.active = false;
 }
 
 void vg_rendered_state_capture_discard(void) {
+    /* Reset overlay write buffer count so stale data is not committed later. */
+    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    if (obuf) {
+        obuf->count = 0;
+    }
     g_capture_ctx.active = false;
 }
 
@@ -475,6 +577,58 @@ size_t vg_rendered_state_static_footprint(void) {
     return sizeof(g_rendered_slots);
 }
 
+/* --- Timeline Overlay public API --- */
+
+bool vg_timeline_overlay_init(uint8_t slot_count) {
+    vg_timeline_overlay_destroy();
+    if (slot_count == 0) {
+        return true;
+    }
+    g_overlay_slots = (OverlaySlot *)CLJ_HOST_CALLOC(slot_count, sizeof(OverlaySlot));
+    if (!g_overlay_slots) {
+        return false;
+    }
+    g_overlay_slot_count = slot_count;
+    return true;
+}
+
+void vg_timeline_overlay_destroy(void) {
+    if (g_overlay_slots) {
+        for (uint8_t s = 0; s < g_overlay_slot_count; s++) {
+            for (int b = 0; b < 2; b++) {
+                CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].rows);
+            }
+        }
+        CLJ_HOST_FREE(g_overlay_slots);
+        g_overlay_slots = NULL;
+    }
+    g_overlay_slot_count = 0;
+}
+
+bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
+                                        uintptr_t entity_id_bits,
+                                        VgRenderedField field,
+                                        VgRenderedTimelineState *out_state) {
+    if (!out_state || !entity_id_bits || !g_overlay_slots ||
+        slot_index >= g_overlay_slot_count || field == VG_RENDERED_FIELD_NONE) {
+        return false;
+    }
+    OverlaySlot *slot = &g_overlay_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&slot->active_buffer_index, memory_order_acquire);
+    if (active > 1u) {
+        return false;
+    }
+    const OverlayTimelineBuffer *buf = &slot->buffers[active];
+    int idx = overlay_find_timeline_row(buf, entity_id_bits, (uint8_t)field);
+    if (idx < 0) {
+        return false;
+    }
+    out_state->snapshot_generation = buf->snapshot_generation;
+    out_state->frame_time_ms = buf->frame_time_ms;
+    out_state->sample = buf->rows[idx].sample;
+    return true;
+}
+
 void vg_rendered_state_reset_all(void) {
     g_capture_ctx.active = false;
     g_capture_ctx.slot_index = 0u;
@@ -482,5 +636,16 @@ void vg_rendered_state_reset_all(void) {
     memset(g_rendered_slots, 0, sizeof(g_rendered_slots));
     for (uint8_t i = 0; i < VG_RENDERED_STATE_MAX_SLOTS; i++) {
         atomic_store_explicit(&g_rendered_slots[i].active_buffer_index, 0u, memory_order_release);
+    }
+    /* Reset overlay buffers (keep allocations). */
+    if (g_overlay_slots) {
+        for (uint8_t s = 0; s < g_overlay_slot_count; s++) {
+            for (int b = 0; b < 2; b++) {
+                g_overlay_slots[s].buffers[b].count = 0;
+                g_overlay_slots[s].buffers[b].snapshot_generation = 0;
+                g_overlay_slots[s].buffers[b].frame_time_ms = 0;
+            }
+            atomic_store_explicit(&g_overlay_slots[s].active_buffer_index, 0u, memory_order_release);
+        }
     }
 }

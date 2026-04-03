@@ -4128,6 +4128,48 @@ TEST(test_scene_query_entity_world_t_returns_false_for_timeline) {
     TEST_ASSERT_FALSE(vg_scene_query_entity_world_t(scene, rect_id, &world_t));
 }
 
+TEST(test_timeline_overlay_stores_and_queries_timeline, 0) {
+    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+    vg_rendered_state_reset_all();
+
+    uintptr_t entity_a = (uintptr_t)fixnum(5001);
+    VgTransformFixed t0 = vg_transform_fixed_identity();
+    t0.m02 = 10 * VG_SCALE_ONE;
+
+    VgRenderedTimelineSample sample = {
+        .step_index = 1,
+        .keyframe_count = 3,
+        .phase_ms = 50,
+        .period_ms = 100,
+        .loop = false,
+        .end_event = false,
+        .at_end = false,
+        .event_id_bits = 0,
+    };
+
+    vg_rendered_state_capture_begin(0, 1, 50);
+    vg_rendered_state_capture_record_entity(entity_a, t0);
+    vg_rendered_state_capture_record_timeline(entity_a, VG_RENDERED_FIELD_T, sample);
+    vg_rendered_state_capture_commit();
+
+    /* Query from overlay — must match the captured sample. */
+    VgRenderedTimelineState tl_state = {0};
+    TEST_ASSERT_TRUE(vg_timeline_overlay_query_timeline(0, entity_a, VG_RENDERED_FIELD_T, &tl_state));
+    TEST_ASSERT_EQUAL_INT(1, tl_state.sample.step_index);
+    TEST_ASSERT_EQUAL_INT(3, tl_state.sample.keyframe_count);
+    TEST_ASSERT_EQUAL_INT(50, tl_state.sample.phase_ms);
+    TEST_ASSERT_EQUAL_INT(100, tl_state.sample.period_ms);
+    TEST_ASSERT_EQUAL_INT(1, tl_state.snapshot_generation);
+    TEST_ASSERT_EQUAL_INT(50, tl_state.frame_time_ms);
+
+    /* Non-timeline entity must not appear in overlay. */
+    uintptr_t entity_b = (uintptr_t)fixnum(5002);
+    TEST_ASSERT_FALSE(vg_timeline_overlay_query_timeline(0, entity_b, VG_RENDERED_FIELD_T, &tl_state));
+
+    vg_rendered_state_reset_all();
+    vg_timeline_overlay_destroy();
+}
+
 TEST(test_rendered_state_bss_baseline, 0) {
     size_t footprint = vg_rendered_state_static_footprint();
     /* g_rendered_slots currently dominates BSS.  This anchor goes RED

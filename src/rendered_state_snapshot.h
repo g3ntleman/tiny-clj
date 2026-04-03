@@ -94,6 +94,16 @@ bool vg_rendered_state_query_timeline(uint8_t slot_index,
                                       VgRenderedField field,
                                       VgRenderedTimelineState *out_state);
 
+/* Timeline Overlay — lightweight dynamic replacement for the timeline
+ * portion of g_rendered_slots.  Stores only entities with active timelines.
+ * Render thread writes, Clojure thread reads via atomic pointer swap. */
+bool vg_timeline_overlay_init(uint8_t slot_count);
+void vg_timeline_overlay_destroy(void);
+bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
+                                        uintptr_t entity_id_bits,
+                                        VgRenderedField field,
+                                        VgRenderedTimelineState *out_state);
+
 /* Test/reset utility */
 void vg_rendered_state_reset_all(void);
 size_t vg_rendered_state_static_footprint(void);
