@@ -226,6 +226,93 @@ TEST(test_event_loop_run_next_slow_task_warning_includes_named_closure_symbol) {
     CLJ_FREE(stdout_output);
 }
 
+TEST(test_event_loop_ingress_call_default_does_not_coalesce_duplicate_key) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-options-default-marker (atom [])) "
+        "  (fn event-loop-options-default-task [event] "
+        "    (swap! event-loop-options-default-marker conj (:key event)) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+
+    ID payload = eval_string("{:key :same}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload), "first enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload), "second enqueue should also succeed");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state), "first task should run");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state), "second task should run");
+
+    ID marker_ok = eval_string("(= @event-loop-options-default-marker [:same :same])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
+TEST(test_event_loop_ingress_call_options_coalesce_deduplicates_by_key) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-options-coalesce-marker (atom [])) "
+        "  (fn event-loop-options-coalesce-task [event] "
+        "    (swap! event-loop-options-coalesce-marker conj (:value event)) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+
+    ID payload_a = eval_string("{:key :k :event/options :coalesce :value 1}", g_test_eval_state);
+    ID payload_b = eval_string("{:key :k :event/options :coalesce :value 2}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(payload_a);
+    TEST_ASSERT_NOT_NULL(payload_b);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_a), "first enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, payload_b), "coalesced enqueue should succeed");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state), "coalesced task should run once");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "queue should be empty after one coalesced run");
+
+    ID marker_ok = eval_string("(= @event-loop-options-coalesce-marker [2])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+}
+
+TEST(test_event_loop_ingress_call_options_coalesce_idle_defers_behind_existing_task) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID setup = eval_string(
+        "(do "
+        "  (def event-loop-options-idle-marker (atom [])) "
+        "  (def event-loop-options-idle-normal (fn [] (swap! event-loop-options-idle-marker conj :normal) nil)) "
+        "  (def event-loop-options-idle-ingress (fn [_] (swap! event-loop-options-idle-marker conj :idle) nil)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    ID normal_fn = eval_string("event-loop-options-idle-normal", g_test_eval_state);
+    ID idle_fn = eval_string("event-loop-options-idle-ingress", g_test_eval_state);
+    ID idle_payload = eval_string("{:key :idle :event/options :coalesce-idle}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(normal_fn);
+    TEST_ASSERT_NOT_NULL(idle_fn);
+    TEST_ASSERT_NOT_NULL(idle_payload);
+
+    event_loop_enqueue((CljObject *)normal_fn, NULL);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(idle_fn, idle_payload),
+                             "idle ingress enqueue should succeed");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "first run_next should process preexisting normal task");
+    ID first_marker_ok = eval_string("(= @event-loop-options-idle-marker [:normal])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, first_marker_ok);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "second run_next should process deferred idle ingress task");
+    ID second_marker_ok = eval_string("(= @event-loop-options-idle-marker [:normal :idle])", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, second_marker_ok);
+}
+
 TEST(test_event_loop_time_until_next_timer_does_not_consume_timer_entry) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
@@ -778,15 +865,15 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_kind_and_key_payloads) {
         "(do "
         "  (def event-loop-ingress-coalesce-marker (atom [])) "
         "  (fn event-loop-ingress-coalesce-task [event] "
-        "    (swap! event-loop-ingress-coalesce-marker conj [(:kind event) (:key event)]) "
+        "    (swap! event-loop-ingress-coalesce-marker conj [(:kind event) (:key event) (:seq event)]) "
         "    nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
     TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
-    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :event/options :coalesce :self 1003 :other 2001 :seq 1}",
                                g_test_eval_state);
-    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :event/options :coalesce :self 1003 :other 2001 :seq 2}",
                                g_test_eval_state);
     TEST_ASSERT_NOT_NULL(payload_a);
     TEST_ASSERT_NOT_NULL(payload_b);
@@ -805,7 +892,7 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_kind_and_key_payloads) {
     TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
                               "ingress queue should be empty after one coalesced callback");
 
-    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-marker [[:collision :brick-2001]])",
+    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-marker [[:collision :brick-2001 2]])",
                                g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
@@ -818,15 +905,15 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_when_key_differs) {
         "(do "
         "  (def event-loop-ingress-coalesce-key-marker (atom [])) "
         "  (fn event-loop-ingress-coalesce-key-task [event] "
-        "    (swap! event-loop-ingress-coalesce-key-marker conj [(:kind event) (:key event)]) "
+        "    (swap! event-loop-ingress-coalesce-key-marker conj [(:kind event) (:key event) (:seq event)]) "
         "    nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
     TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
-    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :self 1003 :other 2001}",
+    ID payload_a = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2001 :event/options :coalesce :self 1003 :other 2001 :seq 1}",
                                g_test_eval_state);
-    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2002 :self 1003 :other 2002}",
+    ID payload_b = eval_string("{:id :ball-vs-brick :phase :enter :kind :collision :key :brick-2002 :event/options :coalesce :self 1003 :other 2002 :seq 2}",
                                g_test_eval_state);
     TEST_ASSERT_NOT_NULL(payload_a);
     TEST_ASSERT_NOT_NULL(payload_b);
@@ -847,12 +934,12 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_when_key_differs) {
     TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
                               "ingress queue should be empty after both callbacks");
 
-    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-key-marker [[:collision :brick-2001] [:collision :brick-2002]])",
+    ID marker_ok = eval_string("(= @event-loop-ingress-coalesce-key-marker [[:collision :brick-2001 1] [:collision :brick-2002 2]])",
                                g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
 
-TEST(test_event_loop_ingress_call_coalesces_duplicate_spatial_identity_without_key) {
+TEST(test_event_loop_ingress_call_coalesces_duplicate_spatial_identity_with_explicit_key_and_option) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
 
@@ -861,15 +948,15 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_spatial_identity_without_k
         "  (def event-loop-ingress-spatial-coalesce-marker (atom [])) "
         "  (fn event-loop-ingress-spatial-coalesce-task [event] "
         "    (swap! event-loop-ingress-spatial-coalesce-marker "
-        "           conj [(:id event) (:phase event) (:self event) (:other event)]) "
+        "           conj [(:id event) (:phase event) (:self event) (:other event) (:snapshot-gen event)]) "
         "    nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
     TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
-    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 1}",
+    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 1 :key :ball-vs-brick-1003-2001 :event/options :coalesce}",
                                g_test_eval_state);
-    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 2}",
+    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :snapshot-gen 2 :key :ball-vs-brick-1003-2001 :event/options :coalesce}",
                                g_test_eval_state);
     TEST_ASSERT_NOT_NULL(payload_a);
     TEST_ASSERT_NOT_NULL(payload_b);
@@ -885,7 +972,7 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_spatial_identity_without_k
     TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
     TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
 
-    ID marker_ok = eval_string("(= @event-loop-ingress-spatial-coalesce-marker [[:ball-vs-brick :enter 1003 2001]])",
+    ID marker_ok = eval_string("(= @event-loop-ingress-spatial-coalesce-marker [[:ball-vs-brick :enter 1003 2001 2]])",
                                g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
@@ -899,15 +986,15 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_spatial_events_for_different
         "  (def event-loop-ingress-spatial-other-marker (atom [])) "
         "  (fn event-loop-ingress-spatial-other-task [event] "
         "    (swap! event-loop-ingress-spatial-other-marker "
-        "           conj [(:id event) (:phase event) (:self event) (:other event)]) "
+        "           conj [(:id event) (:phase event) (:self event) (:other event) (:key event)]) "
         "    nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
     TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
-    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001}",
+    ID payload_a = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2001 :key :ball-vs-brick-1003-2001 :event/options :coalesce}",
                                g_test_eval_state);
-    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2002}",
+    ID payload_b = eval_string("{:source :spatial :id :ball-vs-brick :phase :enter :self 1003 :other 2002 :key :ball-vs-brick-1003-2002 :event/options :coalesce}",
                                g_test_eval_state);
     TEST_ASSERT_NOT_NULL(payload_a);
     TEST_ASSERT_NOT_NULL(payload_b);
@@ -926,12 +1013,13 @@ TEST(test_event_loop_ingress_call_does_not_coalesce_spatial_events_for_different
 
     ID marker_ok = eval_string(
         "(= @event-loop-ingress-spatial-other-marker "
-        "   [[:ball-vs-brick :enter 1003 2001] [:ball-vs-brick :enter 1003 2002]])",
+        "   [[:ball-vs-brick :enter 1003 2001 :ball-vs-brick-1003-2001] "
+        "    [:ball-vs-brick :enter 1003 2002 :ball-vs-brick-1003-2002]])",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }
 
-TEST(test_event_loop_ingress_call_coalesces_duplicate_button_identity_without_key) {
+TEST(test_event_loop_ingress_call_coalesces_duplicate_button_identity_with_explicit_key_and_option) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
 
@@ -940,15 +1028,15 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_button_identity_without_ke
         "  (def event-loop-ingress-button-coalesce-marker (atom [])) "
         "  (fn event-loop-ingress-button-coalesce-task [event] "
         "    (swap! event-loop-ingress-button-coalesce-marker "
-        "           conj [(:source event) (:id event) (:kind event)]) "
+        "           conj [(:source event) (:id event) (:kind event) (:seq event)]) "
         "    nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
     TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
-    ID payload_a = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0}",
+    ID payload_a = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0 :seq 1 :key :button-left-down :event/options :coalesce}",
                                g_test_eval_state);
-    ID payload_b = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0}",
+    ID payload_b = eval_string("{:source :button :id :left :kind :button/down :pin 14 :value 0 :seq 2 :key :button-left-down :event/options :coalesce}",
                                g_test_eval_state);
     TEST_ASSERT_NOT_NULL(payload_a);
     TEST_ASSERT_NOT_NULL(payload_b);
@@ -965,7 +1053,7 @@ TEST(test_event_loop_ingress_call_coalesces_duplicate_button_identity_without_ke
     TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
 
     ID marker_ok = eval_string(
-        "(= @event-loop-ingress-button-coalesce-marker [[:button :left :button/down]])",
+        "(= @event-loop-ingress-button-coalesce-marker [[:button :left :button/down 2]])",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
 }

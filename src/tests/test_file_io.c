@@ -777,6 +777,10 @@ TEST(test_fs_kv_debounce_restarts_named_sync_timer)
     TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
 
     usleep(300000);
+    // Debounced sync now runs in two idle-safe steps:
+    // 1) named timer callback enqueues one coalesced idle ingress event
+    // 2) ingress callback performs the actual kv sync
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
     TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
     TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
 

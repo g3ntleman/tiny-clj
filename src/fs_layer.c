@@ -327,14 +327,25 @@ struct FsKvStore {
 static FsKvStore *g_fs_global_store = NULL;
 static FsKvStore *g_fs_sync_store_head = NULL;
 static ID g_fs_sync_timer_fn_obj = NULL;
+static ID g_fs_sync_ingress_fn_obj = NULL;
+static ID g_fs_sync_ingress_payload_obj = NULL;
 static ID g_fs_sync_timer_key = NULL;
 static ID g_fs_sync_fn_symbol = NULL;
+static ID g_fs_sync_payload_key_kw = NULL;
+static ID g_fs_sync_payload_options_kw = NULL;
+static ID g_fs_sync_payload_key_val = NULL;
+static ID g_fs_sync_payload_options_val = NULL;
 static const IdSymbolCacheEntry g_fs_sync_symbol_cache[] = {
     {&g_fs_sync_fn_symbol, "tiny-clj.fs/kv-sync-flush"},
     {&g_fs_sync_timer_key, FS_KV_SYNC_TIMER_KEY_NAME},
+    {&g_fs_sync_payload_key_kw, ":key"},
+    {&g_fs_sync_payload_options_kw, ":event/options"},
+    {&g_fs_sync_payload_key_val, ":fs.kv.sync"},
+    {&g_fs_sync_payload_options_val, ":coalesce-idle"},
 };
 
 static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc);
+static ID fs_kv_sync_ingress_callback(ID *args, unsigned int argc);
 
 static void fs_kv_sync_register_store(FsKvStore *st)
 {
@@ -368,40 +379,73 @@ static void fs_kv_sync_unregister_store(FsKvStore *st)
 
 static void fs_kv_sync_ensure_timer_fn(void)
 {
-    if (g_fs_sync_timer_fn_obj) return;
-    if (!id_symbol_cache_init_global(g_fs_sync_symbol_cache,
-                                     sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0])) ||
-        !g_fs_sync_fn_symbol) {
+    if (g_fs_sync_timer_fn_obj &&
+        g_fs_sync_ingress_fn_obj &&
+        g_fs_sync_ingress_payload_obj) {
         return;
     }
-    g_fs_sync_timer_fn_obj = make_named_func(fs_kv_sync_timer_callback, g_fs_sync_fn_symbol);
+    if (!id_symbol_cache_init_global(g_fs_sync_symbol_cache,
+                                     sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0])) ||
+        !g_fs_sync_fn_symbol ||
+        !g_fs_sync_payload_key_kw ||
+        !g_fs_sync_payload_options_kw ||
+        !g_fs_sync_payload_key_val ||
+        !g_fs_sync_payload_options_val) {
+        return;
+    }
+    if (!g_fs_sync_timer_fn_obj) {
+        g_fs_sync_timer_fn_obj = make_named_func(fs_kv_sync_timer_callback, g_fs_sync_fn_symbol);
+    }
+    if (!g_fs_sync_ingress_fn_obj) {
+        g_fs_sync_ingress_fn_obj = make_named_func(fs_kv_sync_ingress_callback, g_fs_sync_fn_symbol);
+    }
+    if (!g_fs_sync_ingress_payload_obj) {
+        CljPersistentMap *payload = make_map(2, STRONG);
+        if (!payload) return;
+        ASSIGN(payload, map_assoc(payload, g_fs_sync_payload_key_kw, g_fs_sync_payload_key_val));
+        ASSIGN(payload, map_assoc(payload, g_fs_sync_payload_options_kw, g_fs_sync_payload_options_val));
+        g_fs_sync_ingress_payload_obj = RETAIN(payload);
+        RELEASE(payload);
+    }
 }
 
-static void fs_kv_sync_schedule_debounced(void)
+static bool fs_kv_sync_schedule_debounced(void)
 {
     fs_kv_sync_ensure_timer_fn();
-    if (!g_fs_sync_timer_fn_obj) return;
+    if (!g_fs_sync_timer_fn_obj) return false;
     (void)id_symbol_cache_init_global(g_fs_sync_symbol_cache,
                                       sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0]));
-    (void)timer_upsert_named(g_fs_sync_timer_key,
-                             RETAIN(g_fs_sync_timer_fn_obj),
-                             FS_KV_SYNC_DEBOUNCE_MS,
-                             false,
-                             0);
+    int timer_id = timer_upsert_named(g_fs_sync_timer_key,
+                                      RETAIN(g_fs_sync_timer_fn_obj),
+                                      FS_KV_SYNC_DEBOUNCE_MS,
+                                      false,
+                                      0);
+    if (timer_id <= 0) return false;
+    return true;
 }
 
 static void fs_kv_sync_mark_dirty(FsKvStore *st)
 {
     if (!st) return;
     st->sync_dirty = true;
-    fs_kv_sync_schedule_debounced();
+    (void)fs_kv_sync_schedule_debounced();
 }
 
 static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc)
 {
     (void)args;
     if (argc != 0) return NULL;
+    fs_kv_sync_ensure_timer_fn();
+    if (!g_fs_sync_ingress_fn_obj || !g_fs_sync_ingress_payload_obj) return NULL;
+    (void)event_loop_enqueue_ingress_call((CljObject *)g_fs_sync_ingress_fn_obj,
+                                          g_fs_sync_ingress_payload_obj);
+    return NULL;
+}
 
+static ID fs_kv_sync_ingress_callback(ID *args, unsigned int argc)
+{
+    (void)args;
+    if (argc != 1) return NULL;
     bool retry_needed = false;
     FsKvStore *cur = g_fs_sync_store_head;
     while (cur) {
@@ -413,14 +457,8 @@ static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc)
         cur = cur->sync_next;
     }
 
-    if (retry_needed && g_fs_sync_timer_fn_obj) {
-        (void)id_symbol_cache_init_global(g_fs_sync_symbol_cache,
-                                          sizeof(g_fs_sync_symbol_cache) / sizeof(g_fs_sync_symbol_cache[0]));
-        (void)timer_upsert_named(g_fs_sync_timer_key,
-                                 RETAIN(g_fs_sync_timer_fn_obj),
-                                 FS_KV_SYNC_DEBOUNCE_MS,
-                                 false,
-                                 0);
+    if (retry_needed) {
+        (void)fs_kv_sync_schedule_debounced();
     }
     return NULL;
 }
