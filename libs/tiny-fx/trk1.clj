@@ -73,78 +73,89 @@
         (fail "Invalid note keyword")
         midi))))
 
-(defn- varuint
-  [n]
-  (loop [v n out []]
+(def ^:private trk1-header-size 20)
+(def ^:private trk1-end-ctrl (+ (* 2 16) 0))
+
+(defn- conj-varuint!
+  [acc n]
+  (loop [v n out acc]
     (let [b (mod v 128)
           v2 (quot v 128)
           b2 (if (> v2 0) (+ b 128) b)
-          out2 (conj out b2)]
+          out2 (conj! out b2)]
       (if (> v2 0) (recur v2 out2) out2))))
 
-(defn- ->byte-array
-  [xs]
-  (let [a (byte-array (count xs))]
-    (loop [i 0]
-      (if (< i (count xs))
-        (do
-          (aset a i (nth xs i))
-          (recur (+ i 1)))
-        a))))
-
-(defn- evt-set-vol
-  [ch vol]
-  [(+ (* 1 16) ch) vol])
+(defn- conj-all!
+  [acc xs]
+  (loop [i 0 out acc]
+    (if (< i (count xs))
+      (recur (+ i 1) (conj! out (nth xs i)))
+      out)))
 
 (defn- validate-freq-hz
   [freq-hz]
   (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
     (fail "compile-track: frequency Hz must be integer 0..20000")))
 
-(defn- maybe-append-delay
-  [event-bytes has-delay delay-ms]
-  (if has-delay
-    (reduce conj event-bytes (varuint delay-ms))
-    event-bytes))
-
-(defn- evt-note
-  [ch note-val gate-ms note-flags has-delay delay-ms]
+(defn- append-note-event!
+  [acc ch note-val gate-ms note-flags has-delay delay-ms]
   (let [hz-note? (integer? note-val)
         ex-note? (not (= note-flags 0))
         event-type (cond
                      hz-note? (if ex-note? 5 3)
                      ex-note? 4
                      :else 0)
-        payload (if hz-note?
-                  (do
-                    (validate-freq-hz note-val)
-                    [(mod note-val 256)
-                     (mod (quot note-val 256) 256)])
-                  [(note->midi note-val)])
         ctrl (+ (if has-delay 128 0) (* event-type 16) ch)
-        base1 (reduce conj [ctrl] payload)
-        base2 (reduce conj base1 (varuint gate-ms))
-        base3 (if ex-note? (conj base2 note-flags) base2)]
-    (maybe-append-delay base3 has-delay delay-ms)))
+        base1 (conj! acc ctrl)
+        base2 (if hz-note?
+                (do
+                  (validate-freq-hz note-val)
+                  (-> base1
+                      (conj! (mod note-val 256))
+                      (conj! (mod (quot note-val 256) 256))))
+                (conj! base1 (note->midi note-val)))
+        base3 (conj-varuint! base2 gate-ms)
+        base4 (if ex-note? (conj! base3 note-flags) base3)]
+    (if has-delay
+      (conj-varuint! base4 delay-ms)
+      base4)))
 
-(defn- evt-end
-  []
-  [(* 2 16)])
+(defn- write-trk1-header!
+  [out stream-len channel-count flags]
+  (aset out 0 84)
+  (aset out 1 82)
+  (aset out 2 75)
+  (aset out 3 49)
+  (aset out 4 1)
+  (aset out 5 flags)
+  (aset out 6 channel-count)
+  (aset out 7 0)
+  (aset out 8 1)
+  (aset out 9 0)
+  (aset out 10 60)
+  (aset out 11 0)
+  (aset out 12 (mod stream-len 256))
+  (aset out 13 (mod (quot stream-len 256) 256))
+  (aset out 14 (mod (quot stream-len 65536) 256))
+  (aset out 15 (mod (quot stream-len 16777216) 256))
+  (aset out 16 0)
+  (aset out 17 0)
+  (aset out 18 0)
+  (aset out 19 0)
+  out)
 
-(defn- trk1-header
-  [stream-len channel-count]
-  [84 82 75 49
-   1
-   0
-   channel-count
-   0
-   1 0
-   60 0
-   (mod stream-len 256)
-   (mod (quot stream-len 256) 256)
-   (mod (quot stream-len 65536) 256)
-   (mod (quot stream-len 16777216) 256)
-   0 0 0 0])
+(defn- encode-track-bytes
+  [stream-bytes channel-count flags]
+  (let [stream-len (count stream-bytes)
+        total-len (+ trk1-header-size stream-len)
+        out (byte-array total-len)]
+    (write-trk1-header! out stream-len channel-count flags)
+    (loop [i 0]
+      (if (< i stream-len)
+        (do
+          (aset out (+ trk1-header-size i) (nth stream-bytes i))
+          (recur (+ i 1)))
+        out))))
 
 (defn- normalize-notes
   [notes channel-count]
@@ -170,15 +181,6 @@
             best2 (if (> n best) n best)]
         (recur (rest s) best2)))))
 
-(defn- build-initial-vol-events
-  [channel-count volumes]
-  (loop [ch 0 ev []]
-    (if (< ch channel-count)
-      (let [vol (or (nth volumes ch nil) 180)
-            ev2 (reduce conj ev (evt-set-vol ch vol))]
-        (recur (+ ch 1) ev2))
-      ev)))
-
 (def ^:private duration-fraction-map
   {:w  [4 1]
    :h  [2 1]
@@ -198,6 +200,26 @@
 (def ^:private bend-max-segments 16)
 (def ^:private noise-default-segment-ms 12)
 (def ^:private noise-max-segments 24)
+(def ^:private trk1-inter-note-gap-max 25)
+
+(defn- resolve-track-inter-note-gap-ms
+  [opts ex-prefix]
+  (let [opts* (or opts {})
+        has-gap (contains? opts* :inter-note-gap-ms)
+        gap-ms (get opts* :inter-note-gap-ms)]
+    (if has-gap
+      (do
+        (when (or (not (integer? gap-ms)) (< gap-ms 1) (> gap-ms trk1-inter-note-gap-max))
+          (fail (str ex-prefix " :inter-note-gap-ms must be an integer in 1..25")))
+        gap-ms)
+      0)))
+
+(defn- encode-track-flags
+  [opts ex-prefix]
+  (let [gap-ms (resolve-track-inter-note-gap-ms opts ex-prefix)]
+    (if (<= gap-ms 15)
+      (* gap-ms 16)
+      (+ 2 (* (- gap-ms 16) 16)))))
 
 (defn- duration->ms
   [dur tempo-bpm]
@@ -458,10 +480,12 @@
 (defn- expand-modulated-steps
   [steps opts tempo-bpm]
   (let [channel-count (or (get opts :channel-count) (infer-channel-count steps))]
-    (loop [s steps out []]
+    (loop [s steps out* (transient [])]
       (if (empty? s)
-        out
-        (recur (rest s) (into out (expand-modulated-step (first s) channel-count tempo-bpm)))))))
+        (persistent! out*)
+        (let [expanded (expand-modulated-step (first s) channel-count tempo-bpm)
+              out2 (conj-all! out* expanded)]
+          (recur (rest s) out2))))))
 
 (defn- ensure-no-melody-backing-bend
   [steps]
@@ -740,9 +764,9 @@
   (let [opts2 (compile-opts-melody-backing steps opts)
         channel-count (or (get opts2 :channel-count) 1)
         backing-count (max 0 (- channel-count 1))
-        steps2 (loop [s steps out []]
+        steps2 (loop [s steps out* (transient [])]
                  (if (empty? s)
-                   out
+                   (persistent! out*)
                    (let [step (first s)
                          rest-dur (get step :rest)
                          has-rest (not (nil? rest-dur))
@@ -773,7 +797,7 @@
                                  (assoc :articulation (get step :articulation))
                                  (contains? step :rearticulate)
                                  (assoc :rearticulate (get step :rearticulate)))]
-                     (recur (rest s) (conj out step2)))))]
+                     (recur (rest s) (conj! out* step2)))))]
     steps2))
 
 (defn- normalize-playback-config
@@ -862,12 +886,22 @@
             (recur (+ i 1) (conj out byte-level))))
         out))))
 
-(defn- compile-track-init-events
-  [channel-count volumes envelope-levels]
-  (let [base-events (build-initial-vol-events channel-count volumes)
-        envelope-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
-                                    envelope-levels)]
-    (into envelope-event base-events)))
+(defn- compile-track-init-events!
+  [acc channel-count volumes envelope-levels]
+  (let [acc1 (conj! acc (+ (* 6 16) 0))
+        acc2 (conj! acc1 (count envelope-levels))
+        acc3 (loop [i 0 out acc2]
+               (if (< i (count envelope-levels))
+                 (recur (+ i 1) (conj! out (nth envelope-levels i)))
+                 out))]
+    (loop [ch 0 out acc3]
+      (if (< ch channel-count)
+        (let [vol (or (nth volumes ch nil) 180)]
+          (recur (+ ch 1)
+                 (-> out
+                     (conj! (+ (* 1 16) ch))
+                     (conj! vol))))
+        out))))
 
 (defn- step-next-notes
   [next-step channel-count]
@@ -877,8 +911,8 @@
       (normalize-notes [] channel-count)
       (normalize-notes (or (get next-step :notes) []) channel-count))))
 
-(defn- compile-track-step-events
-  [ev step next-step channel-count tempo-bpm gate-percent]
+(defn- compile-track-step-events!
+  [ev* step next-step channel-count tempo-bpm gate-percent]
   (let [dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)
         articulation (validate-articulation step "compile-track")
         rearticulate (validate-rearticulate step "compile-track")
@@ -888,14 +922,14 @@
                 (normalize-notes [] channel-count)
                 (normalize-notes (or (get step :notes) []) channel-count))
         next-notes (step-next-notes next-step channel-count)]
-    (loop [ch 0 acc ev]
+    (loop [ch 0 acc ev*]
       (if (< ch channel-count)
         (let [n (nth notes ch)
               next-n (if (nil? next-notes) nil (nth next-notes ch))
               note-flags (compute-note-flags articulation rearticulate n next-n)
               has-delay (= ch (- channel-count 1))
               delay (if has-delay dur 0)
-              acc2 (reduce conj acc (evt-note ch n gate note-flags has-delay delay))]
+              acc2 (append-note-event! acc ch n gate note-flags has-delay delay)]
           (recur (+ ch 1) acc2))
         acc))))
 
@@ -905,24 +939,25 @@
         channel-count (or (get opts :channel-count) inferred)
         _ (when (or (< channel-count 1) (> channel-count 16))
             (fail "compile-track: :channel-count must be in 1..16"))
+        track-flags (encode-track-flags opts "compile-track")
         gate-percent (or (get opts :gate-percent) 82)
         envelope-levels (compile-track-envelope-levels opts)
         volumes (or (get opts :volumes) [200 180 160 140])
-        events0 (compile-track-init-events channel-count volumes envelope-levels)
-        eventsN (loop [s steps ev events0]
+        events0* (compile-track-init-events! (transient []) channel-count volumes envelope-levels)
+        eventsN* (loop [s steps ev* events0*]
                   (if (empty? s)
-                    (reduce conj ev (evt-end))
+                    (conj! ev* trk1-end-ctrl)
                     (let [step (first s)
                           next-step (first (rest s))
-                          ev2 (compile-track-step-events ev step next-step channel-count tempo-bpm gate-percent)]
-                      (recur (rest s) ev2))))
-        stream-len (count eventsN)
-        all (reduce conj (trk1-header stream-len channel-count) eventsN)]
-    (->byte-array all)))
+                          ev2* (compile-track-step-events! ev* step next-step channel-count tempo-bpm gate-percent)]
+                      (recur (rest s) ev2*))))
+        stream (persistent! eventsN*)]
+    (encode-track-bytes stream channel-count track-flags)))
 
 (defn compile-track
   "Compiles generic or melody/backing steps into TRK1 bytes.
-   Supports duration keywords, articulation, rearticulation and generic bend/noise options."
+   Supports duration keywords, articulation, rearticulation and generic bend/noise options.
+   Optional :inter-note-gap-ms (1..25) encodes a per-track non-legato gap hint for runtime."
   [steps opts]
   (let [cfg (normalize-playback-config steps opts "compile-track")
         steps* (get cfg :steps)
@@ -971,6 +1006,7 @@
    envelope events so small offline SFX compilers can preserve existing output."
   [steps opts]
   (let [opts* (or opts {})
+        track-flags (encode-track-flags opts* "compile-simple-note-hz-track")
         volumes (:volumes opts*)
         volume (if (and (vector? volumes) (integer? (first volumes)))
                  (clamp-int (first volumes) 0 255 180)
@@ -979,21 +1015,24 @@
         set-vol-ctrl (+ (* 1 16) 0)
         note-hz-ctrl (+ 128 (* 3 16) 0)
         end-ctrl (+ (* 2 16) 0)
-        stream (loop [remaining (seq steps)
-                      out [set-vol-ctrl volume]]
-                 (if (seq remaining)
-                   (let [step (first remaining)
-                         hz (step-frequency-hz step)
-                         duration-ms (simple-step-duration-ms step)
-                         gate-ms (simple-step-gate-ms duration-ms gate-percent)
-                         hz-lo (mod hz 256)
-                         hz-hi (mod (quot hz 256) 256)]
-                     (recur (next remaining)
-                            (-> out
-                                (conj note-hz-ctrl hz-lo hz-hi)
-                                (into (varuint gate-ms))
-                                (into (varuint duration-ms)))))
-                   (conj out end-ctrl)))
-        stream-len (count stream)
-        all (into (trk1-header stream-len 1) stream)]
-    (->byte-array all)))
+        stream* (loop [remaining (seq steps)
+                       out* (-> (transient [])
+                                (conj! set-vol-ctrl)
+                                (conj! volume))]
+                  (if (seq remaining)
+                    (let [step (first remaining)
+                          hz (step-frequency-hz step)
+                          duration-ms (simple-step-duration-ms step)
+                          gate-ms (simple-step-gate-ms duration-ms gate-percent)
+                          hz-lo (mod hz 256)
+                          hz-hi (mod (quot hz 256) 256)
+                          out2 (-> out*
+                                   (conj! note-hz-ctrl)
+                                   (conj! hz-lo)
+                                   (conj! hz-hi))
+                          out3 (conj-varuint! out2 gate-ms)
+                          out4 (conj-varuint! out3 duration-ms)]
+                      (recur (next remaining) out4))
+                    (conj! out* end-ctrl)))
+        stream (persistent! stream*)]
+    (encode-track-bytes stream 1 track-flags)))

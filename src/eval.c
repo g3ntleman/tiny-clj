@@ -606,6 +606,9 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
       used_recur_slots = 0;
     }
 
+    // Bound autoreleased temporaries produced while evaluating this iteration's body.
+    uint32_t iteration_pool_mark = autorelease_pool_mark();
+
     // Evaluate function body with context (stack-only, no allocations)
     EvalContext eval_ctx = {
         .env = NULL,
@@ -646,13 +649,24 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
       // Recreate call frame with new parameters (stack-allocated)
       frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
 
+      autorelease_pool_drain_to_depth(iteration_pool_mark);
+
       // Continue loop - recur_arg_count will be reset at the start of the next iteration
       continue;
     }
 
     // No recur - this is the final result.
-    // Do not retain here: callee results are already safe for the caller's pool.
-    result = new_result;
+    // Preserve the final heap object across this iteration drain, then re-attach it
+    // to the caller-visible pool.
+    if (new_result && !IS_IMMEDIATE(new_result)) {
+      RETAIN(new_result);
+    }
+    autorelease_pool_drain_to_depth(iteration_pool_mark);
+    if (new_result && !IS_IMMEDIATE(new_result)) {
+      result = AUTORELEASE(new_result);
+    } else {
+      result = new_result;
+    }
     break;
   } while (true);
 

@@ -86,6 +86,26 @@ TEST(test_require_heap_sound_demos) {
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, total_bytes, "tiny-fx.sound-demos require exceeded heap budget");
 }
 
+TEST(test_trk1_compile_track_peak_heap_is_bounded_for_large_two_voice_track) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID peak = eval_string(
+        "(do "
+        "  (require 'tiny-fx.trk1) "
+        "  (let [steps (vec (repeat 220 {:notes [:C4 :E4] :duration :e})) "
+        "        opts {:tempo-bpm 120 :channel-count 2}] "
+        "    (tiny-fx.trk1/compile-track steps opts) "
+        "    (:peak (heap (tiny-fx.trk1/compile-track steps opts)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(peak);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(peak), "heap :peak should be a fixnum");
+
+    int peak_bytes = as_fixnum(peak);
+    test_fprintf(stderr, "\ntrk1 compile-track peak delta (220x two-voice): %d bytes\n", peak_bytes);
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(250000, peak_bytes,
+                                          "compile-track peak is too high for large two-voice tracks");
+}
+
 TEST(test_require_sound_demos_does_not_autoload_sound_namespace) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -130,6 +150,70 @@ TEST(test_sound_demos_bytes_asset_under_prefix_returns_bytes) {
 
     TEST_ASSERT_TRUE_MESSAGE(loaded && loaded != clj_false,
                              "bytes-asset-under-prefix should return non-empty byte-array");
+}
+
+TEST(test_sound_demos_play_demo_caches_trk1_and_unloads_compiler_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID setup = eval_string(
+        "(do "
+        "  (require 'tiny-fx.sound-demos) "
+        "  (require 'tiny-clj.fs) "
+        "  ((var tiny-clj.fs/spit-bytes) \"/data/tiny-fx/sound-demos/minuet-in-g.trk1\" nil) "
+        "  ((var tiny-clj.fs/spit-bytes) \"/data/tiny-fx/sound-demos/minuet-in-g.meta.edn\" nil) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(setup && setup != clj_false);
+
+    ID first = eval_string(
+        "(let [ret (tiny-fx.sound-demos/play-demo! :minuet-in-g) "
+        "      trk (slurp-bytes \"/data/tiny-fx/sound-demos/minuet-in-g.trk1\") "
+        "      meta (slurp \"/data/tiny-fx/sound-demos/minuet-in-g.meta.edn\")] "
+        "  (and (map? ret) "
+        "       (contains? ret :status) "
+        "       (number? (:duration-ms ret)) "
+        "       trk "
+        "       (> (alength trk) 0) "
+        "       meta "
+        "       (nil? (find-ns 'tiny-fx.trk1))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(first && first != clj_false,
+                             "first play-demo! should compile, cache TRK1 bytes and unload tiny-fx.trk1");
+
+    ID second_heap = eval_string(
+        "(do "
+        "  (ns-unload 'tiny-fx.trk1) "
+        "  (:total (heap (tiny-fx.sound-demos/play-demo! :minuet-in-g))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(second_heap);
+    TEST_ASSERT_TRUE(is_fixnum(second_heap));
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(2048, as_fixnum(second_heap),
+                                          "cached play-demo! should not re-load/compile tiny-fx.trk1");
+
+    ID second = eval_string(
+        "(let [ret (tiny-fx.sound-demos/play-demo! :minuet-in-g)] "
+        "  (and (map? ret) "
+        "       (contains? ret :status) "
+        "       (number? (:duration-ms ret)) "
+        "       (nil? (find-ns 'tiny-fx.trk1))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(second && second != clj_false,
+                             "cached play-demo! should work without keeping tiny-fx.trk1 loaded");
+
+    ID force_compiler_loaded = eval_string(
+        "(do "
+        "  (require 'tiny-fx.trk1) "
+        "  (not (nil? (find-ns 'tiny-fx.trk1))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(force_compiler_loaded && force_compiler_loaded != clj_false);
+
+    ID forced_unload_after_play = eval_string(
+        "(do "
+        "  (tiny-fx.sound-demos/play-demo! :minuet-in-g) "
+        "  (nil? (find-ns 'tiny-fx.trk1)))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(forced_unload_after_play && forced_unload_after_play != clj_false,
+                             "play-demo! should unload tiny-fx.trk1 even if it was already loaded");
 }
 
 TEST(test_assets_edn_sound_demos_loader_contract) {

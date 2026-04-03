@@ -1511,6 +1511,60 @@ TEST(test_runtime_stats_heap_function_recur_no_arg_retain_growth) {
 #endif
 
 #if DEBUG && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_function_recur_iteration_pool_bounds_peak) {
+  const char *init_expr =
+      "(def recur-peak-alloc "
+      "  (fn [n] "
+      "    (if (= n 0) "
+      "      0 "
+      "      (let [v (reduce conj [] (range 80))] "
+      "        (if (= (count v) 80) "
+      "          (recur (dec n)) "
+      "          0)))))";
+  const char *expr = "(heap (recur-peak-alloc 500))";
+
+  runtime_reset(&g_runtime);
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+  });
+  event_loop_init();
+  meta_registry_init();
+  init_special_symbols();
+  register_builtins();
+  g_runtime.builtins_registered = true;
+  evalstate_reset(&g_test_eval_state, true);
+
+  WITH_AUTORELEASE_POOL({
+    ID init = eval_string(init_expr, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(init);
+  });
+
+  ID k_peak = (ID)intern_symbol_global(":peak");
+  ID k_total = (ID)intern_symbol_global(":total");
+
+  for (int i = 0; i < 3; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID result = eval_string(expr, g_test_eval_state);
+      TEST_ASSERT_NOT_NULL(result);
+      TEST_ASSERT_TRUE(is_map(result));
+
+      ID v_peak = map_get_sentinel((CljPersistentMap *)result, k_peak, NOT_FOUND);
+      TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_peak);
+      TEST_ASSERT_TRUE(is_fixnum(v_peak));
+      TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1000000, as_fixnum(v_peak),
+                                            "function recur path should drain iteration temporaries and keep local peak bounded");
+
+      ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+      TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+      TEST_ASSERT_TRUE(is_fixnum(v_total));
+      TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                    "function recur iteration pooling must not retain heap objects");
+    });
+  }
+}
+#endif
+
+#if DEBUG && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_macroexpand_1_thread_first_no_list_growth) {
   const char *expr = "(heap (eval (read-string \"(macroexpand-1 (quote (-> 1 inc inc)))\")))";
 
