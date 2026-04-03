@@ -47,6 +47,8 @@ static CljSymbol *g_sound_kw_engine_voice_freqs = NULL;
 static CljSymbol *g_sound_kw_engine_voice_gates = NULL;
 static CljSymbol *g_sound_kw_engine_voice_active = NULL;
 static CljSymbol *g_sound_kw_supported = NULL;
+static CljSymbol *g_sound_kw_min_stable_duty = NULL;
+static CljSymbol *g_sound_kw_updated = NULL;
 static CljSymbol *g_sound_kw_host_test_tone = NULL;
 static const SymbolCacheEntry g_sound_symbol_cache[] = {
     {&g_sound_kw_backend_available, ":backend-available", SYMBOL_CACHE_SCOPE_GLOBAL},
@@ -62,6 +64,8 @@ static const SymbolCacheEntry g_sound_symbol_cache[] = {
     {&g_sound_kw_engine_voice_gates, ":engine-voice-gates", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&g_sound_kw_engine_voice_active, ":engine-voice-active", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&g_sound_kw_supported, ":supported", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_min_stable_duty, ":min-stable-duty", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_updated, ":updated", SYMBOL_CACHE_SCOPE_GLOBAL},
     {&g_sound_kw_host_test_tone, ":__host-test-tone", SYMBOL_CACHE_SCOPE_GLOBAL},
 };
 #endif
@@ -252,6 +256,58 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
                             g_sound_kw_engine_voice_freqs, engine_voice_freqs,
                             g_sound_kw_engine_voice_gates, engine_voice_gates,
                             g_sound_kw_engine_voice_active, engine_voice_active);
+}
+
+ID native_sound_set_min_stable_duty(ID *args, unsigned int argc) {
+    if (!validate_arity(argc, 1, "set-min-stable-duty!")) return NULL;
+    builtins_sound_init_symbols();
+    ensure_sound_engine_initialized();
+
+    ID duty_arg = args[0];
+    if (!duty_arg || !is_fixnum((CljValue)duty_arg)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "set-min-stable-duty! duty must be integer 0..127",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int32_t duty = (int32_t)as_fixnum((CljValue)duty_arg);
+    if (duty < 0 || duty > 127) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "set-min-stable-duty! duty must be integer 0..127",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    bool supported = sound_backend_supports_min_stable_duty();
+    bool updated = false;
+    if (supported) {
+        updated = sound_backend_set_min_stable_duty((uint8_t)duty);
+    }
+
+    ID v_supported = supported ? clj_true : clj_false;
+    ID v_updated = updated ? clj_true : clj_false;
+    ID v_min_stable_duty = fixnum((int32_t)sound_backend_get_min_stable_duty());
+    return make_map_from_kv(3,
+                            g_sound_kw_supported, v_supported,
+                            g_sound_kw_min_stable_duty, v_min_stable_duty,
+                            g_sound_kw_updated, v_updated);
+}
+
+ID native_sound_min_stable_duty_status(ID *args, unsigned int argc) {
+    if (!validate_arity(argc, 0, "min-stable-duty-status!")) return NULL;
+    (void)args;
+    builtins_sound_init_symbols();
+    ensure_sound_engine_initialized();
+
+    bool supported = sound_backend_supports_min_stable_duty();
+    ID v_supported = supported ? clj_true : clj_false;
+    ID v_updated = clj_false;
+    ID v_min_stable_duty = fixnum((int32_t)sound_backend_get_min_stable_duty());
+    return make_map_from_kv(3,
+                            g_sound_kw_supported, v_supported,
+                            g_sound_kw_min_stable_duty, v_min_stable_duty,
+                            g_sound_kw_updated, v_updated);
 }
 
 static uint8_t sound_encode_varuint(uint32_t value, uint8_t *out) {
@@ -507,6 +563,61 @@ ID native_sound_play_test_ramp_noise(ID *args, unsigned int argc) {
     return ok ? clj_true : clj_false;
 #endif
 }
+
+#endif
+
+#ifndef DEBUG
+ID native_sound_set_min_stable_duty(ID *args, unsigned int argc) {
+    if (!validate_arity(argc, 1, "sound-set-min-stable-duty!")) return NULL;
+
+    ensure_sound_engine_initialized();
+
+    ID duty_arg = args[0];
+    if (!duty_arg || !is_fixnum((CljValue)duty_arg)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "sound-set-min-stable-duty! duty must be integer 0..127",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int32_t duty = (int32_t)as_fixnum((CljValue)duty_arg);
+    if (duty < 0 || duty > 127) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "sound-set-min-stable-duty! duty must be integer 0..127",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    bool supported = sound_backend_supports_min_stable_duty();
+    bool updated = false;
+    if (supported) {
+        updated = sound_backend_set_min_stable_duty((uint8_t)duty);
+    }
+
+    ID kw_supported = (ID)intern_symbol_global(":supported");
+    ID kw_min_stable_duty = (ID)intern_symbol_global(":min-stable-duty");
+    ID kw_updated = (ID)intern_symbol_global(":updated");
+    return make_map_from_kv(3,
+                            kw_supported, supported ? clj_true : clj_false,
+                            kw_min_stable_duty, fixnum((int32_t)sound_backend_get_min_stable_duty()),
+                            kw_updated, updated ? clj_true : clj_false);
+}
+
+ID native_sound_min_stable_duty_status(ID *args, unsigned int argc) {
+    if (!validate_arity(argc, 0, "sound-min-stable-duty-status!")) return NULL;
+    (void)args;
+
+    ensure_sound_engine_initialized();
+
+    bool supported = sound_backend_supports_min_stable_duty();
+    ID kw_supported = (ID)intern_symbol_global(":supported");
+    ID kw_min_stable_duty = (ID)intern_symbol_global(":min-stable-duty");
+    ID kw_updated = (ID)intern_symbol_global(":updated");
+    return make_map_from_kv(3,
+                            kw_supported, supported ? clj_true : clj_false,
+                            kw_min_stable_duty, fixnum((int32_t)sound_backend_get_min_stable_duty()),
+                            kw_updated, clj_false);
+}
 #endif
 #else
 static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
@@ -531,6 +642,8 @@ TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_stop_all, "sound-stop-all!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_set_track_volume, "sound-set-track-volume!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_set_music_volume, "sound-set-music-volume!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_on_finished, "sound-on-finished!")
+TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_set_min_stable_duty, "sound-set-min-stable-duty!")
+TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_min_stable_duty_status, "sound-min-stable-duty-status!")
 
 #ifdef DEBUG
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_tone, "play-test-tone!")
@@ -587,12 +700,16 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-set-track-volume!", native_sound_set_track_volume);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-set-music-volume!", native_sound_set_music_volume);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-on-finished!", native_sound_on_finished);
+    registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-set-min-stable-duty!", native_sound_set_min_stable_duty);
+    registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-min-stable-duty-status!", native_sound_min_stable_duty_status);
 #ifdef DEBUG
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-tone!", native_sound_play_test_tone);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-noise!", native_sound_play_test_noise);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-ramp!", native_sound_play_test_ramp);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-ramp-noise!", native_sound_play_test_ramp_noise);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/host-status!", native_sound_host_status);
+    registrar(TINYCLJ_SOUND_DEBUG_NS "/set-min-stable-duty!", native_sound_set_min_stable_duty);
+    registrar(TINYCLJ_SOUND_DEBUG_NS "/min-stable-duty-status!", native_sound_min_stable_duty_status);
 #endif
 #endif
 }

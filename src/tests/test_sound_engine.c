@@ -1201,9 +1201,11 @@ TEST(test_sound_native_lookup) {
       "tiny-fx.sound/sound-set-track-volume!",
       "tiny-fx.sound/sound-set-music-volume!",
       "tiny-fx.sound/sound-on-finished!",
+      "tiny-fx.sound/sound-set-min-stable-duty!",
+      "tiny-fx.sound/sound-min-stable-duty-status!",
   };
 
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < (int)(sizeof(names) / sizeof(names[0])); i++) {
     char buf[192];
     test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound) (fn? %s))", names[i]);
     ID result = NULL;
@@ -1256,13 +1258,15 @@ TEST(test_sound_debug_lookup) {
       "tiny-fx.sound-debug/play-test-ramp!",
       "tiny-fx.sound-debug/play-test-ramp-noise!",
       "tiny-fx.sound-debug/host-status!",
+      "tiny-fx.sound-debug/min-stable-duty-status!",
+      "tiny-fx.sound-debug/set-min-stable-duty!",
       "tiny-fx.sound-debug/play-portamento-reference!",
       "tiny-fx.sound-debug/play-rocket-thruster-reference!",
       "tiny-fx.sound-debug/play-thrust-demo!",
       "tiny-fx.sound-debug/play-piu-demo!",
   };
 
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < (int)(sizeof(names) / sizeof(names[0])); i++) {
     char buf[192];
     test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound-debug) (fn? %s))", names[i]);
     ID result = NULL;
@@ -1385,6 +1389,69 @@ TEST(test_sound_native_play_music_initializes_engine_if_needed) {
   TEST_ASSERT_TRUE(g_sound_engine.voice_count > 0);
 
   sound_engine_shutdown();
+}
+
+TEST(test_sound_native_min_stable_duty_status_in_sound_namespace_returns_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) (tiny-fx.sound/sound-min-stable-duty-status!))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("sound-min-stable-duty-status! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":supported")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":min-stable-duty")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":updated")) != NOT_FOUND);
+}
+
+TEST(test_sound_native_set_min_stable_duty_in_sound_namespace_returns_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) (tiny-fx.sound/sound-set-min-stable-duty! 28))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("sound-set-min-stable-duty! should not throw for valid integer input");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+  ID supported = map_get(result, intern_symbol_global(":supported"));
+  ID min_stable_duty = map_get(result, intern_symbol_global(":min-stable-duty"));
+  ID updated = map_get(result, intern_symbol_global(":updated"));
+  TEST_ASSERT_TRUE(supported == clj_true || supported == clj_false);
+  TEST_ASSERT_TRUE(is_fixnum(min_stable_duty));
+  TEST_ASSERT_TRUE(updated == clj_true || updated == clj_false);
+}
+
+TEST(test_sound_native_set_min_stable_duty_in_sound_namespace_rejects_out_of_range_values) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  bool threw = false;
+  TRY {
+    (void)eval_string(
+        "(do (require 'tiny-fx.sound) (tiny-fx.sound/sound-set-min-stable-duty! 200))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    threw = true;
+    TEST_ASSERT_NOT_NULL(ex);
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(threw);
 }
 
 TEST(test_sound_native_play_test_tone_returns_bool) {
@@ -1551,6 +1618,69 @@ TEST(test_sound_native_host_status_returns_map) {
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-noise-active")) != NOT_FOUND);
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-ramp-active")) != NOT_FOUND);
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-ramp-noise-active")) != NOT_FOUND);
+}
+
+TEST(test_sound_native_min_stable_duty_status_returns_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/min-stable-duty-status!))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("min-stable-duty-status! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":supported")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":min-stable-duty")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":updated")) != NOT_FOUND);
+}
+
+TEST(test_sound_native_set_min_stable_duty_returns_status_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/set-min-stable-duty! 28))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("set-min-stable-duty! should not throw for valid integer input");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+  ID supported = map_get(result, intern_symbol_global(":supported"));
+  ID min_stable_duty = map_get(result, intern_symbol_global(":min-stable-duty"));
+  ID updated = map_get(result, intern_symbol_global(":updated"));
+  TEST_ASSERT_TRUE(supported == clj_true || supported == clj_false);
+  TEST_ASSERT_TRUE(is_fixnum(min_stable_duty));
+  TEST_ASSERT_TRUE(updated == clj_true || updated == clj_false);
+}
+
+TEST(test_sound_native_set_min_stable_duty_rejects_out_of_range_values) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  bool threw = false;
+  TRY {
+    (void)eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/set-min-stable-duty! 200))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    threw = true;
+    TEST_ASSERT_NOT_NULL(ex);
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(threw);
 }
 
 TEST(test_sound_host_init_failure_throws_and_allows_retry) {

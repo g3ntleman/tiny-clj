@@ -24,3 +24,8 @@
 ^#^{:doc "Registers callback fn(event-map) for finished track notifications."}
 (defn sound-on-finished! [callback-fn] :native)
 
+^#^{:doc "Sets ESP32 minimum PWM duty floor (0..127) used for active tones. Returns {:supported bool :min-stable-duty int :updated bool}."}
+(defn sound-set-min-stable-duty! [duty] :native)
+
+^#^{:doc "Returns ESP32 minimum PWM duty floor status {:supported bool :min-stable-duty int :updated false}."}
+(defn sound-min-stable-duty-status! [] :native)

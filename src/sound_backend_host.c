@@ -734,6 +734,19 @@ bool sound_backend_keepalive_active(void) {
            atomic_load_explicit(&g_debug_ramp_noise_enabled, memory_order_acquire);
 }
 
+bool sound_backend_set_min_stable_duty(uint8_t duty) {
+    (void)duty;
+    return false;
+}
+
+uint8_t sound_backend_get_min_stable_duty(void) {
+    return 0u;
+}
+
+bool sound_backend_supports_min_stable_duty(void) {
+    return false;
+}
+
 void sound_tick_start(void) {
     bool started_now = sound_engine_tick_mark_running();
     if (!started_now) {
@@ -914,6 +927,19 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, 
 }
 
 bool sound_backend_keepalive_active(void) {
+    return false;
+}
+
+bool sound_backend_set_min_stable_duty(uint8_t duty) {
+    (void)duty;
+    return false;
+}
+
+uint8_t sound_backend_get_min_stable_duty(void) {
+    return 0u;
+}
+
+bool sound_backend_supports_min_stable_duty(void) {
     return false;
 }
 

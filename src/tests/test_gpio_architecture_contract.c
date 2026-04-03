@@ -371,8 +371,14 @@ TEST(test_gpio_architecture_sound_backend_keeps_pwm_duty_at_half_scale_max) {
                                  "sound backend should keep GPIO duty within 0..127 (max ~50%)");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SOUND_PWM_MIN_STABLE_DUTY"),
                                  "sound backend should define a minimum stable nonzero PWM duty");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "if (boosted < SOUND_PWM_MIN_STABLE_DUTY)"),
-                                 "sound backend should clamp very low duty levels to zero to avoid unstable overtone tails");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "g_sound_pwm_min_stable_duty"),
+                                 "sound backend should keep a runtime-tunable minimum stable duty");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "uint32_t span = (uint32_t)SOUND_PWM_HALF_DUTY_MAX - (uint32_t)min_stable_duty;"),
+                                 "sound backend should map dynamic range relative to min stable duty");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "uint32_t mapped = (uint32_t)min_stable_duty + ((((uint32_t)volume * span) + 127u) / 255u);"),
+                                 "sound backend should scale volume into the [min_stable_duty..127] duty interval");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "if (boosted < min_stable_duty)"),
+                             "sound backend should no longer hard-clip low volume to zero");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "int32_t gpio_duty = ((int32_t)duty8 * 255 + 63) / 127;"),
                              "sound backend should not remap duty8 back to full 0..255 scale");
 

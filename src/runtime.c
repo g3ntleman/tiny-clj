@@ -55,6 +55,7 @@ static uint8_t g_resolve_cache_activation_generation = 0;
 static uint32_t g_runtime_activation_counter = 0;
 static uint32_t g_runtime_activation_id = 0;
 
+#if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_nonzero_u8(uint8_t *counter) {
     uint8_t next = (uint8_t)(*counter + 1u);
     if (next == 0u) {
@@ -63,6 +64,7 @@ static inline uint8_t runtime_next_nonzero_u8(uint8_t *counter) {
     *counter = next;
     return next;
 }
+#endif
 
 static inline uint32_t runtime_next_nonzero_u32(uint32_t *counter) {
     uint32_t next = ++(*counter);
@@ -85,9 +87,11 @@ static bool runtime_bootstrap_builtins_present(void) {
     return map_get_sentinel((ID)core_ns->mappings, (ID)SYM_PLUS, NULL) != NULL;
 }
 
+#if !MEMORY_PROFILING_ENABLED
 static inline uint8_t runtime_next_resolve_cache_activation_generation(void) {
     return runtime_next_nonzero_u8(&g_resolve_cache_activation_generation);
 }
+#endif
 
 static inline uint32_t runtime_next_activation_id_value(void) {
     return runtime_next_nonzero_u32(&g_runtime_activation_counter);

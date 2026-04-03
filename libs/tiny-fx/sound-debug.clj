@@ -5,6 +5,12 @@
 ^#^{:doc "DEBUG-only sound host diagnostics map. Not part of the production sound API."}
 (defn host-status! [] :native)
 
+^#^{:doc "DEBUG-only ESP32 PWM tail clamp status map. Returns {:supported bool :min-stable-duty int :updated false}."}
+(defn min-stable-duty-status! [] :native)
+
+^#^{:doc "DEBUG-only ESP32 PWM tail clamp tuner. Accepts integer duty 0..127 and returns {:supported bool :min-stable-duty int :updated bool}."}
+(defn set-min-stable-duty! [duty] :native)
+
 ^#^{:doc "DEBUG-only one-shot test tone helper. Not part of the production sound API."}
 (defn play-test-tone! [& args] :native)
 

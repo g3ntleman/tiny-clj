@@ -4404,6 +4404,16 @@ static StaticSymbolData sym_tinyfx_sound_debug_host_status_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-fx.sound-debug/host-status!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_set_min_stable_duty_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/set-min-stable-duty!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_min_stable_duty_status_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/min-stable-duty-status!"}};
 #endif
 
 static StaticSymbolData sym_tinyclj_net_udp_socket_qualified_data = {
@@ -4574,6 +4584,10 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_ramp_noise_qualified_data.sym,
                  native_sound_play_test_ramp_noise),
     NATIVE_ENTRY(&sym_tinyfx_sound_debug_host_status_qualified_data.sym, native_sound_host_status),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_set_min_stable_duty_qualified_data.sym,
+                 native_sound_set_min_stable_duty),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_min_stable_duty_status_qualified_data.sym,
+                 native_sound_min_stable_duty_status),
 #endif
     NATIVE_ENTRY(&sym_tinyclj_net_udp_socket_qualified_data.sym, native_tinyclj_net_udp_socket),
     NATIVE_ENTRY(&sym_tinyclj_net_on_receive_qualified_data.sym, native_tinyclj_net_on_receive),
@@ -4730,6 +4744,8 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_sound_set_track_volume_data.sym, native_sound_set_track_volume),
     NATIVE_ENTRY(&sym_sound_set_music_volume_data.sym, native_sound_set_music_volume),
     NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
+    NATIVE_ENTRY(&sym_sound_set_min_stable_duty_data.sym, native_sound_set_min_stable_duty),
+    NATIVE_ENTRY(&sym_sound_min_stable_duty_status_data.sym, native_sound_min_stable_duty_status),
     NATIVE_ENTRY_BOOT_CNAME(native_ast_string, "tiny-clj.runtime/ast-string"),
     NATIVE_ENTRY_BOOT_CNAME(native_bound_p, "bound?"),
     NATIVE_ENTRY(NULL, NULL) // Sentinel

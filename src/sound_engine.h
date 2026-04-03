@@ -299,6 +299,11 @@ void sound_backend_init(int voice_count);
 /* Called on shutdown. */
 void sound_backend_shutdown(void);
 
+/* ESP32 PWM tail clamp tuning (debug tooling support). */
+bool sound_backend_set_min_stable_duty(uint8_t duty);
+uint8_t sound_backend_get_min_stable_duty(void);
+bool sound_backend_supports_min_stable_duty(void);
+
 /* ========================================================================= */
 /* Tick lifecycle (platform-specific)                                         */
 /* ========================================================================= */

@@ -545,6 +545,8 @@ DEFINE_EXTERN_SYMBOL(sym_sound_stop_all_data, "sound-stop-all!");
 DEFINE_EXTERN_SYMBOL(sym_sound_set_track_volume_data, "sound-set-track-volume!");
 DEFINE_EXTERN_SYMBOL(sym_sound_set_music_volume_data, "sound-set-music-volume!");
 DEFINE_EXTERN_SYMBOL(sym_sound_on_finished_data, "sound-on-finished!");
+DEFINE_EXTERN_SYMBOL(sym_sound_set_min_stable_duty_data, "sound-set-min-stable-duty!");
+DEFINE_EXTERN_SYMBOL(sym_sound_min_stable_duty_status_data, "sound-min-stable-duty-status!");
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");

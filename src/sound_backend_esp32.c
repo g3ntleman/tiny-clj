@@ -28,9 +28,7 @@ typedef struct {
 } PwmVoice;
 
 #define SOUND_PWM_HALF_DUTY_MAX 127u
-#define SOUND_PWM_GAIN_NUM 6u
-#define SOUND_PWM_GAIN_DEN 5u
-#define SOUND_PWM_MIN_STABLE_DUTY 32u
+#define SOUND_PWM_MIN_STABLE_DUTY 29u
 
 /* Board-default mapping (from vector_handheld_config.h).
  * Extensible to N voices if more pins/timers are configured. */
@@ -48,6 +46,7 @@ static PwmVoice g_pwm_voices[] = {
 static esp_timer_handle_t g_sound_timer = NULL;
 static _Atomic bool g_sound_tick_in_callback = false;
 static _Atomic uint32_t g_sound_scheduled_ticks = 0u;
+static _Atomic uint8_t g_sound_pwm_min_stable_duty = SOUND_PWM_MIN_STABLE_DUTY;
 
 /* Keep callback work within one tick budget. */
 #define SOUND_TICK_BUDGET_US (VG_SOUND_TICK_MS * 1000)
@@ -84,19 +83,15 @@ static void sound_backend_silence_pwm_voices(void) {
 }
 
 static uint8_t sound_backend_volume_to_half_duty(uint8_t volume) {
-    if (volume == 0u) {
-        return 0u;
+    uint8_t min_stable_duty =
+        atomic_load_explicit(&g_sound_pwm_min_stable_duty, memory_order_relaxed);
+    if (min_stable_duty > SOUND_PWM_HALF_DUTY_MAX) {
+        min_stable_duty = SOUND_PWM_HALF_DUTY_MAX;
     }
 
-    uint32_t half_scale = ((uint32_t)volume * SOUND_PWM_HALF_DUTY_MAX) / 255u;
-    uint32_t boosted = (half_scale * SOUND_PWM_GAIN_NUM + (SOUND_PWM_GAIN_DEN / 2u)) / SOUND_PWM_GAIN_DEN;
-    if (boosted > SOUND_PWM_HALF_DUTY_MAX) {
-        boosted = SOUND_PWM_HALF_DUTY_MAX;
-    }
-    if (boosted < SOUND_PWM_MIN_STABLE_DUTY) {
-        return 0u;
-    }
-    return (uint8_t)boosted;
+    uint32_t span = (uint32_t)SOUND_PWM_HALF_DUTY_MAX - (uint32_t)min_stable_duty;
+    uint32_t mapped = (uint32_t)min_stable_duty + ((((uint32_t)volume * span) + 127u) / 255u);
+    return (uint8_t)mapped;
 }
 
 static uint32_t sound_backend_normalize_due_ticks(uint32_t ticks) {
@@ -205,6 +200,22 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, 
 
 bool sound_backend_keepalive_active(void) {
     return false;
+}
+
+bool sound_backend_set_min_stable_duty(uint8_t duty) {
+    if (duty > SOUND_PWM_HALF_DUTY_MAX) {
+        return false;
+    }
+    atomic_store_explicit(&g_sound_pwm_min_stable_duty, duty, memory_order_release);
+    return true;
+}
+
+uint8_t sound_backend_get_min_stable_duty(void) {
+    return atomic_load_explicit(&g_sound_pwm_min_stable_duty, memory_order_acquire);
+}
+
+bool sound_backend_supports_min_stable_duty(void) {
+    return true;
 }
 
 /* ========================================================================= */

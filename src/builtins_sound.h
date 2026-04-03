@@ -18,6 +18,8 @@ ID native_sound_stop_all(ID *args, unsigned int argc);
 ID native_sound_set_track_volume(ID *args, unsigned int argc);
 ID native_sound_set_music_volume(ID *args, unsigned int argc);
 ID native_sound_on_finished(ID *args, unsigned int argc);
+ID native_sound_set_min_stable_duty(ID *args, unsigned int argc);
+ID native_sound_min_stable_duty_status(ID *args, unsigned int argc);
 #ifdef DEBUG
 ID native_sound_play_test_tone(ID *args, unsigned int argc);
 ID native_sound_play_test_noise(ID *args, unsigned int argc);

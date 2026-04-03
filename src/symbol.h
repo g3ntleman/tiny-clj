@@ -512,6 +512,8 @@ extern StaticSymbolData sym_sound_stop_all_data;
 extern StaticSymbolData sym_sound_set_track_volume_data;
 extern StaticSymbolData sym_sound_set_music_volume_data;
 extern StaticSymbolData sym_sound_on_finished_data;
+extern StaticSymbolData sym_sound_set_min_stable_duty_data;
+extern StaticSymbolData sym_sound_min_stable_duty_status_data;
 
 // Extended Symbol for Special Forms with embedded evaluation function
 typedef struct CljSpecialSymbol {
