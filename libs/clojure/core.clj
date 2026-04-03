@@ -611,15 +611,15 @@
 ; ============================================================================
 ; Byte Array Functions (Native)
 ; ============================================================================
-^#^{:doc "Creates an array of bytes. If size-or-seq is a number, creates a byte array of that size. If size-or-seq is a sequence, creates a byte array with the elements of the sequence."}
+^#^{:doc "Creates a tiny-clj byte-array. With a non-negative integer, allocates that many zero bytes. With a vector, copies elements as bytes (each value must be an integer in 0..255)."}
 (defn byte-array [size-or-seq] :native)
-^#^{:doc "Returns the value at the index. Works on Java arrays. Note - aget throws an exception if the index is out of bounds."}
+^#^{:doc "Returns byte value at `idx` from a tiny-clj byte-array. Throws if index is out of bounds."}
 (defn aget [array idx] :native)
-^#^{:doc "Sets the value at the index. Works on Java arrays. Note - aset throws an exception if the index is out of bounds."}
+^#^{:doc "Sets byte value at `idx` in a tiny-clj byte-array. Value must be an integer in 0..255. Throws if index is out of bounds."}
 (defn aset [array idx val] :native)
-^#^{:doc "Returns the length of the Java array. Works on arrays of all types."}
+^#^{:doc "Returns the length in bytes of a tiny-clj byte-array."}
 (defn alength [array] :native)
-^#^{:doc "Returns a clone of the Java array. Works on arrays of all types."}
+^#^{:doc "Returns a cloned tiny-clj byte-array with copied contents."}
 (defn aclone [array] :native)
 
 ; ============================================================================
