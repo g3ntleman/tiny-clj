@@ -87,4 +87,12 @@ bool vg_render_frame_slot_record_if_changed_at_ms(ID frame_scene_record,
                                                    uint32_t *out_dirty_pixels);
 void vg_set_timeline_progress_observer(VgTimelineProgressObserverFn observer);
 
+/* Query entity world transform from an immutable scene record.
+ * Walks the scene tree composing static transforms.  Returns false when
+ * the entity is not found or any ancestor carries a timeline transform
+ * (the caller should fall back to the render-thread overlay in that case). */
+bool vg_scene_query_entity_world_t(ID scene_record,
+                                   uintptr_t entity_id_bits,
+                                   VgTransformFixed *out_world_t);
+
 #endif

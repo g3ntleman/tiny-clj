@@ -1683,7 +1683,7 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID
         FrameScene *fs = scene_record;
         *out_root = fs->root;
         if (out_index) *out_index = fs->index;
-        *out_clip = fs->clip_rect;
+        if (out_clip) *out_clip = fs->clip_rect;
         if (out_erase) *out_erase = fs->erase_color;
         return true;
     }
@@ -1691,11 +1691,107 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID
         Scene *s = scene_record;
         *out_root = s->root;
         if (out_index) *out_index = s->index;
-        *out_clip = s->clip_rect;
+        if (out_clip) *out_clip = s->clip_rect;
         if (out_erase) *out_erase = s->erase_color;
         return true;
     }
     return false;
+}
+
+/* ---------------------------------------------------------------------------
+ * Scene-tree world_t query (no rendering, no timeline interpolation)
+ * ------------------------------------------------------------------------ */
+
+static bool find_entity_world_t(ID node_obj,
+                                ID entity_map,
+                                const VgFlatSceneLookup *lookup,
+                                VgTransformFixed parent_t,
+                                uintptr_t target_id_bits,
+                                const VgRecordSchema *sc,
+                                VgTransformFixed *out_world_t) {
+    if (!node_obj || TAG(node_obj) != CLJ_RECORD) {
+        return false;
+    }
+    CljRecordDescriptor *desc = record_descriptor_of(node_obj);
+    VgSceneNodeCommonFields fields = {0};
+    if (!scene_node_common_fields(node_obj, desc, sc, &fields)) {
+        return false;
+    }
+
+    /* Compose transform — abort subtree if timeline is present. */
+    VgTransformFixed world_t = parent_t;
+    if (fields.t) {
+        if (TAG(fields.t) != CLJ_RECORD ||
+            record_descriptor_of(fields.t) != sc->d_transform) {
+            /* Timeline or unknown transform type — can't compute statically. */
+            return false;
+        }
+        VgTransformFixed local_t = decode_transform_record_fixed((Transform *)fields.t);
+        world_t = vg_transform_fixed_compose(parent_t, local_t);
+    }
+
+    /* Match? */
+    if (fields.id && (uintptr_t)fields.id == target_id_bits) {
+        *out_world_t = world_t;
+        return true;
+    }
+
+    /* Recurse into group children. */
+    if (desc == sc->d_group) {
+        Group *group = (Group *)node_obj;
+        if (!group->children || !id_is_vector(group->children)) {
+            return false;
+        }
+        CljPersistentVector *vec = as_vector(group->children);
+        unsigned int count = vector_count(vec);
+        for (unsigned int i = 0; i < count; i++) {
+            ID child_ref = vector_nth(vec, i);
+            if (!child_ref) {
+                continue;
+            }
+            ID child_node = child_ref;
+            if (TAG(child_node) != CLJ_RECORD) {
+                child_node = vg_flat_scene_lookup_get(lookup, entity_map, child_ref);
+                if (!child_node || TAG(child_node) != CLJ_RECORD) {
+                    continue;
+                }
+            }
+            if (find_entity_world_t(child_node, entity_map, lookup,
+                                    world_t, target_id_bits, sc, out_world_t)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool vg_scene_query_entity_world_t(ID scene_record,
+                                   uintptr_t entity_id_bits,
+                                   VgTransformFixed *out_world_t) {
+    if (!scene_record || !entity_id_bits || !out_world_t || TAG(scene_record) != CLJ_RECORD) {
+        return false;
+    }
+    ID root = NULL;
+    ID index = NULL;
+    if (!decode_scene_fields(scene_record, &root, &index, NULL, NULL)) {
+        return false;
+    }
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
+    VgFlatSceneLookup lookup = {0};
+    if (!is_map(index) || !vg_flat_scene_lookup_build(index, &lookup)) {
+        return false;
+    }
+    ID root_node = NULL;
+    ID entity_map = NULL;
+    if (!resolve_root_node(root, index, &lookup, &root_node, &entity_map)) {
+        return false;
+    }
+    if (!root_node) {
+        return false;
+    }
+    return find_entity_world_t(root_node, entity_map, &lookup,
+                               vg_transform_fixed_identity(),
+                               entity_id_bits, sc, out_world_t);
 }
 
 bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t now_ms) {

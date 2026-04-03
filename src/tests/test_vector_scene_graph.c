@@ -4082,6 +4082,52 @@ TEST(test_vector_scene_graph_collision_detect_aabb_overlap_bounds) {
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &high_obstacle));
 }
 
+TEST(test_scene_query_entity_world_t_static_transform) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    /* Group (tx=5 ty=3) → Rect (tx=10 ty=7).  Expected world_t: tx=15 ty=10. */
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [t-group (record-create (quote Transform) [5 3 1 1 0]) "
+        "        t-rect  (record-create (quote Transform) [10 7 1 1 0]) "
+        "        style   (->Style 65535 1 true false 0 false 0) "
+        "        rect-id 42 "
+        "        root    (->Group :tiny-fx.scene/root t-group style true [rect-id] nil) "
+        "        rect    (->Rect rect-id t-rect style true 0 0 4 4 nil) "
+        "        entities {:tiny-fx.scene/root root rect-id rect}] "
+        "    (record-create (quote Scene) [:tiny-fx.scene/root entities nil nil nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    VgTransformFixed world_t = {0};
+    uintptr_t rect_id = (uintptr_t)fixnum(42);
+    TEST_ASSERT_TRUE(vg_scene_query_entity_world_t(scene, rect_id, &world_t));
+    /* m02/m12 carry tx/ty in Q19.13 fixed-point. */
+    TEST_ASSERT_EQUAL_INT(15 * VG_SCALE_ONE, world_t.m02);
+    TEST_ASSERT_EQUAL_INT(10 * VG_SCALE_ONE, world_t.m12);
+}
+
+TEST(test_scene_query_entity_world_t_returns_false_for_timeline) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    /* Entity with timeline transform — query must return false. */
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [tl (record-create (quote Timeline) "
+        "             [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
+        "               [100 (record-create (quote Transform) [20 0 1 1 0])]] false]) "
+        "        style (->Style 65535 1 true false 0 false 0) "
+        "        rect-id 99 "
+        "        root (->Group :tiny-fx.scene/root nil style true [rect-id] nil) "
+        "        rect (->Rect rect-id tl style true 0 0 4 4 nil) "
+        "        entities {:tiny-fx.scene/root root rect-id rect}] "
+        "    (record-create (quote Scene) [:tiny-fx.scene/root entities nil nil nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    VgTransformFixed world_t = {0};
+    uintptr_t rect_id = (uintptr_t)fixnum(99);
+    TEST_ASSERT_FALSE(vg_scene_query_entity_world_t(scene, rect_id, &world_t));
+}
+
 TEST(test_rendered_state_bss_baseline, 0) {
     size_t footprint = vg_rendered_state_static_footprint();
     /* g_rendered_slots currently dominates BSS.  This anchor goes RED
