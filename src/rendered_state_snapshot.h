@@ -99,6 +99,9 @@ bool vg_rendered_state_query_timeline(uint8_t slot_index,
  * Render thread writes, Clojure thread reads via atomic pointer swap. */
 bool vg_timeline_overlay_init(uint8_t slot_count);
 void vg_timeline_overlay_destroy(void);
+bool vg_timeline_overlay_query_entity(uint8_t slot_index,
+                                      uintptr_t entity_id_bits,
+                                      VgRenderedEntityState *out_state);
 bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
                                         uintptr_t entity_id_bits,
                                         VgRenderedField field,

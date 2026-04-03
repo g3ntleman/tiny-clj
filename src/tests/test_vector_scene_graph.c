@@ -4170,6 +4170,44 @@ TEST(test_timeline_overlay_stores_and_queries_timeline, 0) {
     vg_timeline_overlay_destroy();
 }
 
+TEST(test_timeline_overlay_stores_and_queries_entity_world_t, 0) {
+    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+    vg_rendered_state_reset_all();
+
+    uintptr_t entity_a = (uintptr_t)fixnum(6001);
+    VgTransformFixed t0 = vg_transform_fixed_identity();
+    t0.m02 = 15 * VG_SCALE_ONE;  /* tx=15 */
+    t0.m12 =  8 * VG_SCALE_ONE;  /* ty=8  */
+
+    VgRenderedTimelineSample sample = {
+        .step_index = 0, .keyframe_count = 2,
+        .phase_ms = 30, .period_ms = 100,
+    };
+
+    vg_rendered_state_capture_begin(0, 2, 30);
+    vg_rendered_state_capture_record_entity(entity_a, t0);
+    vg_rendered_state_capture_record_timeline(entity_a, VG_RENDERED_FIELD_T, sample);
+    vg_rendered_state_capture_commit();
+
+    /* Overlay must provide the entity world_t for timeline entities. */
+    VgRenderedEntityState entity_state = {0};
+    TEST_ASSERT_TRUE(vg_timeline_overlay_query_entity(0, entity_a, &entity_state));
+    TEST_ASSERT_EQUAL_INT(15 * VG_SCALE_ONE, entity_state.world_t.m02);
+    TEST_ASSERT_EQUAL_INT( 8 * VG_SCALE_ONE, entity_state.world_t.m12);
+    TEST_ASSERT_EQUAL_INT(2, entity_state.snapshot_generation);
+
+    /* Non-timeline entity must NOT appear in overlay. */
+    uintptr_t entity_b = (uintptr_t)fixnum(6002);
+    vg_rendered_state_capture_begin(0, 3, 40);
+    vg_rendered_state_capture_record_entity(entity_b, vg_transform_fixed_identity());
+    vg_rendered_state_capture_commit();
+
+    TEST_ASSERT_FALSE(vg_timeline_overlay_query_entity(0, entity_b, &entity_state));
+
+    vg_rendered_state_reset_all();
+    vg_timeline_overlay_destroy();
+}
+
 TEST(test_rendered_state_bss_baseline, 0) {
     size_t footprint = vg_rendered_state_static_footprint();
     /* g_rendered_slots currently dominates BSS.  This anchor goes RED

@@ -48,7 +48,13 @@ static RenderedCaptureContext g_capture_ctx = {0};
 
 /* --- Timeline Overlay (dynamic, heap-allocated) --- */
 
-#define OVERLAY_INITIAL_CAPACITY 32u
+#define OVERLAY_INITIAL_ENTITY_CAPACITY 16u
+#define OVERLAY_INITIAL_TIMELINE_CAPACITY 32u
+
+typedef struct {
+    uintptr_t entity_id_bits;
+    VgTransformFixed world_t;
+} OverlayEntityRow;
 
 typedef struct {
     uintptr_t entity_id_bits;
@@ -60,20 +66,23 @@ typedef struct {
 typedef struct {
     uint32_t snapshot_generation;
     uint32_t frame_time_ms;
-    uint16_t count;
-    uint16_t capacity;
-    OverlayTimelineRow *rows;
-} OverlayTimelineBuffer;
+    uint16_t entity_count;
+    uint16_t entity_capacity;
+    OverlayEntityRow *entities;
+    uint16_t timeline_count;
+    uint16_t timeline_capacity;
+    OverlayTimelineRow *timelines;
+} OverlayBuffer;
 
 typedef struct {
-    OverlayTimelineBuffer buffers[2];
+    OverlayBuffer buffers[2];
     atomic_uint active_buffer_index;
 } OverlaySlot;
 
 static OverlaySlot *g_overlay_slots = NULL;
 static uint8_t g_overlay_slot_count = 0;
 
-static OverlayTimelineBuffer *overlay_write_buffer(void) {
+static OverlayBuffer *overlay_write_buf(void) {
     if (!g_overlay_slots || !g_capture_ctx.active ||
         g_capture_ctx.slot_index >= g_overlay_slot_count) {
         return NULL;
@@ -84,31 +93,65 @@ static OverlayTimelineBuffer *overlay_write_buffer(void) {
     return &slot->buffers[write_idx];
 }
 
-static int overlay_find_timeline_row(const OverlayTimelineBuffer *buf,
-                                     uintptr_t entity_id_bits,
-                                     uint8_t field) {
-    for (uint16_t i = 0; i < buf->count; i++) {
-        if (buf->rows[i].entity_id_bits == entity_id_bits &&
-            buf->rows[i].field == field) {
+static int overlay_find_entity_row(const OverlayBuffer *buf, uintptr_t entity_id_bits) {
+    for (uint16_t i = 0; i < buf->entity_count; i++) {
+        if (buf->entities[i].entity_id_bits == entity_id_bits) {
             return (int)i;
         }
     }
     return -1;
 }
 
-static bool overlay_ensure_capacity(OverlayTimelineBuffer *buf) {
-    if (buf->count < buf->capacity) {
+static int overlay_find_timeline_row(const OverlayBuffer *buf,
+                                     uintptr_t entity_id_bits,
+                                     uint8_t field) {
+    for (uint16_t i = 0; i < buf->timeline_count; i++) {
+        if (buf->timelines[i].entity_id_bits == entity_id_bits &&
+            buf->timelines[i].field == field) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static bool overlay_ensure_entity_capacity(OverlayBuffer *buf) {
+    if (buf->entity_count < buf->entity_capacity) {
         return true;
     }
-    uint16_t new_cap = buf->capacity ? (uint16_t)(buf->capacity * 2u) : OVERLAY_INITIAL_CAPACITY;
-    OverlayTimelineRow *new_rows = (OverlayTimelineRow *)CLJ_HOST_REALLOC(
-        buf->rows, (size_t)new_cap * sizeof(OverlayTimelineRow));
-    if (!new_rows) {
-        return false;
-    }
-    buf->rows = new_rows;
-    buf->capacity = new_cap;
+    uint16_t new_cap = buf->entity_capacity
+        ? (uint16_t)(buf->entity_capacity * 2u) : OVERLAY_INITIAL_ENTITY_CAPACITY;
+    OverlayEntityRow *p = (OverlayEntityRow *)CLJ_HOST_REALLOC(
+        buf->entities, (size_t)new_cap * sizeof(OverlayEntityRow));
+    if (!p) { return false; }
+    buf->entities = p;
+    buf->entity_capacity = new_cap;
     return true;
+}
+
+static bool overlay_ensure_timeline_capacity(OverlayBuffer *buf) {
+    if (buf->timeline_count < buf->timeline_capacity) {
+        return true;
+    }
+    uint16_t new_cap = buf->timeline_capacity
+        ? (uint16_t)(buf->timeline_capacity * 2u) : OVERLAY_INITIAL_TIMELINE_CAPACITY;
+    OverlayTimelineRow *p = (OverlayTimelineRow *)CLJ_HOST_REALLOC(
+        buf->timelines, (size_t)new_cap * sizeof(OverlayTimelineRow));
+    if (!p) { return false; }
+    buf->timelines = p;
+    buf->timeline_capacity = new_cap;
+    return true;
+}
+
+/* Ensure an entity row exists in the overlay; create if missing.
+ * Called when a timeline is recorded (only timeline entities enter the overlay). */
+static OverlayEntityRow *overlay_ensure_entity(OverlayBuffer *buf, uintptr_t entity_id_bits) {
+    int idx = overlay_find_entity_row(buf, entity_id_bits);
+    if (idx >= 0) { return &buf->entities[idx]; }
+    if (!overlay_ensure_entity_capacity(buf)) { return NULL; }
+    uint16_t i = buf->entity_count++;
+    buf->entities[i].entity_id_bits = entity_id_bits;
+    buf->entities[i].world_t = vg_transform_fixed_identity();
+    return &buf->entities[i];
 }
 
 static inline RenderedSlotSnapshot *capture_write_snapshot(void) {
@@ -236,9 +279,10 @@ void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_gener
     g_capture_ctx.write_buffer_index = write;
 
     /* Prepare overlay write buffer (if initialised). */
-    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    OverlayBuffer *obuf = overlay_write_buf();
     if (obuf) {
-        obuf->count = 0;
+        obuf->entity_count = 0;
+        obuf->timeline_count = 0;
         obuf->snapshot_generation = snapshot_generation;
         obuf->frame_time_ms = frame_time_ms;
     }
@@ -315,17 +359,26 @@ void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
     snapshot->timelines[idx].sample = sample;
 
     /* Mirror into overlay. */
-    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    OverlayBuffer *obuf = overlay_write_buf();
     if (obuf) {
         int oexisting = overlay_find_timeline_row(obuf, entity_id_bits, (uint8_t)field);
         if (oexisting >= 0) {
-            obuf->rows[oexisting].sample = sample;
-        } else if (overlay_ensure_capacity(obuf)) {
-            uint16_t oidx = obuf->count++;
-            obuf->rows[oidx].entity_id_bits = entity_id_bits;
-            obuf->rows[oidx].field = (uint8_t)field;
-            obuf->rows[oidx]._pad = 0;
-            obuf->rows[oidx].sample = sample;
+            obuf->timelines[oexisting].sample = sample;
+        } else if (overlay_ensure_timeline_capacity(obuf)) {
+            uint16_t oidx = obuf->timeline_count++;
+            obuf->timelines[oidx].entity_id_bits = entity_id_bits;
+            obuf->timelines[oidx].field = (uint8_t)field;
+            obuf->timelines[oidx]._pad = 0;
+            obuf->timelines[oidx].sample = sample;
+        }
+        /* Ensure entity row exists — grab world_t from g_rendered_slots write buffer. */
+        OverlayEntityRow *erow = overlay_ensure_entity(obuf, entity_id_bits);
+        if (erow) {
+            RenderedSlotSnapshot *snap = capture_write_snapshot();
+            int eidx = snap ? find_entity_row(snap, entity_id_bits) : -1;
+            if (eidx >= 0) {
+                erow->world_t = snap->entities[eidx].world_t;
+            }
         }
     }
 }
@@ -520,10 +573,11 @@ void vg_rendered_state_capture_commit(void) {
 }
 
 void vg_rendered_state_capture_discard(void) {
-    /* Reset overlay write buffer count so stale data is not committed later. */
-    OverlayTimelineBuffer *obuf = overlay_write_buffer();
+    /* Reset overlay write buffer counts so stale data is not committed later. */
+    OverlayBuffer *obuf = overlay_write_buf();
     if (obuf) {
-        obuf->count = 0;
+        obuf->entity_count = 0;
+        obuf->timeline_count = 0;
     }
     g_capture_ctx.active = false;
 }
@@ -596,13 +650,38 @@ void vg_timeline_overlay_destroy(void) {
     if (g_overlay_slots) {
         for (uint8_t s = 0; s < g_overlay_slot_count; s++) {
             for (int b = 0; b < 2; b++) {
-                CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].rows);
+                CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].entities);
+                CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].timelines);
             }
         }
         CLJ_HOST_FREE(g_overlay_slots);
         g_overlay_slots = NULL;
     }
     g_overlay_slot_count = 0;
+}
+
+bool vg_timeline_overlay_query_entity(uint8_t slot_index,
+                                      uintptr_t entity_id_bits,
+                                      VgRenderedEntityState *out_state) {
+    if (!out_state || !entity_id_bits || !g_overlay_slots ||
+        slot_index >= g_overlay_slot_count) {
+        return false;
+    }
+    OverlaySlot *slot = &g_overlay_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&slot->active_buffer_index, memory_order_acquire);
+    if (active > 1u) {
+        return false;
+    }
+    const OverlayBuffer *buf = &slot->buffers[active];
+    int idx = overlay_find_entity_row(buf, entity_id_bits);
+    if (idx < 0) {
+        return false;
+    }
+    out_state->snapshot_generation = buf->snapshot_generation;
+    out_state->frame_time_ms = buf->frame_time_ms;
+    out_state->world_t = buf->entities[idx].world_t;
+    out_state->has_world_aabb = false;
+    return true;
 }
 
 bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
@@ -618,14 +697,14 @@ bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
     if (active > 1u) {
         return false;
     }
-    const OverlayTimelineBuffer *buf = &slot->buffers[active];
+    const OverlayBuffer *buf = &slot->buffers[active];
     int idx = overlay_find_timeline_row(buf, entity_id_bits, (uint8_t)field);
     if (idx < 0) {
         return false;
     }
     out_state->snapshot_generation = buf->snapshot_generation;
     out_state->frame_time_ms = buf->frame_time_ms;
-    out_state->sample = buf->rows[idx].sample;
+    out_state->sample = buf->timelines[idx].sample;
     return true;
 }
 
@@ -641,7 +720,8 @@ void vg_rendered_state_reset_all(void) {
     if (g_overlay_slots) {
         for (uint8_t s = 0; s < g_overlay_slot_count; s++) {
             for (int b = 0; b < 2; b++) {
-                g_overlay_slots[s].buffers[b].count = 0;
+                g_overlay_slots[s].buffers[b].entity_count = 0;
+                g_overlay_slots[s].buffers[b].timeline_count = 0;
                 g_overlay_slots[s].buffers[b].snapshot_generation = 0;
                 g_overlay_slots[s].buffers[b].frame_time_ms = 0;
             }
