@@ -187,6 +187,22 @@ static char *read_event_loop_source(size_t *out_len) {
     return NULL;
 }
 
+static char *read_runtime_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/runtime.c",
+        "../src/runtime.c",
+        "../../src/runtime.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/runtime.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
 TEST(test_gpio_architecture_uses_request_flag_polling) {
     size_t len = 0;
     char *src = read_gpio_esp32_source(&len);
@@ -382,6 +398,19 @@ TEST(test_gpio_architecture_runtime_uses_shared_gpio_api_above_backend) {
 
     CLJ_FREE(builtins_src);
     CLJ_FREE(event_loop_src);
+}
+
+TEST(test_gpio_architecture_runtime_does_not_eagerly_seed_flash_sources_on_boot) {
+    size_t len = 0;
+    char *src = read_runtime_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "embedded_source_map_init();"),
+                                 "runtime should keep embedded source registry initialization");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "source_resolver_seed_flash_sources();"),
+                             "runtime_init should not eagerly write flash seed sources without explicit asset access");
+
+    CLJ_FREE(src);
 }
 
 TEST(test_gpio_architecture_esp32_repl_wait_uses_blocking_event_loop_driver) {
