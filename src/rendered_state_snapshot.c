@@ -54,6 +54,9 @@ static RenderedCaptureContext g_capture_ctx = {0};
 typedef struct {
     uintptr_t entity_id_bits;
     VgTransformFixed world_t;
+    bool has_world_aabb;
+    VgAabb world_aabb;
+    uint32_t content_signature;
 } OverlayEntityRow;
 
 typedef struct {
@@ -142,13 +145,13 @@ static bool overlay_ensure_timeline_capacity(OverlayBuffer *buf) {
     return true;
 }
 
-/* Ensure an entity row exists in the overlay; create if missing.
- * Called when a timeline is recorded (only timeline entities enter the overlay). */
+/* Ensure an entity row exists in the overlay; create if missing. */
 static OverlayEntityRow *overlay_ensure_entity(OverlayBuffer *buf, uintptr_t entity_id_bits) {
     int idx = overlay_find_entity_row(buf, entity_id_bits);
     if (idx >= 0) { return &buf->entities[idx]; }
     if (!overlay_ensure_entity_capacity(buf)) { return NULL; }
     uint16_t i = buf->entity_count++;
+    memset(&buf->entities[i], 0, sizeof(buf->entities[i]));
     buf->entities[i].entity_id_bits = entity_id_bits;
     buf->entities[i].world_t = vg_transform_fixed_identity();
     return &buf->entities[i];
@@ -293,14 +296,15 @@ void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransfo
         return;
     }
     RenderedSlotSnapshot *snapshot = capture_write_snapshot();
-    if (!snapshot) {
-        return;
+    if (snapshot) {
+        RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+        if (row) { row->world_t = world_t; }
     }
-    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
-    if (!row) {
-        return;
+    OverlayBuffer *obuf = overlay_write_buf();
+    if (obuf) {
+        OverlayEntityRow *orow = overlay_ensure_entity(obuf, entity_id_bits);
+        if (orow) { orow->world_t = world_t; }
     }
-    row->world_t = world_t;
 }
 
 void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAabb world_aabb) {
@@ -308,15 +312,15 @@ void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAa
         return;
     }
     RenderedSlotSnapshot *snapshot = capture_write_snapshot();
-    if (!snapshot) {
-        return;
+    if (snapshot) {
+        RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+        if (row) { row->has_world_aabb = true; row->world_aabb = world_aabb; }
     }
-    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
-    if (!row) {
-        return;
+    OverlayBuffer *obuf = overlay_write_buf();
+    if (obuf) {
+        OverlayEntityRow *orow = overlay_ensure_entity(obuf, entity_id_bits);
+        if (orow) { orow->has_world_aabb = true; orow->world_aabb = world_aabb; }
     }
-    row->has_world_aabb = true;
-    row->world_aabb = world_aabb;
 }
 
 void vg_rendered_state_capture_record_entity_content_signature(uintptr_t entity_id_bits, uint32_t content_signature) {
@@ -324,14 +328,15 @@ void vg_rendered_state_capture_record_entity_content_signature(uintptr_t entity_
         return;
     }
     RenderedSlotSnapshot *snapshot = capture_write_snapshot();
-    if (!snapshot) {
-        return;
+    if (snapshot) {
+        RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+        if (row) { row->content_signature = content_signature; }
     }
-    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
-    if (!row) {
-        return;
+    OverlayBuffer *obuf = overlay_write_buf();
+    if (obuf) {
+        OverlayEntityRow *orow = overlay_ensure_entity(obuf, entity_id_bits);
+        if (orow) { orow->content_signature = content_signature; }
     }
-    row->content_signature = content_signature;
 }
 
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
@@ -370,15 +375,6 @@ void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
             obuf->timelines[oidx].field = (uint8_t)field;
             obuf->timelines[oidx]._pad = 0;
             obuf->timelines[oidx].sample = sample;
-        }
-        /* Ensure entity row exists — grab world_t from g_rendered_slots write buffer. */
-        OverlayEntityRow *erow = overlay_ensure_entity(obuf, entity_id_bits);
-        if (erow) {
-            RenderedSlotSnapshot *snap = capture_write_snapshot();
-            int eidx = snap ? find_entity_row(snap, entity_id_bits) : -1;
-            if (eidx >= 0) {
-                erow->world_t = snap->entities[eidx].world_t;
-            }
         }
     }
 }
@@ -680,7 +676,8 @@ bool vg_timeline_overlay_query_entity(uint8_t slot_index,
     out_state->snapshot_generation = buf->snapshot_generation;
     out_state->frame_time_ms = buf->frame_time_ms;
     out_state->world_t = buf->entities[idx].world_t;
-    out_state->has_world_aabb = false;
+    out_state->has_world_aabb = buf->entities[idx].has_world_aabb;
+    out_state->world_aabb = buf->entities[idx].world_aabb;
     return true;
 }
 
@@ -706,6 +703,117 @@ bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
     out_state->frame_time_ms = buf->frame_time_ms;
     out_state->sample = buf->timelines[idx].sample;
     return true;
+}
+
+static bool overlay_entity_changed(const OverlayEntityRow *curr,
+                                   const OverlayBuffer *prev_buf) {
+    int prev_idx = overlay_find_entity_row(prev_buf, curr->entity_id_bits);
+    if (prev_idx < 0) { return true; }
+    const OverlayEntityRow *prev = &prev_buf->entities[prev_idx];
+    if (memcmp(&curr->world_t, &prev->world_t, sizeof(curr->world_t)) != 0) { return true; }
+    if (curr->has_world_aabb != prev->has_world_aabb) { return true; }
+    if (curr->content_signature != prev->content_signature) { return true; }
+    if (curr->has_world_aabb && prev->has_world_aabb &&
+        !aabb_equal(curr->world_aabb, prev->world_aabb)) { return true; }
+    return false;
+}
+
+bool vg_timeline_overlay_capture_compute_dirty_rect(uint8_t slot_index,
+                                                    VgClipRect clip_rect,
+                                                    uint8_t padding_px,
+                                                    VgClipRect *out_dirty_rect) {
+    if (!out_dirty_rect || !g_overlay_slots || slot_index >= g_overlay_slot_count ||
+        !g_capture_ctx.active || g_capture_ctx.slot_index != slot_index ||
+        vg_clip_rect_is_empty(clip_rect)) {
+        return false;
+    }
+    OverlaySlot *oslot = &g_overlay_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&oslot->active_buffer_index, memory_order_acquire);
+    if (active > 1u) { return false; }
+    const OverlayBuffer *prev = &oslot->buffers[active];
+    uint8_t write_idx = (active == 0u) ? 1u : 0u;
+    const OverlayBuffer *curr = &oslot->buffers[write_idx];
+
+    bool have_dirty = false;
+    VgClipRect dirty = {0};
+
+    for (uint16_t i = 0; i < curr->entity_count; i++) {
+        const OverlayEntityRow *cr = &curr->entities[i];
+        if (!overlay_entity_changed(cr, prev)) { continue; }
+        int pi = overlay_find_entity_row(prev, cr->entity_id_bits);
+        bool contributed = false;
+        if (pi >= 0 && prev->entities[pi].has_world_aabb) {
+            contributed |= append_dirty_aabb_rect(&dirty, &have_dirty,
+                                                   prev->entities[pi].world_aabb, padding_px, clip_rect);
+        }
+        if (cr->has_world_aabb) {
+            contributed |= append_dirty_aabb_rect(&dirty, &have_dirty,
+                                                   cr->world_aabb, padding_px, clip_rect);
+        }
+        if (!contributed) { *out_dirty_rect = clip_rect; return true; }
+    }
+    for (uint16_t i = 0; i < prev->entity_count; i++) {
+        if (overlay_find_entity_row(curr, prev->entities[i].entity_id_bits) >= 0) { continue; }
+        if (!prev->entities[i].has_world_aabb) { *out_dirty_rect = clip_rect; return true; }
+        (void)append_dirty_aabb_rect(&dirty, &have_dirty,
+                                     prev->entities[i].world_aabb, padding_px, clip_rect);
+    }
+    if (!have_dirty) { return false; }
+    *out_dirty_rect = dirty;
+    return true;
+}
+
+bool vg_timeline_overlay_capture_collect_dirty_rects(uint8_t slot_index,
+                                                     VgClipRect clip_rect,
+                                                     uint8_t padding_px,
+                                                     VgClipRect *out_rects,
+                                                     size_t out_capacity,
+                                                     size_t *out_count) {
+    if (out_count) { *out_count = 0u; }
+    if (!out_rects || !out_count || out_capacity == 0u || !g_overlay_slots ||
+        slot_index >= g_overlay_slot_count || !g_capture_ctx.active ||
+        g_capture_ctx.slot_index != slot_index || vg_clip_rect_is_empty(clip_rect)) {
+        return false;
+    }
+    OverlaySlot *oslot = &g_overlay_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&oslot->active_buffer_index, memory_order_acquire);
+    if (active > 1u) { return false; }
+    const OverlayBuffer *prev = &oslot->buffers[active];
+    uint8_t write_idx = (active == 0u) ? 1u : 0u;
+    const OverlayBuffer *curr = &oslot->buffers[write_idx];
+    size_t count = 0u;
+
+    for (uint16_t i = 0; i < curr->entity_count; i++) {
+        const OverlayEntityRow *cr = &curr->entities[i];
+        if (!overlay_entity_changed(cr, prev)) { continue; }
+        int pi = overlay_find_entity_row(prev, cr->entity_id_bits);
+        bool has_any = (pi >= 0 && prev->entities[pi].has_world_aabb) || cr->has_world_aabb;
+        if (!has_any) { out_rects[0] = clip_rect; *out_count = 1u; return true; }
+        if (pi >= 0 && prev->entities[pi].has_world_aabb) {
+            if (!append_dirty_aabb_rect_leaf(out_rects, out_capacity, &count,
+                                             prev->entities[pi].world_aabb, padding_px, clip_rect)) {
+                return false;
+            }
+        }
+        if (cr->has_world_aabb) {
+            if (!append_dirty_aabb_rect_leaf(out_rects, out_capacity, &count,
+                                             cr->world_aabb, padding_px, clip_rect)) {
+                return false;
+            }
+        }
+    }
+    for (uint16_t i = 0; i < prev->entity_count; i++) {
+        if (overlay_find_entity_row(curr, prev->entities[i].entity_id_bits) >= 0) { continue; }
+        if (!prev->entities[i].has_world_aabb) {
+            out_rects[0] = clip_rect; *out_count = 1u; return true;
+        }
+        if (!append_dirty_aabb_rect_leaf(out_rects, out_capacity, &count,
+                                         prev->entities[i].world_aabb, padding_px, clip_rect)) {
+            return false;
+        }
+    }
+    *out_count = count;
+    return count > 0u;
 }
 
 void vg_rendered_state_reset_all(void) {

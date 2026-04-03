@@ -106,6 +106,16 @@ bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
                                         uintptr_t entity_id_bits,
                                         VgRenderedField field,
                                         VgRenderedTimelineState *out_state);
+bool vg_timeline_overlay_capture_compute_dirty_rect(uint8_t slot_index,
+                                                    VgClipRect clip_rect,
+                                                    uint8_t padding_px,
+                                                    VgClipRect *out_dirty_rect);
+bool vg_timeline_overlay_capture_collect_dirty_rects(uint8_t slot_index,
+                                                     VgClipRect clip_rect,
+                                                     uint8_t padding_px,
+                                                     VgClipRect *out_rects,
+                                                     size_t out_capacity,
+                                                     size_t *out_count);
 
 /* Test/reset utility */
 void vg_rendered_state_reset_all(void);

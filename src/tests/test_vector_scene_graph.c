@@ -4196,14 +4196,51 @@ TEST(test_timeline_overlay_stores_and_queries_entity_world_t, 0) {
     TEST_ASSERT_EQUAL_INT( 8 * VG_SCALE_ONE, entity_state.world_t.m12);
     TEST_ASSERT_EQUAL_INT(2, entity_state.snapshot_generation);
 
-    /* Non-timeline entity must NOT appear in overlay. */
+    /* All entities (including non-timeline) appear in the overlay. */
     uintptr_t entity_b = (uintptr_t)fixnum(6002);
+    VgTransformFixed t1 = vg_transform_fixed_identity();
+    t1.m02 = 20 * VG_SCALE_ONE;
     vg_rendered_state_capture_begin(0, 3, 40);
-    vg_rendered_state_capture_record_entity(entity_b, vg_transform_fixed_identity());
+    vg_rendered_state_capture_record_entity(entity_b, t1);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_FALSE(vg_timeline_overlay_query_entity(0, entity_b, &entity_state));
+    TEST_ASSERT_TRUE(vg_timeline_overlay_query_entity(0, entity_b, &entity_state));
+    TEST_ASSERT_EQUAL_INT(20 * VG_SCALE_ONE, entity_state.world_t.m02);
 
+    vg_rendered_state_reset_all();
+    vg_timeline_overlay_destroy();
+}
+
+TEST(test_timeline_overlay_dirty_rect_tracks_entity_movement, 0) {
+    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+    vg_rendered_state_reset_all();
+
+    uintptr_t entity_a = (uintptr_t)fixnum(7001);
+    VgTransformFixed t0 = vg_transform_fixed_identity();
+
+    /* Frame 1: entity at (20,10)-(30,20) */
+    vg_rendered_state_capture_begin(0, 1, 0);
+    vg_rendered_state_capture_record_entity(entity_a, t0);
+    vg_rendered_state_capture_record_entity_aabb(entity_a, (VgAabb){20, 30, 10, 20});
+    vg_rendered_state_capture_commit();
+
+    /* Frame 2: entity moved to (24,10)-(34,20) */
+    VgTransformFixed t1 = vg_transform_fixed_identity();
+    t1.m02 = 4 * VG_SCALE_ONE;
+    vg_rendered_state_capture_begin(0, 2, 16);
+    vg_rendered_state_capture_record_entity(entity_a, t1);
+    vg_rendered_state_capture_record_entity_aabb(entity_a, (VgAabb){24, 34, 10, 20});
+
+    VgClipRect dirty = {0};
+    TEST_ASSERT_TRUE(vg_timeline_overlay_capture_compute_dirty_rect(
+        0, (VgClipRect){0, 0, TEST_W, TEST_H}, 1, &dirty));
+    /* Dirty rect should cover union of old and new AABB + padding. */
+    TEST_ASSERT_EQUAL_INT(19, dirty.x);
+    TEST_ASSERT_EQUAL_INT(9, dirty.y);
+    TEST_ASSERT_EQUAL_INT(17, dirty.w);
+    TEST_ASSERT_EQUAL_INT(13, dirty.h);
+
+    vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
     vg_timeline_overlay_destroy();
 }
