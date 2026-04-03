@@ -471,6 +471,10 @@ bool vg_rendered_state_query_timeline(uint8_t slot_index,
     return true;
 }
 
+size_t vg_rendered_state_static_footprint(void) {
+    return sizeof(g_rendered_slots);
+}
+
 void vg_rendered_state_reset_all(void) {
     g_capture_ctx.active = false;
     g_capture_ctx.slot_index = 0u;

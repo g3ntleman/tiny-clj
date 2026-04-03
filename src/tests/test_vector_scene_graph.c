@@ -4082,6 +4082,14 @@ TEST(test_vector_scene_graph_collision_detect_aabb_overlap_bounds) {
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &high_obstacle));
 }
 
+TEST(test_rendered_state_bss_baseline, 0) {
+    size_t footprint = vg_rendered_state_static_footprint();
+    /* g_rendered_slots currently dominates BSS.  This anchor goes RED
+       once the static array is eliminated (footprint → 0). */
+    TEST_ASSERT_TRUE_MESSAGE(footprint > 0,
+        "g_rendered_slots static footprint is zero — update or remove this baseline test");
+}
+
 TEST(test_vector_scene_graph_collision_detect_aabb_overlap_edge_touch_is_not_overlap) {
     VgAabb player = {.min_x = 66, .max_x = 70, .min_y = 80, .max_y = 84};
     VgAabb left_obstacle = {.min_x = 40, .max_x = 66, .min_y = 40, .max_y = 50};

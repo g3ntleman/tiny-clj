@@ -96,5 +96,6 @@ bool vg_rendered_state_query_timeline(uint8_t slot_index,
 
 /* Test/reset utility */
 void vg_rendered_state_reset_all(void);
+size_t vg_rendered_state_static_footprint(void);
 
 #endif /* TINY_CLJ_RENDERED_STATE_SNAPSHOT_H */
