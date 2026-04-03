@@ -3012,17 +3012,16 @@ static CljPersistentMap *extend_env_with_binding(CljPersistentMap *env, CljObjec
 
 ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   CLJ_ASSERT(env != NULL);
-  // (doseq [binding coll] expr)
-  // Executes expr for side effects, returns nil
+  // (doseq [binding coll] expr*)
+  // Executes body forms eagerly for side effects, returns nil.
 
   unsigned int argc = args ? vector_count(args) : 0;
-  if (argc == 0) {
+  if (argc < 2) {
     return NULL;
   }
 
   CljObject *binding_list = (CljObject *)vector_nth(args, 0);
-  CljObject *body = (argc >= 2) ? (CljObject *)vector_nth(args, 1) : NULL;
-  if (!binding_list || !body) {
+  if (!binding_list) {
     return NULL;
   }
   // Parse binding: [var coll] - support both vectors and lists without allocations
@@ -3071,14 +3070,20 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
           EvalContext inner_ctx = *ctx;
           inner_ctx.env_stack = new_stack;
 
-          ID body_result = eval_body(body, NULL, st, &inner_ctx);
+          for (unsigned int body_idx = 1; body_idx < argc; body_idx++) {
+            CljObject *body_expr = (CljObject *)vector_nth(args, body_idx);
+            ID body_result = eval_body(body_expr, NULL, st, &inner_ctx);
+            RELEASE(body_result);
+          }
           RELEASE(new_stack);
-          RELEASE(body_result);
         } else {
           CljPersistentMap *new_env = extend_env_with_binding(env, var, element);
           if (new_env) {
-            ID body_result = eval_body_with_env(body, new_env, st);
-            RELEASE(body_result);
+            for (unsigned int body_idx = 1; body_idx < argc; body_idx++) {
+              CljObject *body_expr = (CljObject *)vector_nth(args, body_idx);
+              ID body_result = eval_body_with_env(body_expr, new_env, st);
+              RELEASE(body_result);
+            }
             RELEASE(new_env);
           }
         }

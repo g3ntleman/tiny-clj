@@ -252,6 +252,23 @@ TEST_SHARED(test_doseq_with_vector_binding) {
   TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
 }
 
+// Regression: doseq must execute all body forms eagerly, not only the first one.
+TEST_SHARED(test_doseq_multiple_body_forms_execute_all) {
+  ID result = eval_string(
+      "(let [a (atom 0) b (atom 0)] "
+      "  (doseq [x [1 2 3]] "
+      "    (swap! a + x) "
+      "    (swap! b + (* x 10))) "
+      "  [@a @b])",
+      g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_vector(result));
+  CljPersistentVector *vec = as_vector(result);
+  TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+  TEST_ASSERT_EQUAL_INT(6, as_fixnum(vector_nth(vec, 0)));
+  TEST_ASSERT_EQUAL_INT(60, as_fixnum(vector_nth(vec, 1)));
+}
+
 /* Target: 0 (raised to 64); TODO: find/fix remaining for LazySeq leak to lower again. */
 // Regression: for with vector binding (basic list comprehension)
 // Test uses doseq (side-effect) to avoid LazySeq ownership complexity

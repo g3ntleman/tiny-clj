@@ -11,6 +11,19 @@
 ;; doc - Print documentation for a var
 ;; Note: Requires metadata support
 ;; Format matches Clojure/JVM: 25 dashes, name, params (if available), doc
+;; Fallback docs for special forms that don't currently carry symbol metadata.
+(def ^:private special-form-docs
+  {'doseq {:name "clojure.core/doseq"
+           :doc  "Runs body expressions eagerly for side effects over each element of a sequence, then returns nil. doseq is not lazy."}})
+
+(defn- print-special-form-doc [sym entry]
+  (core/println "-------------------------")
+  (core/println (or (core/get entry :name) (core/str sym)))
+  (core/println "Special Form")
+  (let [doc-str (core/get entry :doc)]
+    (when doc-str
+      (core/println (core/str " " doc-str)))))
+
 ^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring." :macro true}
 (defn doc [x]
   (core/if-let [m (core/meta x)]
@@ -37,7 +50,9 @@
       (let [doc-str (core/get m :doc)]
         (when doc-str
           (core/println (core/str " " doc-str)))))
-    (core/println "No metadata available")))
+    (core/if-let [special-doc (core/get special-form-docs x)]
+      (print-special-form-doc x special-doc)
+      (core/println "No metadata available"))))
 
 ;; source - Print source code for a function
 ;; Note: In Clojure, source is a normal function (not a special form)
