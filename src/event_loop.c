@@ -309,14 +309,14 @@ static void event_loop_warn_if_slow_clojure_task(uint64_t elapsed_ns,
         char arg_buf[160] = {0};
         event_loop_log_value_to_buffer(arg, arg_buf, sizeof(arg_buf));
         fprintf(stdout,
-                "[viewer-runloop] warning: clojure runloop event took %lums "
+                "[runloop] warning: clojure runloop event took %lums "
                 "(threshold: 20ms, fn=%s, payload=%s)\n",
                 elapsed_ms,
                 fn_buf,
                 arg_buf);
     } else {
         fprintf(stdout,
-                "[viewer-runloop] warning: clojure runloop event took %lums "
+                "[runloop] warning: clojure runloop event took %lums "
                 "(threshold: 20ms, fn=%s)\n",
                 elapsed_ms,
                 fn_buf);

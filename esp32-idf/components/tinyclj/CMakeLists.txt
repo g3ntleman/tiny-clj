@@ -8,11 +8,13 @@ get_filename_component(TINYCLJ_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." AB
 set(TINYCLJ_SRC_DIR "${TINYCLJ_REPO_ROOT}/src")
 include("${TINYCLJ_REPO_ROOT}/cmake/embedded_clojure_sources.cmake")
 
-if(NOT DEFINED TINYCLJ_WITH_TINY_FX)
-  set(TINYCLJ_WITH_TINY_FX ON)
+if(NOT DEFINED TINY_FX_ENABLED)
+  set(TINY_FX_ENABLED ON)
 endif()
 
 set(TINYCLJ_CORE_SRCS
+  "${TINYCLJ_SRC_DIR}/platform_esp32_embedded.c"
+  "${TINYCLJ_SRC_DIR}/platform_esp32_uart.c"
   "${TINYCLJ_SRC_DIR}/hash.c"
   "${TINYCLJ_SRC_DIR}/event_loop.c"
   "${TINYCLJ_SRC_DIR}/channel.c"
@@ -88,7 +90,7 @@ set(TINYCLJ_FX_SRCS
 )
 
 set(TINYCLJ_SRCS ${TINYCLJ_CORE_SRCS})
-if(TINYCLJ_WITH_TINY_FX)
+if(TINY_FX_ENABLED)
   list(APPEND TINYCLJ_SRCS ${TINYCLJ_FX_SRCS})
 endif()
 
@@ -135,5 +137,6 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
   add_dependencies(${COMPONENT_LIB} tinyclj_embedded_clojure_sources)
 
   # ESP32_BUILD, TINYCLJ_*: set globally in cmake/tinyclj_idf_compile_flags.cmake (before project()).
+  target_compile_definitions(${COMPONENT_LIB} PRIVATE REPL_ENABLED=1)
   target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
 endif()

@@ -235,7 +235,7 @@ static void macos_fx_update_runloop_watchdog_overlay(ViewerRunloopLivenessSnapsh
     if (snapshot.state != FX_RUNLOOP_LIVENESS_STALLED) {
         if (g_macos_fx_runloop_watchdog_stalled) {
             fprintf(stderr,
-                    "[viewer-runloop] recovered after %.1fs without a runloop tick\n",
+                    "[runloop] recovered after %.1fs without a runloop tick\n",
                     (double)snapshot.age_ns / 1e9);
             fflush(stderr);
         }
@@ -256,7 +256,7 @@ static void macos_fx_update_runloop_watchdog_overlay(ViewerRunloopLivenessSnapsh
     }
     if (!g_macos_fx_runloop_watchdog_stalled) {
         fprintf(stderr,
-                "[viewer-runloop] stalled for %.1fs (iterations=%llu)\n",
+                "[runloop] stalled for %.1fs (iterations=%llu)\n",
                 (double)snapshot.age_ns / 1e9,
                 (unsigned long long)snapshot.iteration_count);
         fflush(stderr);

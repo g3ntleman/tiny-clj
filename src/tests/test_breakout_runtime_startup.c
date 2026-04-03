@@ -590,7 +590,7 @@ TEST(test_breakout_runtime_startup_runloop_warns_to_stdout_when_event_exceeds_20
     BreakoutRunloopDrainCaptureCtx ctx = {.st = st};
     char *stdout_output = breakout_capture_stdout(breakout_capture_drain_one_runloop_task, &ctx);
     TEST_ASSERT_NOT_NULL_MESSAGE(stdout_output, "failed to capture stdout for slow runloop warning");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[viewer-runloop] warning: clojure runloop event took"),
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[runloop] warning: clojure runloop event took"),
                                  "expected slow runloop warning on stdout");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "threshold: 20ms"),
                                  "expected warning to mention 20ms threshold");
@@ -2325,4 +2325,3 @@ TEST(test_breakout_runtime_startup_first_launch_with_render_thread_fits_debug_he
                                         : "");
     TEST_ASSERT_EQUAL_PTR(play_phase, final_phase);
 }
-

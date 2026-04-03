@@ -248,15 +248,78 @@ static ID source_resolver_try_filesystem(const char *path) {
     return NULL;
 }
 
+#if defined(ESP32_BUILD)
+static const char *const g_source_resolver_flash_seed_paths[] = {
+    "/libs/tiny-fx/sound.clj",
+    "/libs/tiny-fx/assets.clj",
+    "/libs/tiny-fx/trk1.clj",
+    "/libs/tiny-fx/sound-demos.clj",
+    "/libs/tiny-fx/sound-demos-william.clj",
+    "/assets/tiny-fx/sound-demos/the-entertainer.edn",
+    "/assets/tiny-fx/sound-demos/minuet-in-g.edn",
+    "/assets/tiny-fx/sound-demos/gymnopedie-no-1.edn",
+    "/assets/tiny-fx/sound-demos/rondo-alla-turca.edn",
+    "/assets/tiny-fx/sound-demos/hall-of-the-mountain-king.edn",
+    "/assets/tiny-fx/sound-demos/can-can.edn",
+    "/assets/tiny-fx/sound-demos/laser-sfx.edn",
+    "/assets/tiny-fx/sound-demos/rocket-launch-sfx.edn",
+    "/assets/tiny-fx/sound-demos/the-entertainer.trk1",
+};
+
+static bool source_resolver_is_flash_seed_path(const char *path) {
+    if (!path || !path[0]) {
+        return false;
+    }
+    for (size_t i = 0; i < sizeof(g_source_resolver_flash_seed_paths) /
+                            sizeof(g_source_resolver_flash_seed_paths[0]); i++) {
+        if (strcmp(path, g_source_resolver_flash_seed_paths[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool source_resolver_seed_flash_entry_if_missing(FsKvStore *st, const char *path) {
+    if (!st || !path || !path[0]) {
+        return false;
+    }
+    if (fs_exists(st, path)) {
+        return true;
+    }
+    const uint8_t *embedded_data = NULL;
+    int embedded_len = 0;
+    if (!embedded_source_lookup(path, &embedded_data, &embedded_len) ||
+        !embedded_data || embedded_len < 0) {
+        return false;
+    }
+    return fs_write_bytes(st, path, embedded_data, (size_t)embedded_len) == FS_NO_ERR;
+}
+#endif
+
+void source_resolver_seed_flash_sources(void) {
+#if defined(ESP32_BUILD)
+    FsKvStore *st = fs_global_store_if_initialized();
+    if (!st) {
+        st = fs_global_store();
+    }
+    if (!st) {
+        return;
+    }
+    for (size_t i = 0; i < sizeof(g_source_resolver_flash_seed_paths) /
+                            sizeof(g_source_resolver_flash_seed_paths[0]); i++) {
+        (void)source_resolver_seed_flash_entry_if_missing(st, g_source_resolver_flash_seed_paths[i]);
+    }
+#endif
+}
+
 /**
  * @brief Resolves a virtual path to byte content from KV store or embedded sources.
  *
  * Lookup order is KV store first (to allow overrides), then the compiled-in
  * embedded source table. A final filesystem fallback is allowed for local dev
- * and host tooling namespaces that are not embedded. The resolver must not
- * force KV backend initialization:
- * if the global KV store is not initialized yet, embedded sources are used
- * directly. Returns a caller-usable byte-array object on success.
+ * and host tooling namespaces that are not embedded. In ESP32 builds, selected
+ * sound-demo paths are flash-seeded on demand and therefore may force store
+ * initialization. Returns a caller-usable byte-array object on success.
  *
  * @param path Virtual path to resolve.
  * @return Byte-array object (pool-managed) or NULL when not found.
@@ -267,10 +330,23 @@ ID resolve_path_to_bytes(const char *path) {
     // Consult KV overrides only when the store is already initialized.
     // This keeps plain require() from creating host-side tiny-db files.
     FsKvStore *st = fs_global_store_if_initialized();
+#if defined(ESP32_BUILD)
+    if (!st && source_resolver_is_flash_seed_path(path)) {
+        st = fs_global_store();
+    }
+#endif
     if (st) {
         ID kv_bytes = fs_read_bytes(st, path);
         if (kv_bytes && TAG(kv_bytes) == CLJ_BYTE_ARRAY) return kv_bytes;
     }
+
+#if defined(ESP32_BUILD)
+    if (st && source_resolver_is_flash_seed_path(path) &&
+        source_resolver_seed_flash_entry_if_missing(st, path)) {
+        ID seeded_kv_bytes = fs_read_bytes(st, path);
+        if (seeded_kv_bytes && TAG(seeded_kv_bytes) == CLJ_BYTE_ARRAY) return seeded_kv_bytes;
+    }
+#endif
 
     const uint8_t *embedded_data = NULL;
     int embedded_len = 0;

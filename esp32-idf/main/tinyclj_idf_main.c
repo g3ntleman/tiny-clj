@@ -5,7 +5,7 @@
 #include "platform.h"
 #include "builtins.h"
 #include "event_loop.h"
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 #include "tinyclj_idf_display.h"
 #endif
 
@@ -261,7 +261,7 @@ void app_main(void) {
 #endif
 #endif
 
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
     (void)tinyclj_idf_display_bootstrap();
 #endif
 
@@ -328,6 +328,18 @@ void tinyclj_esp32_uart_write_bytes(const uint8_t *data, size_t n) {
 
 void tinyclj_esp32_uart_flush(void) {
     // No-op on ESP-IDF UART driver; writes are queued internally.
+}
+
+bool tinyclj_esp32_uart_has_pending_input(void) {
+#if defined(ESP_PLATFORM)
+    size_t pending = 0u;
+    if (uart_get_buffered_data_len(UART_NUM_0, &pending) != ESP_OK) {
+        return false;
+    }
+    return pending > 0u;
+#else
+    return false;
+#endif
 }
 
 void tinyclj_esp32_uart_debug_snapshot(size_t *bytes_read, size_t *bytes_written) {

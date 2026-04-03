@@ -13,7 +13,7 @@
 #include "repl.h"
 #include "startup_pipeline.h"
 #include "tiny_clj.h"
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 #include "tinyclj_idf_display.h"
 #include "panel.h"
 #endif
@@ -23,6 +23,9 @@
 #endif
 
 #if defined(ESP_PLATFORM)
+bool tinyclj_esp32_uart_has_pending_input(void);
+uint32_t tinyclj_esp32_current_time_ms(void);
+
 /**
  * @brief Writes a single line to the active platform output stream.
  *
@@ -56,7 +59,7 @@ static bool esp_boot_load_root_file(EvalState *st) {
     return ok;
 }
 
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 static void esp_report_display_throughput_if_due(void) {
     static uint32_t s_last_report_ms = 0u;
     uint32_t now_ms = tinyclj_esp32_current_time_ms();
@@ -244,6 +247,10 @@ void tinyclj_idf_start(void) {
                 (void)esp_repl_history_save(ed);  // best-effort
                 subjective_c_clear_interpreter_thread();
                 return;
+            }
+            if (tinyclj_esp32_uart_has_pending_input()) {
+                // Drain pending UART bytes before running potentially slow event-loop work.
+                continue;
             }
             esp_report_display_throughput_if_due();
             (void)event_loop_run(NULL, st);

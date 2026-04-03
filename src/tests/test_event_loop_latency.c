@@ -217,7 +217,7 @@ TEST(test_event_loop_run_next_slow_task_warning_includes_named_closure_symbol) {
     char *stdout_output = event_loop_capture_stdout(event_loop_capture_drain_one, &capture);
     TEST_ASSERT_NOT_NULL_MESSAGE(stdout_output, "failed to capture stdout for runloop warning");
     TEST_ASSERT_TRUE_MESSAGE(capture.ran, "run_next should execute the queued slow closure");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[viewer-runloop] warning: clojure runloop event took"),
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "[runloop] warning: clojure runloop event took"),
                                  "expected slow runloop warning on stdout");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stdout_output, "event-loop-latency-slow-handler"),
                                  "expected warning to include the closure function name");

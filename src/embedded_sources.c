@@ -16,10 +16,6 @@
       (const uint8_t *)(source_array),                    \
       (int)(sizeof(source_array) - 1u)}
 
-#ifndef TINYCLJ_WITH_TINY_FX
-#define TINYCLJ_WITH_TINY_FX 1
-#endif
-
 static const char clojure_core_code[] =
 #include "clojure.core.clj.inc"
     ;
@@ -60,7 +56,10 @@ static const char tiny_clj_fs_code[] =
 #include "tiny-clj.fs.clj.inc"
     ;
 
-#if TINYCLJ_WITH_TINY_FX
+static const char tiny_fx_trk1_code[] =
+#include "tiny-fx.trk1.clj.inc"
+    ;
+
 static const char tiny_fx_sound_code[] =
 #include "tiny-fx.sound.clj.inc"
     ;
@@ -69,14 +68,49 @@ static const char tiny_fx_assets_code[] =
 #include "tiny-fx.assets.clj.inc"
     ;
 
+#if TINY_FX_ENABLED
 static const char tiny_fx_gfx_records_code[] =
 #include "tiny-fx.gfx-records.clj.inc"
     ;
+#endif
 
 static const char tiny_fx_sound_demos_code[] =
 #include "tiny-fx.sound-demos.clj.inc"
     ;
 
+static const char tiny_fx_sound_demos_the_entertainer_edn[] =
+#include "tiny-fx.sound-demos.the-entertainer.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_minuet_in_g_edn[] =
+#include "tiny-fx.sound-demos.minuet-in-g.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_gymnopedie_no_1_edn[] =
+#include "tiny-fx.sound-demos.gymnopedie-no-1.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_rondo_alla_turca_edn[] =
+#include "tiny-fx.sound-demos.rondo-alla-turca.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_hall_of_the_mountain_king_edn[] =
+#include "tiny-fx.sound-demos.hall-of-the-mountain-king.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_can_can_edn[] =
+#include "tiny-fx.sound-demos.can-can.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_laser_sfx_edn[] =
+#include "tiny-fx.sound-demos.laser-sfx.edn.inc"
+    ;
+
+static const char tiny_fx_sound_demos_rocket_launch_sfx_edn[] =
+#include "tiny-fx.sound-demos.rocket-launch-sfx.edn.inc"
+    ;
+
+#if TINY_FX_ENABLED
 static const char tiny_fx_sound_demos_william_code[] =
 #include "tiny-fx.sound-demos-william.clj.inc"
     ;
@@ -120,7 +154,7 @@ static const char tiny_clj_net_mdns_code[] =
 #include "tiny-clj.net.mdns.clj.inc"
     ;
 
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
 static const char tiny_fx_gfx_scene_code[] =
 #include "tiny-gfx.scene.clj.inc"
     ;
@@ -200,11 +234,9 @@ typedef struct {
 #define EMBEDDED_ASSET_BYTES(path_literal, arr) \
   { (path_literal), (uint16_t)(sizeof(path_literal) - 1u), (const uint8_t *)(arr), (int)sizeof(arr) }
 
-#if TINYCLJ_WITH_TINY_FX
 static const uint8_t tiny_fx_the_entertainer_trk1[] = {
 #include "the_entertainer_trk1.inc"
 };
-#endif
 
 static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
@@ -220,13 +252,30 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/event.clj", tiny_clj_event_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/sensor.clj", tiny_clj_sensor_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/deployment.clj", tiny_clj_deployment_code),
-#if TINYCLJ_WITH_TINY_FX
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/trk1.clj", tiny_fx_trk1_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-records.clj", tiny_fx_gfx_records_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/the-entertainer.edn",
+                          tiny_fx_sound_demos_the_entertainer_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/minuet-in-g.edn",
+                          tiny_fx_sound_demos_minuet_in_g_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/gymnopedie-no-1.edn",
+                          tiny_fx_sound_demos_gymnopedie_no_1_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/rondo-alla-turca.edn",
+                          tiny_fx_sound_demos_rondo_alla_turca_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/hall-of-the-mountain-king.edn",
+                          tiny_fx_sound_demos_hall_of_the_mountain_king_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/can-can.edn",
+                          tiny_fx_sound_demos_can_can_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/laser-sfx.edn",
+                          tiny_fx_sound_demos_laser_sfx_edn),
+    EMBEDDED_SOURCE_ENTRY("/assets/tiny-fx/sound-demos/rocket-launch-sfx.edn",
+                          tiny_fx_sound_demos_rocket_launch_sfx_edn),
     EMBEDDED_ASSET_BYTES("/assets/tiny-fx/sound-demos/the-entertainer.trk1", tiny_fx_the_entertainer_trk1),
+#if TINY_FX_ENABLED
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-records.clj", tiny_fx_gfx_records_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif
@@ -234,7 +283,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/gpio.clj", tiny_clj_gpio_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-timeline.clj", tiny_fx_gfx_timeline_code),
 #ifdef DEBUG

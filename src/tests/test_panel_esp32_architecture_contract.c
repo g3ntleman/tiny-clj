@@ -117,7 +117,7 @@ TEST(test_panel_esp32_architecture_bootstraps_display_from_app_main_for_tiny_fx)
                                  "expected app_main to know the display bootstrap header");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "tinyclj_idf_display_bootstrap()"),
                                  "expected app_main to bootstrap the ESP display for tiny-fx");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "TINYCLJ_WITH_TINY_FX"),
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "TINY_FX_ENABLED"),
                                  "expected display bootstrap to stay gated behind tiny-fx builds");
 
     CLJ_FREE(src);

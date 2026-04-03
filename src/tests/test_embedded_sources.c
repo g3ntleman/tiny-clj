@@ -359,6 +359,43 @@ TEST(test_embedded_sources_tiny_fx_sound_demos_matches_libs_file_bytes)
     assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound-demos.clj", "/libs/tiny-fx/sound-demos.clj");
 }
 
+TEST(test_embedded_sources_tiny_fx_sound_demos_assets_are_embedded)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+
+    const uint8_t *data = NULL;
+    int len = 0;
+
+    TEST_ASSERT_TRUE(embedded_source_lookup("/libs/tiny-fx/sound-demos.clj", &data, &len));
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_TRUE(len > 0);
+
+    data = NULL;
+    len = 0;
+    TEST_ASSERT_TRUE(embedded_source_lookup("/libs/tiny-fx/trk1.clj", &data, &len));
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_TRUE(len > 0);
+
+    data = NULL;
+    len = 0;
+    TEST_ASSERT_TRUE(embedded_source_lookup("/assets/tiny-fx/sound-demos/the-entertainer.edn", &data, &len));
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_TRUE(len > 0);
+
+    data = NULL;
+    len = 0;
+    TEST_ASSERT_TRUE(embedded_source_lookup("/assets/tiny-fx/sound-demos/minuet-in-g.edn", &data, &len));
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_TRUE(len > 0);
+
+    data = NULL;
+    len = 0;
+    TEST_ASSERT_TRUE(embedded_source_lookup("/assets/tiny-fx/sound-demos/the-entertainer.trk1", &data, &len));
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_TRUE(len > 0);
+}
+
 TEST(test_source_resolver_assets_path_maps_to_repo_assets_directory)
 {
     embedded_source_map_init();

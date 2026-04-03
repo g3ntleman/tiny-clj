@@ -325,6 +325,44 @@ TEST(test_gpio_architecture_sound_backend_uses_shared_pwm_backend) {
     CLJ_FREE(src);
 }
 
+TEST(test_gpio_architecture_sound_backend_normalizes_zero_tick_rearm) {
+    size_t len = 0;
+    char *src = read_sound_backend_esp32_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_backend_normalize_due_ticks"),
+                                 "sound backend should normalize zero-tick rearm requests");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "uint32_t normalized_ticks = sound_backend_normalize_due_ticks(ticks);"),
+                                 "sound backend should normalize ticks before scheduling esp_timer");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_backend_ticks_to_delay_us(normalized_ticks)"),
+                                 "sound backend should arm esp_timer using normalized tick delays");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "if (ticks == 0u) {\n        return 1u;\n    }\n    return (uint64_t)ticks *"),
+                             "sound backend should not map zero ticks to a 1us spin delay");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_gpio_architecture_sound_backend_keeps_pwm_duty_at_half_scale_max) {
+    size_t len = 0;
+    char *src = read_sound_backend_esp32_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_backend_volume_to_half_duty"),
+                                 "sound backend should map voice volume through a dedicated half-duty helper");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "uint8_t duty8 = (freq_hz > 0) ? sound_backend_volume_to_half_duty(volume) : 0;"),
+                                 "sound backend should derive per-voice duty via the capped half-duty helper");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "int32_t gpio_duty = (int32_t)duty8;"),
+                                 "sound backend should keep GPIO duty within 0..127 (max ~50%)");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SOUND_PWM_MIN_STABLE_DUTY"),
+                                 "sound backend should define a minimum stable nonzero PWM duty");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "if (boosted < SOUND_PWM_MIN_STABLE_DUTY)"),
+                                 "sound backend should clamp very low duty levels to zero to avoid unstable overtone tails");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "int32_t gpio_duty = ((int32_t)duty8 * 255 + 63) / 127;"),
+                             "sound backend should not remap duty8 back to full 0..255 scale");
+
+    CLJ_FREE(src);
+}
+
 TEST(test_gpio_architecture_runtime_uses_shared_gpio_api_above_backend) {
     size_t builtins_len = 0;
     size_t event_loop_len = 0;
@@ -351,6 +389,8 @@ TEST(test_gpio_architecture_esp32_repl_wait_uses_blocking_event_loop_driver) {
     char *src = read_tinyclj_idf_run_source(&len);
     TEST_ASSERT_TRUE(len > 0);
 
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "tinyclj_esp32_uart_has_pending_input()"),
+                                 "ESP32 REPL wait loop should drain queued UART input before blocking runloop waits");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "event_loop_run(NULL, st)"),
                                  "ESP32 REPL wait loop should use blocking event_loop_run");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "repl_process_event_loop(st)"),

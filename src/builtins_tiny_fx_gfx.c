@@ -2,11 +2,7 @@
 
 #include "exception.h"
 
-#ifndef TINYCLJ_WITH_TINY_FX
-#define TINYCLJ_WITH_TINY_FX 1
-#endif
-
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
 #include <stdint.h>
 #include <string.h>
 
@@ -22,7 +18,7 @@
 #include "vector.h"
 #endif
 
-#if !TINYCLJ_WITH_TINY_FX
+#if !TINY_FX_ENABLED
 
 static ID tinyclj_runtime_fx_disabled(const char *fn_name) {
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,

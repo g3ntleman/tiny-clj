@@ -88,6 +88,22 @@ TEST(test_quiet_mode_subprocess_preserves_assertion_details) {
     CLJ_HOST_FREE(output);
 }
 
+TEST(test_single_passing_test_does_not_emit_false_double_free_warning) {
+    FILE *pipe = open_unit_tests_pipe("test_gpio_architecture_contract/gpio_architecture_sound_backend_keeps_pwm_duty_at_half_scale_max");
+    TEST_ASSERT_NOT_NULL_MESSAGE(pipe, "failed to locate unit-tests executable for warning probe subprocess");
+
+    int status = 0;
+    char *output = read_pipe_to_string(pipe, &status);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(output, "failed to capture warning probe subprocess output");
+    TEST_ASSERT_TRUE_MESSAGE(WIFEXITED(status), "warning probe subprocess should exit normally");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, WEXITSTATUS(status), output);
+    TEST_ASSERT_NULL_MESSAGE(strstr(output, "Potential double-free"),
+                             "passing single test should not report potential double-free");
+
+    CLJ_HOST_FREE(output);
+}
+
 TEST(test_quiet_output_probe_failure) {
     if (!getenv("TINYCLJ_RUNNER_QUIET_PROBE")) {
         return;

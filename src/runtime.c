@@ -19,6 +19,7 @@
 #include "ast_canon.h"      // For ast_canon_reset_caches()
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
 #include "embedded_sources.h"
+#include "source_resolver.h"
 #ifndef ESP32_BUILD
 #include "gpio.h"
 #endif
@@ -212,6 +213,10 @@ void runtime_init(TinyClJRuntime *runtime) {
 
     // Initialize embedded source registry (static table + on-demand byte-array views).
     embedded_source_map_init();
+#if defined(ESP32_BUILD)
+    // Provision flash-backed optional libraries/assets once per runtime activation.
+    source_resolver_seed_flash_sources();
+#endif
 
     // runtime_init() is allowed to run repeatedly on an already bootstrapped host
     // process (for example inside unit tests that reuse the global runtime without a

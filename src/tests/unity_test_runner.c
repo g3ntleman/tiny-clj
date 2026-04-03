@@ -395,6 +395,21 @@ void setUp(void) {
     return;
   }
 
+#if MEMORY_PROFILING_ENABLED
+  /*
+   * Initialize/reset profiler state before runtime_reset/runtime_init.
+   * Otherwise setup allocations can be wiped from stats and later cleanup
+   * deallocations appear as false "dests > allocs" warnings.
+   */
+  if (!g_memory_profiler_initialized) {
+    MEMORY_PROFILER_INIT();
+    g_memory_profiler_initialized = true;
+  }
+  enable_memory_profiling(true);
+  set_memory_verbose_mode(g_single_test_mode);
+  memory_set_debug_output_enabled(memory_get_debug_output_enabled());
+#endif
+
   // Suppress time output in tests
   set_suppress_time_output(true);
 
@@ -427,16 +442,6 @@ void setUp(void) {
     register_builtins();
     g_runtime.builtins_registered = true;
   }
-
-#if MEMORY_PROFILING_ENABLED
-  if (!g_memory_profiler_initialized) {
-    MEMORY_PROFILER_INIT();
-    g_memory_profiler_initialized = true;
-  }
-  enable_memory_profiling(true);
-  set_memory_verbose_mode(g_single_test_mode);
-  memory_set_debug_output_enabled(memory_get_debug_output_enabled());
-#endif
 
   // Zombie mode is automatically enabled via __attribute__((constructor)) if ZOMBIE_ENABLED is defined
 

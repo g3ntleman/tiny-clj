@@ -27,10 +27,25 @@ set(TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES
     "libs/tiny-db/rrd-spline.clj|tiny-db.rrd-spline.clj.inc"
 )
 
-set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
+set(TINYCLJ_EMBEDDED_CLOJURE_SOUND_STACK_ENTRIES
     "libs/tiny-fx/trk1.clj|tiny-fx.trk1.clj.inc"
     "libs/tiny-fx/sound.clj|tiny-fx.sound.clj.inc"
     "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
+    "libs/tiny-fx/sound-demos.clj|tiny-fx.sound-demos.clj.inc"
+)
+
+set(TINYCLJ_EMBEDDED_SOUND_DEMOS_ASSET_ENTRIES
+    "assets/tiny-fx/sound-demos/the-entertainer.edn|tiny-fx.sound-demos.the-entertainer.edn.inc"
+    "assets/tiny-fx/sound-demos/minuet-in-g.edn|tiny-fx.sound-demos.minuet-in-g.edn.inc"
+    "assets/tiny-fx/sound-demos/gymnopedie-no-1.edn|tiny-fx.sound-demos.gymnopedie-no-1.edn.inc"
+    "assets/tiny-fx/sound-demos/rondo-alla-turca.edn|tiny-fx.sound-demos.rondo-alla-turca.edn.inc"
+    "assets/tiny-fx/sound-demos/hall-of-the-mountain-king.edn|tiny-fx.sound-demos.hall-of-the-mountain-king.edn.inc"
+    "assets/tiny-fx/sound-demos/can-can.edn|tiny-fx.sound-demos.can-can.edn.inc"
+    "assets/tiny-fx/sound-demos/laser-sfx.edn|tiny-fx.sound-demos.laser-sfx.edn.inc"
+    "assets/tiny-fx/sound-demos/rocket-launch-sfx.edn|tiny-fx.sound-demos.rocket-launch-sfx.edn.inc"
+)
+
+set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
     "libs/tiny-fx/gfx-records.clj|tiny-fx.gfx-records.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
     "libs/tiny-fx/gfx-timeline.clj|tiny-fx.gfx-timeline.clj.inc"
@@ -49,18 +64,31 @@ set(TINYCLJ_EMBEDDED_CLOJURE_DEBUG_ENTRIES
     "libs/tiny-fx/sound-debug.clj|tiny-fx.sound-debug.clj.inc"
     "libs/tiny-fx/gfx-collision.clj|tiny-gfx.collision.clj.inc"
     "libs/tiny-fx/gfx-bench.clj|tiny-fx.gfx-bench.clj.inc"
-    "libs/tiny-fx/sound-demos.clj|tiny-fx.sound-demos.clj.inc"
     "libs/tiny-fx/sound-demos-william.clj|tiny-fx.sound-demos-william.clj.inc"
 )
 
 set(TINYCLJ_FLASH_FS_CLOJURE_SOURCES
+    "libs/tiny-fx/sound.clj"
+    "libs/tiny-fx/assets.clj"
+    "libs/tiny-fx/trk1.clj"
     "libs/tiny-fx/sound-demos.clj"
     "libs/tiny-fx/sound-demos-william.clj"
+    "assets/tiny-fx/sound-demos/the-entertainer.edn"
+    "assets/tiny-fx/sound-demos/minuet-in-g.edn"
+    "assets/tiny-fx/sound-demos/gymnopedie-no-1.edn"
+    "assets/tiny-fx/sound-demos/rondo-alla-turca.edn"
+    "assets/tiny-fx/sound-demos/hall-of-the-mountain-king.edn"
+    "assets/tiny-fx/sound-demos/can-can.edn"
+    "assets/tiny-fx/sound-demos/laser-sfx.edn"
+    "assets/tiny-fx/sound-demos/rocket-launch-sfx.edn"
+    "assets/tiny-fx/sound-demos/the-entertainer.trk1"
 )
 
 function(tinyclj_get_embedded_clojure_entries out_var)
     set(entries ${TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES})
-    if(TINYCLJ_WITH_TINY_FX)
+    list(APPEND entries ${TINYCLJ_EMBEDDED_CLOJURE_SOUND_STACK_ENTRIES})
+    list(APPEND entries ${TINYCLJ_EMBEDDED_SOUND_DEMOS_ASSET_ENTRIES})
+    if(TINY_FX_ENABLED)
         list(APPEND entries
             ${TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES}
             ${TINYCLJ_EMBEDDED_CLOJURE_DEBUG_ENTRIES}

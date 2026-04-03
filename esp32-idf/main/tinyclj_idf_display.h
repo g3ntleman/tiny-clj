@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 #include "panel_esp_lcd.h"
 
 typedef struct {

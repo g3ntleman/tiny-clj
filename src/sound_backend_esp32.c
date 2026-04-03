@@ -27,6 +27,11 @@ typedef struct {
     uint8_t       last_duty;
 } PwmVoice;
 
+#define SOUND_PWM_HALF_DUTY_MAX 127u
+#define SOUND_PWM_GAIN_NUM 6u
+#define SOUND_PWM_GAIN_DEN 5u
+#define SOUND_PWM_MIN_STABLE_DUTY 32u
+
 /* Board-default mapping (from vector_handheld_config.h).
  * Extensible to N voices if more pins/timers are configured. */
 static PwmVoice g_pwm_voices[] = {
@@ -78,10 +83,27 @@ static void sound_backend_silence_pwm_voices(void) {
     }
 }
 
-static uint64_t sound_backend_ticks_to_delay_us(uint32_t ticks) {
-    if (ticks == 0u) {
-        return 1u;
+static uint8_t sound_backend_volume_to_half_duty(uint8_t volume) {
+    if (volume == 0u) {
+        return 0u;
     }
+
+    uint32_t half_scale = ((uint32_t)volume * SOUND_PWM_HALF_DUTY_MAX) / 255u;
+    uint32_t boosted = (half_scale * SOUND_PWM_GAIN_NUM + (SOUND_PWM_GAIN_DEN / 2u)) / SOUND_PWM_GAIN_DEN;
+    if (boosted > SOUND_PWM_HALF_DUTY_MAX) {
+        boosted = SOUND_PWM_HALF_DUTY_MAX;
+    }
+    if (boosted < SOUND_PWM_MIN_STABLE_DUTY) {
+        return 0u;
+    }
+    return (uint8_t)boosted;
+}
+
+static uint32_t sound_backend_normalize_due_ticks(uint32_t ticks) {
+    return (ticks == 0u) ? 1u : ticks;
+}
+
+static uint64_t sound_backend_ticks_to_delay_us(uint32_t ticks) {
     return (uint64_t)ticks * (uint64_t)VG_SOUND_TICK_MS * 1000ull;
 }
 
@@ -89,9 +111,10 @@ static void sound_backend_schedule_next_timer(uint32_t ticks) {
     if (!g_sound_timer || !sound_engine_tick_is_running()) {
         return;
     }
-    atomic_store_explicit(&g_sound_scheduled_ticks, ticks, memory_order_release);
+    uint32_t normalized_ticks = sound_backend_normalize_due_ticks(ticks);
+    atomic_store_explicit(&g_sound_scheduled_ticks, normalized_ticks, memory_order_release);
     (void)esp_timer_stop(g_sound_timer);
-    (void)esp_timer_start_once(g_sound_timer, sound_backend_ticks_to_delay_us(ticks));
+    (void)esp_timer_start_once(g_sound_timer, sound_backend_ticks_to_delay_us(normalized_ticks));
 }
 
 static void sound_timer_callback(void *arg) {
@@ -158,7 +181,7 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, 
     PwmVoice *v = &g_pwm_voices[voice_index];
 
     /* Only update hardware on actual change */
-    uint8_t duty8 = (freq_hz > 0) ? (volume >> 1) : 0; /* scale 0..255 -> 0..127 for 50% max duty */
+    uint8_t duty8 = (freq_hz > 0) ? sound_backend_volume_to_half_duty(volume) : 0;
     if (!retrigger && freq_hz == v->last_freq_hz && duty8 == v->last_duty) return;
 
     if (retrigger) {
@@ -168,7 +191,7 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, 
     }
 
     if (freq_hz > 0 && duty8 > 0) {
-        int32_t gpio_duty = ((int32_t)duty8 * 255 + 63) / 127;
+        int32_t gpio_duty = (int32_t)duty8; /* keep max duty near 50% (127/255) */
         (void)gpio_pwm_start_or_update(v->pin, freq_hz, gpio_duty);
         v->retained_freq_hz = freq_hz;
     } else if (v->retained_freq_hz > 0) {

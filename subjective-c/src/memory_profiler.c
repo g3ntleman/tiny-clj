@@ -184,7 +184,7 @@ static void update_memory_leak_stats(void) {
         g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.object_destructions;
     else {
         g_memory_stats.memory_leaks = 0;
-        if (g_memory_stats.object_destructions > g_memory_stats.total_allocations + 2) {
+        if (g_memory_stats.object_destructions > g_memory_stats.total_allocations) {
             static bool warn_once = false;
             if (!warn_once && g_memory_verbose_mode) {
                 LOGF(stdout, "⚠️  WARNING: Potential double-free (dests %zu > allocs %zu).\n",

@@ -1,6 +1,6 @@
 #include "tinyclj_idf_display.h"
 
-#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 
 #include <string.h>
 

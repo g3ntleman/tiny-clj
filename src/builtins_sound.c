@@ -21,10 +21,6 @@
 #include "byte_array.h"
 #include "exception.h"
 
-#ifndef TINYCLJ_WITH_TINY_FX
-#define TINYCLJ_WITH_TINY_FX 1
-#endif
-
 #define TINYCLJ_SOUND_NATIVE_NS "tiny-fx.sound"
 #define TINYCLJ_SOUND_DEBUG_NS "tiny-fx.sound-debug"
 
@@ -77,7 +73,7 @@ static void builtins_sound_init_symbols(void) {
 #endif
 }
 
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
 static void ensure_sound_engine_initialized(void) {
     if (g_sound_engine.voice_count > 0) return;
 #ifdef ESP32_BUILD
@@ -582,7 +578,7 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
         return;
     }
     builtins_sound_init_symbols();
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-play-music!", native_sound_play_music);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-track!", native_sound_stop_track);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-music!", native_sound_stop_music);

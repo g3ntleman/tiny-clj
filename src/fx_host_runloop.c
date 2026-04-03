@@ -83,7 +83,7 @@ bool fx_drain_one_runloop_task(EvalState *st) {
     } CATCH(ex) {
         atomic_store_explicit(&g_runloop_thread.blocked_in_event_loop_wait, false, memory_order_relaxed);
         if (ex) {
-            fprintf(stderr, "[viewer-runloop] uncaught exception while draining runloop task\n");
+            fprintf(stderr, "[runloop] uncaught exception while draining runloop task\n");
             print_exception(ex);
             fflush(stderr);
         }

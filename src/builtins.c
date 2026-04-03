@@ -60,10 +60,6 @@
 #include "builtins_tiny_fx_gfx.h"
 #include "fx_collision.h"
 
-#ifndef TINYCLJ_WITH_TINY_FX
-#define TINYCLJ_WITH_TINY_FX 1
-#endif
-
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -2942,7 +2938,7 @@ ID native_record_register(ID *args, unsigned int argc) {
 
 static CljRecordDescriptor *lookup_record_descriptor_with_schema(ID type_symbol) {
   CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
   if (!desc) {
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
     if (tiny_fx_gfx_require_records_namespace(st) && tiny_fx_gfx_ensure_schema(st)) {
@@ -5187,11 +5183,14 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
   if (!src_data || !st)
     return false;
   static int debug_require_errors = -1;
+#if defined(DEBUG)
   static int debug_require_heap = -1;
+#endif
   if (debug_require_errors == -1) {
     const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_ERRORS");
     debug_require_errors = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
   }
+#if defined(DEBUG)
   if (debug_require_heap == -1) {
     const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_HEAP");
     if (v && v[0] && strcmp(v, "0") != 0) {
@@ -5212,6 +5211,9 @@ static bool eval_source_buffer_in_current_state(const char *src_data, size_t src
        strstr(src_name, "tiny-breakout/runtime.clj") != NULL ||
        strstr(src_name, "tiny-breakout/scene.clj") != NULL ||
        strstr(src_name, "tiny-breakout/core.clj") != NULL);
+#else
+  const bool trace_require_heap = false;
+#endif
   Reader reader;
   reader_init_with_length(&reader, src_data, src_len);
   if (src_name && src_name[0]) {
@@ -7714,7 +7716,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
     ID k_sound_cmd_drop_count = g_stats_kw_sound_cmd_drop_count;
     ID k_sound_tick_overrun_count = g_stats_kw_sound_tick_overrun_count;
     ID k_sound_queue_high_watermark = g_stats_kw_sound_queue_high_watermark;
@@ -8418,7 +8420,7 @@ void register_builtins() {
 
     ns_end_resolve_cache_batch();
 
-#if TINYCLJ_WITH_TINY_FX
+#if TINY_FX_ENABLED
     ns_register_init("tiny-fx.gfx", tiny_fx_gfx_ensure_schema);
     ns_register_init("tiny-fx.gfx-scene", tiny_fx_gfx_ensure_schema);
 #endif

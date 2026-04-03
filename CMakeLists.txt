@@ -11,6 +11,7 @@ option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
 option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" OFF)
 option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" OFF)
 option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
+option(TINY_FX_ENABLED "Enable tiny-fx feature set (TINY_FX_ENABLED)" ON)
 
 if(TINYCLJ_META_ENABLED)
     set(TINYCLJ_META_ENABLED_VALUE 1)
@@ -29,6 +30,13 @@ if(TINYCLJ_ZOMBIE_ENABLED)
 else()
     set(TINYCLJ_ZOMBIE_ENABLED_VALUE 0)
 endif()
+
+if(TINY_FX_ENABLED)
+    set(TINY_FX_ENABLED_VALUE 1)
+else()
+    set(TINY_FX_ENABLED_VALUE 0)
+endif()
+add_compile_definitions(TINY_FX_ENABLED=${TINY_FX_ENABLED_VALUE})
 
 # Include common paths configuration
 include(cmake_include_paths.cmake)
@@ -745,13 +753,8 @@ target_compile_definitions(subjective-c PRIVATE
 # that are called via constructor attributes
 apply_common_settings(unit-tests)
 
-# Give profiling builds a distinct binary name to avoid overwriting the default
-# unit-tests executable (all executables share the same runtime output dir).
-if(TINYCLJ_MEMORY_PROFILING_ENABLED)
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests-prof")
-else()
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
-endif()
+# Keep a single stable unit-test binary name across build modes.
+set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
 
 # Use release-ish flags for faster runs unless caller overrides.
 target_compile_options(unit-tests PRIVATE
