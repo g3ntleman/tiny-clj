@@ -24,6 +24,10 @@
 #define TINYCLJ_SOUND_NATIVE_NS "tiny-fx.sound"
 #define TINYCLJ_SOUND_DEBUG_NS "tiny-fx.sound-debug"
 
+#ifndef TINYCLJ_SOUND_ENABLED
+#define TINYCLJ_SOUND_ENABLED TINY_FX_ENABLED
+#endif
+
 /* ========================================================================= */
 /* Native function implementations                                           */
 /* ========================================================================= */
@@ -77,7 +81,7 @@ static void builtins_sound_init_symbols(void) {
 #endif
 }
 
-#if TINY_FX_ENABLED
+#if TINYCLJ_SOUND_ENABLED
 static void ensure_sound_engine_initialized(void) {
     if (g_sound_engine.voice_count > 0) return;
 #ifdef ESP32_BUILD
@@ -622,7 +626,7 @@ ID native_sound_min_stable_duty_status(ID *args, unsigned int argc) {
 #else
 static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                              "tiny-fx is disabled; %s is unavailable",
+                              "sound engine is disabled; %s is unavailable",
                               fn_name ? fn_name : "feature");
     return NULL;
 }
@@ -691,7 +695,7 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
         return;
     }
     builtins_sound_init_symbols();
-#if TINY_FX_ENABLED
+#if TINYCLJ_SOUND_ENABLED
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-play-music!", native_sound_play_music);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-track!", native_sound_stop_track);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-stop-music!", native_sound_stop_music);

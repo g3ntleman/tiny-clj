@@ -51,6 +51,38 @@ static char *read_tinyclj_idf_main_source(size_t *out_len) {
     return NULL;
 }
 
+static char *read_tinyclj_component_cmakelists_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/components/tinyclj/CMakeLists.txt",
+        "../esp32-idf/components/tinyclj/CMakeLists.txt",
+        "../../esp32-idf/components/tinyclj/CMakeLists.txt"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/components/tinyclj/CMakeLists.txt (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_tinyclj_idf_compile_flags_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/cmake/tinyclj_idf_compile_flags.cmake",
+        "../esp32-idf/cmake/tinyclj_idf_compile_flags.cmake",
+        "../../esp32-idf/cmake/tinyclj_idf_compile_flags.cmake"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/cmake/tinyclj_idf_compile_flags.cmake (tried cwd-relative candidates)");
+    return NULL;
+}
+
 TEST(test_panel_esp32_architecture_uses_board_profile_and_panel_adapter) {
     size_t len = 0;
     char *src = read_tinyclj_idf_display_source(&len);
@@ -119,6 +151,42 @@ TEST(test_panel_esp32_architecture_bootstraps_display_from_app_main_for_tiny_fx)
                                  "expected app_main to bootstrap the ESP display for tiny-fx");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "TINY_FX_ENABLED"),
                                  "expected display bootstrap to stay gated behind tiny-fx builds");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_keeps_sound_sources_outside_tiny_fx_bundle) {
+    size_t len = 0;
+    char *src = read_tinyclj_component_cmakelists_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "set(TINYCLJ_SOUND_SRCS"),
+                                 "expected dedicated source list for sound runtime");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "\"${TINYCLJ_SRC_DIR}/sound_tick_scheduler.c\""),
+                                 "expected sound scheduler in the sound source list");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "\"${TINYCLJ_SRC_DIR}/sound_engine.c\""),
+                                 "expected sound engine in the sound source list");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "\"${TINYCLJ_SRC_DIR}/sound_backend_esp32.c\""),
+                                 "expected sound backend in the sound source list");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "if(TINYCLJ_SOUND_ENABLED)"),
+                                 "expected sound sources to be gated by TINYCLJ_SOUND_ENABLED");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "list(APPEND TINYCLJ_SRCS ${TINYCLJ_SOUND_SRCS})"),
+                                 "expected sound source bundle to be appended independently");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "\"${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c\""),
+                                 "expected rendered snapshot to remain in tiny-fx-specific sources");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_enables_sound_for_tiny_clj_product_builds) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_compile_flags_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "set(TINYCLJ_SOUND_ENABLED ON CACHE BOOL"),
+                                 "expected product compile flags to keep sound enabled");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "idf_build_set_property(COMPILE_DEFINITIONS \"TINYCLJ_SOUND_ENABLED=1\" APPEND)"),
+                                 "expected compile definitions to export TINYCLJ_SOUND_ENABLED=1");
 
     CLJ_FREE(src);
 }

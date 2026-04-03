@@ -60,6 +60,10 @@
 #include "builtins_tiny_fx_gfx.h"
 #include "fx_collision.h"
 
+#ifndef TINYCLJ_SOUND_ENABLED
+#define TINYCLJ_SOUND_ENABLED TINY_FX_ENABLED
+#endif
+
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -7732,7 +7736,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
-#if TINY_FX_ENABLED
+#if TINYCLJ_SOUND_ENABLED
     ID k_sound_cmd_drop_count = g_stats_kw_sound_cmd_drop_count;
     ID k_sound_tick_overrun_count = g_stats_kw_sound_tick_overrun_count;
     ID k_sound_queue_high_watermark = g_stats_kw_sound_queue_high_watermark;

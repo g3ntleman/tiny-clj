@@ -11,6 +11,9 @@ include("${TINYCLJ_REPO_ROOT}/cmake/embedded_clojure_sources.cmake")
 if(NOT DEFINED TINY_FX_ENABLED)
   set(TINY_FX_ENABLED ON)
 endif()
+if(NOT DEFINED TINYCLJ_SOUND_ENABLED)
+  set(TINYCLJ_SOUND_ENABLED ON)
+endif()
 
 set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/platform_esp32_embedded.c"
@@ -75,7 +78,6 @@ set(TINYCLJ_CORE_SRCS
 )
 
 set(TINYCLJ_FX_SRCS
-  "${TINYCLJ_SRC_DIR}/sound_tick_scheduler.c"
   "${TINYCLJ_SRC_DIR}/gfx.c"
   "${TINYCLJ_SRC_DIR}/scene.c"
   "${TINYCLJ_SRC_DIR}/panel.c"
@@ -85,11 +87,18 @@ set(TINYCLJ_FX_SRCS
   "${TINYCLJ_SRC_DIR}/vector_scene_graph.c"
   "${TINYCLJ_SRC_DIR}/renderer_lifecycle.c"
   "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
+)
+
+set(TINYCLJ_SOUND_SRCS
+  "${TINYCLJ_SRC_DIR}/sound_tick_scheduler.c"
   "${TINYCLJ_SRC_DIR}/sound_engine.c"
   "${TINYCLJ_SRC_DIR}/sound_backend_esp32.c"
 )
 
 set(TINYCLJ_SRCS ${TINYCLJ_CORE_SRCS})
+if(TINYCLJ_SOUND_ENABLED)
+  list(APPEND TINYCLJ_SRCS ${TINYCLJ_SOUND_SRCS})
+endif()
 if(TINY_FX_ENABLED)
   list(APPEND TINYCLJ_SRCS ${TINYCLJ_FX_SRCS})
 endif()
