@@ -8,16 +8,6 @@
 #include "vector_scene_graph.h"
 #include "fx_collision.h"
 
-#if defined(ESP32_BUILD)
-#define VG_RENDERED_STATE_MAX_SLOTS 3u
-#define VG_RENDERED_STATE_MAX_ENTITIES 64u
-#define VG_RENDERED_STATE_MAX_TIMELINES 128u
-#else
-#define VG_RENDERED_STATE_MAX_SLOTS 8u
-#define VG_RENDERED_STATE_MAX_ENTITIES 256u
-#define VG_RENDERED_STATE_MAX_TIMELINES 512u
-#endif
-
 typedef enum {
     VG_RENDERED_FIELD_NONE = 0,
     VG_RENDERED_FIELD_T = 1,
@@ -66,7 +56,8 @@ typedef struct {
     VgRenderedTimelineSample sample;
 } VgRenderedTimelineState;
 
-/* Writer-side API (render thread) */
+/* Writer-side API (render thread).
+ * capture_begin lazily allocates overlay storage as needed. */
 void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_generation, uint32_t frame_time_ms);
 void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransformFixed world_t);
 void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAabb world_aabb);
@@ -74,6 +65,19 @@ void vg_rendered_state_capture_record_entity_content_signature(uintptr_t entity_
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
                                                VgRenderedField field,
                                                VgRenderedTimelineSample sample);
+void vg_rendered_state_capture_commit(void);
+void vg_rendered_state_capture_discard(void);
+
+/* Reader-side API (Clojure thread reads via atomic pointer swap) */
+bool vg_rendered_state_query_entity(uint8_t slot_index,
+                                    uintptr_t entity_id_bits,
+                                    VgRenderedEntityState *out_state);
+bool vg_rendered_state_query_timeline(uint8_t slot_index,
+                                      uintptr_t entity_id_bits,
+                                      VgRenderedField field,
+                                      VgRenderedTimelineState *out_state);
+
+/* Dirty-rect API (render thread, between capture_begin and capture_commit) */
 bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
                                                   VgClipRect clip_rect,
                                                   uint8_t padding_px,
@@ -84,41 +88,8 @@ bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
                                                    VgClipRect *out_rects,
                                                    size_t out_capacity,
                                                    size_t *out_count);
-void vg_rendered_state_capture_commit(void);
-void vg_rendered_state_capture_discard(void);
-
-/* Reader-side API (runtime builtins) */
-bool vg_rendered_state_query_entity(uint8_t slot_index, uintptr_t entity_id_bits, VgRenderedEntityState *out_state);
-bool vg_rendered_state_query_timeline(uint8_t slot_index,
-                                      uintptr_t entity_id_bits,
-                                      VgRenderedField field,
-                                      VgRenderedTimelineState *out_state);
-
-/* Timeline Overlay — lightweight dynamic replacement for the timeline
- * portion of g_rendered_slots.  Stores only entities with active timelines.
- * Render thread writes, Clojure thread reads via atomic pointer swap. */
-bool vg_timeline_overlay_init(uint8_t slot_count);
-void vg_timeline_overlay_destroy(void);
-bool vg_timeline_overlay_query_entity(uint8_t slot_index,
-                                      uintptr_t entity_id_bits,
-                                      VgRenderedEntityState *out_state);
-bool vg_timeline_overlay_query_timeline(uint8_t slot_index,
-                                        uintptr_t entity_id_bits,
-                                        VgRenderedField field,
-                                        VgRenderedTimelineState *out_state);
-bool vg_timeline_overlay_capture_compute_dirty_rect(uint8_t slot_index,
-                                                    VgClipRect clip_rect,
-                                                    uint8_t padding_px,
-                                                    VgClipRect *out_dirty_rect);
-bool vg_timeline_overlay_capture_collect_dirty_rects(uint8_t slot_index,
-                                                     VgClipRect clip_rect,
-                                                     uint8_t padding_px,
-                                                     VgClipRect *out_rects,
-                                                     size_t out_capacity,
-                                                     size_t *out_count);
 
 /* Test/reset utility */
 void vg_rendered_state_reset_all(void);
-size_t vg_rendered_state_static_footprint(void);
 
 #endif /* TINY_CLJ_RENDERED_STATE_SNAPSHOT_H */

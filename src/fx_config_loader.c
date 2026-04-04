@@ -10,7 +10,6 @@
 #include "exception.h"
 #include "memory.h"
 #include "record.h"
-#include "rendered_state_snapshot.h"
 #include "tiny_clj.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
@@ -157,7 +156,7 @@ static bool fx_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) {
         return false;
     }
     uint32_t raw_count = vector_count(vec);
-    if (raw_count == 0u || raw_count > VG_RENDERED_STATE_MAX_SLOTS) {
+    if (raw_count == 0u || raw_count > UINT8_MAX) {
         return false;
     }
     ViewerConfiguredSlot *slot_items =

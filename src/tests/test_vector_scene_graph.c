@@ -865,6 +865,7 @@ TEST(test_vector_scene_graph_game_demo_hidden_collision_proxy_captures_rendered_
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     TEST_ASSERT_TRUE(tiny_fx_gfx_require_records_namespace(g_test_eval_state));
     TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
+
     vg_rendered_state_reset_all();
 
     ID game_scene = eval_string(
@@ -899,9 +900,11 @@ TEST(test_vector_scene_graph_game_demo_hidden_collision_proxy_captures_rendered_
     TEST_ASSERT_EQUAL_INT(146, proxy_state.world_aabb.max_y);
 
     vg_rendered_state_reset_all();
+
 }
 
 TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_for_changed_entity_aabbs, 0) {
+
     vg_rendered_state_reset_all();
 
     VgTransformFixed t0 = vg_transform_fixed_identity();
@@ -925,9 +928,9 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_for_chang
 
     VgClipRect dirty = {0};
     TEST_ASSERT_TRUE(vg_rendered_state_capture_compute_dirty_rect(3u,
-                                                                  (VgClipRect){0, 0, TEST_W, TEST_H},
-                                                                  1u,
-                                                                  &dirty));
+                                                                    (VgClipRect){0, 0, TEST_W, TEST_H},
+                                                                    1u,
+                                                                    &dirty));
     TEST_ASSERT_EQUAL_INT(19, dirty.x);
     TEST_ASSERT_EQUAL_INT(9, dirty.y);
     TEST_ASSERT_EQUAL_INT(17, dirty.w);
@@ -935,10 +938,12 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_for_chang
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
+
 }
 
 TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_falls_back_without_aabb, 0) {
     vg_rendered_state_reset_all();
+
 
     VgTransformFixed t0 = vg_transform_fixed_identity();
     VgTransformFixed t1 = vg_transform_fixed_identity();
@@ -964,10 +969,12 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_falls_bac
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
+
 }
 
 TEST(test_vector_scene_graph_rendered_state_capture_text_content_change_uses_aabb_union, 0) {
     vg_rendered_state_reset_all();
+
 
     VgTransformFixed t0 = vg_transform_fixed_identity();
     uintptr_t entity = (uintptr_t)fixnum(4202);
@@ -995,6 +1002,7 @@ TEST(test_vector_scene_graph_rendered_state_capture_text_content_change_uses_aab
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
+
 }
 
 TEST(test_vector_scene_graph_text_local_bounds_tracks_visible_glyphs_only, 0) {
@@ -1010,6 +1018,7 @@ TEST(test_vector_scene_graph_text_local_bounds_tracks_visible_glyphs_only, 0) {
 
 TEST(test_vector_scene_graph_rendered_state_capture_collect_dirty_rects_keeps_far_entities_separate, 0) {
     vg_rendered_state_reset_all();
+
 
     VgTransformFixed t0 = vg_transform_fixed_identity();
     VgTransformFixed t1 = vg_transform_fixed_identity();
@@ -1033,11 +1042,11 @@ TEST(test_vector_scene_graph_rendered_state_capture_collect_dirty_rects_keeps_fa
     VgClipRect dirty_rects[4] = {0};
     size_t dirty_count = 0u;
     TEST_ASSERT_TRUE(vg_rendered_state_capture_collect_dirty_rects(5u,
-                                                                   (VgClipRect){0, 0, 320, 240},
-                                                                   1u,
-                                                                   dirty_rects,
-                                                                   4u,
-                                                                   &dirty_count));
+                                                                     (VgClipRect){0, 0, 320, 240},
+                                                                     1u,
+                                                                     dirty_rects,
+                                                                     4u,
+                                                                     &dirty_count));
     TEST_ASSERT_EQUAL_UINT(4u, dirty_count);
     TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[0], (VgClipRect){.x = 139, .y = 223, .w = 42, .h = 6}));
     TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[1], (VgClipRect){.x = 239, .y = 223, .w = 42, .h = 6}));
@@ -1046,6 +1055,7 @@ TEST(test_vector_scene_graph_rendered_state_capture_collect_dirty_rects_keeps_fa
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
+
 }
 
 TEST(test_vector_scene_graph_game_demo_gpio_press_triggers_demo_melody_once) {
@@ -4129,7 +4139,7 @@ TEST(test_scene_query_entity_world_t_returns_false_for_timeline) {
 }
 
 TEST(test_timeline_overlay_stores_and_queries_timeline, 0) {
-    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+
     vg_rendered_state_reset_all();
 
     uintptr_t entity_a = (uintptr_t)fixnum(5001);
@@ -4154,7 +4164,7 @@ TEST(test_timeline_overlay_stores_and_queries_timeline, 0) {
 
     /* Query from overlay — must match the captured sample. */
     VgRenderedTimelineState tl_state = {0};
-    TEST_ASSERT_TRUE(vg_timeline_overlay_query_timeline(0, entity_a, VG_RENDERED_FIELD_T, &tl_state));
+    TEST_ASSERT_TRUE(vg_rendered_state_query_timeline(0, entity_a, VG_RENDERED_FIELD_T, &tl_state));
     TEST_ASSERT_EQUAL_INT(1, tl_state.sample.step_index);
     TEST_ASSERT_EQUAL_INT(3, tl_state.sample.keyframe_count);
     TEST_ASSERT_EQUAL_INT(50, tl_state.sample.phase_ms);
@@ -4164,14 +4174,14 @@ TEST(test_timeline_overlay_stores_and_queries_timeline, 0) {
 
     /* Non-timeline entity must not appear in overlay. */
     uintptr_t entity_b = (uintptr_t)fixnum(5002);
-    TEST_ASSERT_FALSE(vg_timeline_overlay_query_timeline(0, entity_b, VG_RENDERED_FIELD_T, &tl_state));
+    TEST_ASSERT_FALSE(vg_rendered_state_query_timeline(0, entity_b, VG_RENDERED_FIELD_T, &tl_state));
 
     vg_rendered_state_reset_all();
-    vg_timeline_overlay_destroy();
+
 }
 
 TEST(test_timeline_overlay_stores_and_queries_entity_world_t, 0) {
-    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+
     vg_rendered_state_reset_all();
 
     uintptr_t entity_a = (uintptr_t)fixnum(6001);
@@ -4191,7 +4201,7 @@ TEST(test_timeline_overlay_stores_and_queries_entity_world_t, 0) {
 
     /* Overlay must provide the entity world_t for timeline entities. */
     VgRenderedEntityState entity_state = {0};
-    TEST_ASSERT_TRUE(vg_timeline_overlay_query_entity(0, entity_a, &entity_state));
+    TEST_ASSERT_TRUE(vg_rendered_state_query_entity(0, entity_a, &entity_state));
     TEST_ASSERT_EQUAL_INT(15 * VG_SCALE_ONE, entity_state.world_t.m02);
     TEST_ASSERT_EQUAL_INT( 8 * VG_SCALE_ONE, entity_state.world_t.m12);
     TEST_ASSERT_EQUAL_INT(2, entity_state.snapshot_generation);
@@ -4204,15 +4214,15 @@ TEST(test_timeline_overlay_stores_and_queries_entity_world_t, 0) {
     vg_rendered_state_capture_record_entity(entity_b, t1);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(vg_timeline_overlay_query_entity(0, entity_b, &entity_state));
+    TEST_ASSERT_TRUE(vg_rendered_state_query_entity(0, entity_b, &entity_state));
     TEST_ASSERT_EQUAL_INT(20 * VG_SCALE_ONE, entity_state.world_t.m02);
 
     vg_rendered_state_reset_all();
-    vg_timeline_overlay_destroy();
+
 }
 
 TEST(test_timeline_overlay_dirty_rect_tracks_entity_movement, 0) {
-    TEST_ASSERT_TRUE(vg_timeline_overlay_init(VG_RENDERED_STATE_MAX_SLOTS));
+
     vg_rendered_state_reset_all();
 
     uintptr_t entity_a = (uintptr_t)fixnum(7001);
@@ -4232,7 +4242,7 @@ TEST(test_timeline_overlay_dirty_rect_tracks_entity_movement, 0) {
     vg_rendered_state_capture_record_entity_aabb(entity_a, (VgAabb){24, 34, 10, 20});
 
     VgClipRect dirty = {0};
-    TEST_ASSERT_TRUE(vg_timeline_overlay_capture_compute_dirty_rect(
+    TEST_ASSERT_TRUE(vg_rendered_state_capture_compute_dirty_rect(
         0, (VgClipRect){0, 0, TEST_W, TEST_H}, 1, &dirty));
     /* Dirty rect should cover union of old and new AABB + padding. */
     TEST_ASSERT_EQUAL_INT(19, dirty.x);
@@ -4242,16 +4252,9 @@ TEST(test_timeline_overlay_dirty_rect_tracks_entity_movement, 0) {
 
     vg_rendered_state_capture_discard();
     vg_rendered_state_reset_all();
-    vg_timeline_overlay_destroy();
+
 }
 
-TEST(test_rendered_state_bss_baseline, 0) {
-    size_t footprint = vg_rendered_state_static_footprint();
-    /* g_rendered_slots currently dominates BSS.  This anchor goes RED
-       once the static array is eliminated (footprint → 0). */
-    TEST_ASSERT_TRUE_MESSAGE(footprint > 0,
-        "g_rendered_slots static footprint is zero — update or remove this baseline test");
-}
 
 TEST(test_vector_scene_graph_collision_detect_aabb_overlap_edge_touch_is_not_overlap) {
     VgAabb player = {.min_x = 66, .max_x = 70, .min_y = 80, .max_y = 84};

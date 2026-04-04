@@ -95,7 +95,7 @@ typedef struct {
     VgRenderedField field;
 } TinycljRenderedFieldKeyword;
 
-static TinycljRendererSlotBinding g_renderer_slot_bindings[VG_RENDERED_STATE_MAX_SLOTS];
+static TinycljRendererSlotBinding *g_renderer_slot_bindings = NULL;
 static uint8_t g_renderer_slot_binding_count = 0u;
 
 static ID g_kw_id = NULL;
@@ -298,7 +298,8 @@ static ID tinyclj_runtime_slot_desc_field(ID slot_desc, ID key) {
 }
 
 static void tinyclj_runtime_clear_slot_bindings(void) {
-    memset(g_renderer_slot_bindings, 0, sizeof(g_renderer_slot_bindings));
+    CLJ_HOST_FREE(g_renderer_slot_bindings);
+    g_renderer_slot_bindings = NULL;
     g_renderer_slot_binding_count = 0u;
 }
 
@@ -326,7 +327,16 @@ bool builtins_tiny_fx_gfx_register_slot_bindings(ID slot_atoms) {
     }
 
     uint32_t count = vector_count(vec);
-    if (count > VG_RENDERED_STATE_MAX_SLOTS) {
+    if (count > UINT8_MAX) {
+        return false;
+    }
+    if (count == 0u) {
+        return true;
+    }
+
+    g_renderer_slot_bindings = (TinycljRendererSlotBinding *)CLJ_HOST_CALLOC(
+        (size_t)count, sizeof(TinycljRendererSlotBinding));
+    if (!g_renderer_slot_bindings) {
         return false;
     }
 
@@ -442,7 +452,7 @@ static bool tinyclj_runtime_parse_renderer_slot(ID slot_obj, uint8_t *out_slot) 
 
     if (is_fixnum(slot_obj)) {
         int32_t slot = as_fixnum(slot_obj);
-        if (slot < 0 || slot >= (int32_t)VG_RENDERED_STATE_MAX_SLOTS) {
+        if (slot < 0 || slot >= (int32_t)g_renderer_slot_binding_count) {
             return false;
         }
         *out_slot = (uint8_t)slot;

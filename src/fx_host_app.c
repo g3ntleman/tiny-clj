@@ -51,7 +51,7 @@ static bool fx_perf_stderr_diag_enabled(void) {
 #define VIEW_W 320
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
-#define FX_MAX_SLOTS VG_RENDERED_STATE_MAX_SLOTS
+#define FX_MAX_SLOTS 8u
 #define TARGET_FPS              60u
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
@@ -1025,11 +1025,11 @@ static void *fx_render_thread_main(void *arg) {
                                             ? (uint8_t)(g_render_thread.slot_states[i].last_guard_px + 2u)
                                             : UINT8_MAX;
                 if (vg_rendered_state_capture_collect_dirty_rects(i,
-                                                                  g_render_thread.slot_states[i].last_clip_rect,
-                                                                  dirty_padding,
-                                                                  refined_dirty_rects,
-                                                                  FX_MAX_DIRTY_PLAN_RECTS,
-                                                                  &refined_dirty_count) &&
+                                                                   g_render_thread.slot_states[i].last_clip_rect,
+                                                                   dirty_padding,
+                                                                   refined_dirty_rects,
+                                                                   FX_MAX_DIRTY_PLAN_RECTS,
+                                                                   &refined_dirty_count) &&
                     refined_dirty_count > 0u) {
                     use_refined_dirty_rects = true;
                     slot_result.dirty_rect = refined_dirty_rects[0];
