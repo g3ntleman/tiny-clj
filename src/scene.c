@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include "callbacks.h"
+#include "flat_index.h"
 #include "hashmap.h"
 #include "map.h"
 #include "record.h"
@@ -21,10 +22,10 @@
 
 typedef struct {
     ID entity_map;
-    CljHashMap *index;
+    CljFlatIndex *index; /* points to g_flat_scene_lookup_scratch */
 } VgFlatSceneLookup;
 
-static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+static THREAD_LOCAL CljFlatIndex g_flat_scene_lookup_scratch = {0};
 static CljSymbol *g_ns_tiny_fx_scene = NULL;
 static CljSymbol *g_kw_root = NULL;
 static CljSymbol *g_kw_timeline_ease = NULL;
@@ -49,76 +50,6 @@ void vg_set_timeline_progress_observer(VgTimelineProgressObserverFn observer) {
     g_timeline_progress_observer = observer;
 }
 
-static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
-    if (!index) {
-        return;
-    }
-    for (unsigned int i = 0; i < index->capacity; i++) {
-        KV_SET_KEY(index->data, i, HASHMAP_EMPTY);
-        KV_SET_VALUE(index->data, i, NULL);
-    }
-    index->count = 0u;
-    index->tombstones = 0u;
-}
-
-static bool vg_flat_scene_lookup_reserve(unsigned int entry_count) {
-    unsigned int required = entry_count > 0u ? (entry_count * 2u) : 8u;
-    if (g_flat_scene_lookup_scratch && g_flat_scene_lookup_scratch->capacity >= required) {
-        vg_flat_scene_lookup_reset_borrowed(g_flat_scene_lookup_scratch);
-        return true;
-    }
-
-    CljHashMap *replacement = make_hashmap(required);
-    if (!replacement) {
-        return false;
-    }
-
-    if (g_flat_scene_lookup_scratch) {
-        vg_flat_scene_lookup_reset_borrowed(g_flat_scene_lookup_scratch);
-        RELEASE(g_flat_scene_lookup_scratch);
-    }
-    g_flat_scene_lookup_scratch = replacement;
-    return true;
-}
-
-static unsigned int vg_flat_scene_lookup_find_slot(CljHashMap *index, ID key) {
-    CLJ_ASSERT(index && index->capacity > 0u);
-    unsigned int mask = index->capacity - 1u;
-    unsigned int start_idx = clj_hash(key) & mask;
-    unsigned int idx = start_idx;
-
-    do {
-        ID stored_key = KV_KEY(index->data, idx);
-        if (stored_key == HASHMAP_EMPTY) {
-            return idx;
-        }
-        if (clj_equal(stored_key, key)) {
-            return idx;
-        }
-        idx = (idx + 1u) & mask;
-    } while (idx != start_idx);
-
-    return UINT_MAX;
-}
-
-static bool vg_flat_scene_lookup_insert_borrowed(CljHashMap *index, ID key, ID value) {
-    if (!index) {
-        return false;
-    }
-    unsigned int idx = vg_flat_scene_lookup_find_slot(index, key);
-    if (idx == UINT_MAX) {
-        return false;
-    }
-    if (KV_KEY(index->data, idx) == HASHMAP_EMPTY) {
-        KV_SET_KEY(index->data, idx, key);
-        KV_SET_VALUE(index->data, idx, value);
-        index->count++;
-        return true;
-    }
-    KV_SET_VALUE(index->data, idx, value);
-    return true;
-}
-
 static bool vg_flat_scene_lookup_build(ID entity_map, VgFlatSceneLookup *out_lookup) {
     if (!out_lookup) {
         return false;
@@ -131,18 +62,20 @@ static bool vg_flat_scene_lookup_build(ID entity_map, VgFlatSceneLookup *out_loo
         return true;
     }
     unsigned int entry_count = (unsigned int)((backing->count > 0) ? backing->count : 0);
-    if (!vg_flat_scene_lookup_reserve(entry_count)) {
+    clj_flat_index_clear(&g_flat_scene_lookup_scratch);
+    if (!clj_flat_index_reserve(&g_flat_scene_lookup_scratch, entry_count)) {
         return false;
     }
 
-    out_lookup->index = g_flat_scene_lookup_scratch;
+    out_lookup->index = &g_flat_scene_lookup_scratch;
     if (entry_count == 0u) {
         return true;
     }
 
     MAP_FOR_EACH(entity_map, key, value) {
-        if (!vg_flat_scene_lookup_insert_borrowed(out_lookup->index, key, value)) {
-            vg_flat_scene_lookup_reset_borrowed(out_lookup->index);
+        if (!clj_flat_index_put(&g_flat_scene_lookup_scratch,
+                                (uintptr_t)key, (uintptr_t)value)) {
+            clj_flat_index_clear(&g_flat_scene_lookup_scratch);
             out_lookup->index = NULL;
             return false;
         }
@@ -152,7 +85,8 @@ static bool vg_flat_scene_lookup_build(ID entity_map, VgFlatSceneLookup *out_loo
 
 static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID entity_map, ID key) {
     if (lookup && lookup->index && lookup->entity_map == entity_map) {
-        return hashmap_get_sentinel(lookup->index, key, NULL);
+        const CljFlatIndexEntry *e = clj_flat_index_find(lookup->index, (uintptr_t)key);
+        return e ? (ID)e->value : NULL;
     }
     return map_get_sentinel(entity_map, key, NULL);
 }

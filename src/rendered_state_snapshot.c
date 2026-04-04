@@ -3,7 +3,8 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#include "memory.h"  /* CLJ_HOST_CALLOC / REALLOC / FREE */
+#include "memory.h"       /* CLJ_HOST_CALLOC / REALLOC / FREE */
+#include "flat_index.h"   /* CljFlatIndex */
 
 typedef struct {
     bool active;
@@ -32,13 +33,6 @@ typedef struct {
     VgRenderedTimelineSample sample;
 } OverlayTimelineRow;
 
-/* Open-addressing entity index: entity_id_bits → row index in entities[].
-   Key 0 marks an empty slot (entity_id_bits is never 0). */
-typedef struct {
-    uintptr_t key;   /* entity_id_bits, 0 = empty */
-    uint16_t  value; /* index into OverlayBuffer.entities[] */
-} OverlayEntityIndexEntry;
-
 typedef struct {
     uint32_t snapshot_generation;
     uint32_t frame_time_ms;
@@ -48,9 +42,7 @@ typedef struct {
     uint16_t timeline_count;
     uint16_t timeline_capacity;
     OverlayTimelineRow *timelines;
-    /* Entity hash index (power-of-2, load factor ≤ 0.5). */
-    OverlayEntityIndexEntry *entity_index;
-    uint16_t entity_index_capacity; /* always power-of-2, 0 when unallocated */
+    CljFlatIndex entity_index;
 } OverlayBuffer;
 
 typedef struct {
@@ -72,25 +64,9 @@ static OverlayBuffer *overlay_write_buf(void) {
     return &slot->buffers[write_idx];
 }
 
-/* --- Entity hash index (open-addressing, linear probing) --- */
-
-static inline uint32_t entity_id_hash(uintptr_t key) {
-    /* Fibonacci hashing — good distribution for pointer-derived keys. */
-    return (uint32_t)((key * (uintptr_t)0x9E3779B9u) >> 16u);
-}
-
 static int overlay_find_entity_row(const OverlayBuffer *buf, uintptr_t entity_id_bits) {
-    if (buf->entity_index && buf->entity_index_capacity > 0u) {
-        uint16_t mask = (uint16_t)(buf->entity_index_capacity - 1u);
-        uint16_t slot = (uint16_t)(entity_id_hash(entity_id_bits) & mask);
-        for (uint16_t probe = 0; probe < buf->entity_index_capacity; probe++) {
-            const OverlayEntityIndexEntry *e = &buf->entity_index[slot];
-            if (e->key == 0u) { return -1; }
-            if (e->key == entity_id_bits) { return (int)e->value; }
-            slot = (uint16_t)((slot + 1u) & mask);
-        }
-        return -1;
-    }
+    const CljFlatIndexEntry *e = clj_flat_index_find(&buf->entity_index, entity_id_bits);
+    if (e) { return (int)e->value; }
     /* Fallback: linear scan (before index is allocated). */
     for (uint16_t i = 0; i < buf->entity_count; i++) {
         if (buf->entities[i].entity_id_bits == entity_id_bits) {
@@ -98,58 +74,6 @@ static int overlay_find_entity_row(const OverlayBuffer *buf, uintptr_t entity_id
         }
     }
     return -1;
-}
-
-static bool overlay_entity_index_ensure(OverlayBuffer *buf, uint16_t needed_entries) {
-    /* Capacity must be power-of-2 and ≥ 2× entry count (load factor ≤ 0.5). */
-    uint16_t required = (needed_entries < 4u) ? 8u : (uint16_t)(needed_entries * 2u);
-    /* Round up to power-of-2. */
-    uint16_t cap = 8u;
-    while (cap < required) { cap = (uint16_t)(cap * 2u); }
-
-    if (buf->entity_index && buf->entity_index_capacity >= cap) {
-        return true;
-    }
-    OverlayEntityIndexEntry *p = (OverlayEntityIndexEntry *)CLJ_HOST_REALLOC(
-        buf->entity_index, (size_t)cap * sizeof(OverlayEntityIndexEntry));
-    if (!p) { return false; }
-    buf->entity_index = p;
-    buf->entity_index_capacity = cap;
-    /* Rebuild: clear and re-insert all existing entities. */
-    memset(p, 0, (size_t)cap * sizeof(OverlayEntityIndexEntry));
-    uint16_t mask = (uint16_t)(cap - 1u);
-    for (uint16_t i = 0; i < buf->entity_count; i++) {
-        uintptr_t key = buf->entities[i].entity_id_bits;
-        uint16_t slot = (uint16_t)(entity_id_hash(key) & mask);
-        while (p[slot].key != 0u) {
-            slot = (uint16_t)((slot + 1u) & mask);
-        }
-        p[slot].key = key;
-        p[slot].value = i;
-    }
-    return true;
-}
-
-static void overlay_entity_index_clear(OverlayBuffer *buf) {
-    if (buf->entity_index && buf->entity_index_capacity > 0u) {
-        memset(buf->entity_index, 0,
-               (size_t)buf->entity_index_capacity * sizeof(OverlayEntityIndexEntry));
-    }
-}
-
-static void overlay_entity_index_insert(OverlayBuffer *buf, uintptr_t key, uint16_t value) {
-    if (!buf->entity_index || buf->entity_index_capacity == 0u) { return; }
-    uint16_t mask = (uint16_t)(buf->entity_index_capacity - 1u);
-    uint16_t slot = (uint16_t)(entity_id_hash(key) & mask);
-    for (uint16_t probe = 0; probe < buf->entity_index_capacity; probe++) {
-        OverlayEntityIndexEntry *e = &buf->entity_index[slot];
-        if (e->key == 0u || e->key == key) {
-            e->key = key;
-            e->value = value;
-            return;
-        }
-        slot = (uint16_t)((slot + 1u) & mask);
-    }
 }
 
 static int overlay_find_timeline_row(const OverlayBuffer *buf,
@@ -197,13 +121,22 @@ static OverlayEntityRow *overlay_ensure_entity(OverlayBuffer *buf, uintptr_t ent
     int idx = overlay_find_entity_row(buf, entity_id_bits);
     if (idx >= 0) { return &buf->entities[idx]; }
     if (!overlay_ensure_entity_capacity(buf)) { return NULL; }
-    /* Grow index if needed (before inserting — capacity may change). */
-    (void)overlay_entity_index_ensure(buf, (uint16_t)(buf->entity_count + 1u));
+    /* Grow index if needed.  reserve() clears on growth, so rebuild. */
+    uint32_t needed = (uint32_t)(buf->entity_count + 1u);
+    uint32_t old_cap = buf->entity_index.capacity;
+    if (!clj_flat_index_reserve(&buf->entity_index, needed)) { return NULL; }
+    if (buf->entity_index.capacity != old_cap) {
+        /* Capacity changed — re-insert all existing entities. */
+        for (uint16_t j = 0; j < buf->entity_count; j++) {
+            clj_flat_index_put(&buf->entity_index,
+                               buf->entities[j].entity_id_bits, (uintptr_t)j);
+        }
+    }
     uint16_t i = buf->entity_count++;
     memset(&buf->entities[i], 0, sizeof(buf->entities[i]));
     buf->entities[i].entity_id_bits = entity_id_bits;
     buf->entities[i].world_t = vg_transform_fixed_identity();
-    overlay_entity_index_insert(buf, entity_id_bits, i);
+    clj_flat_index_put(&buf->entity_index, entity_id_bits, (uintptr_t)i);
     return &buf->entities[i];
 }
 
@@ -297,7 +230,7 @@ void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_gener
         obuf->timeline_count = 0;
         obuf->snapshot_generation = snapshot_generation;
         obuf->frame_time_ms = frame_time_ms;
-        overlay_entity_index_clear(obuf);
+        clj_flat_index_clear(&obuf->entity_index);
     }
 }
 
@@ -374,7 +307,7 @@ void vg_rendered_state_capture_discard(void) {
     if (obuf) {
         obuf->entity_count = 0;
         obuf->timeline_count = 0;
-        overlay_entity_index_clear(obuf);
+        clj_flat_index_clear(&obuf->entity_index);
     }
     g_capture_ctx.active = false;
 }
@@ -385,7 +318,7 @@ static void overlay_destroy(void) {
             for (int b = 0; b < 2; b++) {
                 CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].entities);
                 CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].timelines);
-                CLJ_HOST_FREE(g_overlay_slots[s].buffers[b].entity_index);
+                clj_flat_index_destroy(&g_overlay_slots[s].buffers[b].entity_index);
             }
         }
         CLJ_HOST_FREE(g_overlay_slots);
