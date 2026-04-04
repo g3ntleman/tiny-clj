@@ -68,6 +68,7 @@ venv/
 .venv/
 
 # Tooling caches (do not commit)
+.claude/
 .cache/
 .clj-kondo/
 .lsp/
