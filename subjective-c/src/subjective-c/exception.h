@@ -82,9 +82,8 @@ extern CLJException *clj_oom_exception;
 // GLOBAL EXCEPTION STACK (independent of EvalState)
 // ============================================================================
 
-// Forward declaration to avoid circular dependency with memory.h
-// Forward declaration for autorelease pool vector.
-struct CljPersistentVector;
+// Vector is needed for autorelease pool and Clojure call stack.
+#include "vector.h"
 
 /**
  * @brief Exception handler for TRY/CATCH blocks.
@@ -93,7 +92,7 @@ struct CljPersistentVector;
 typedef struct ExceptionHandler {
     jmp_buf jump_state;                  // Jump target for longjmp
     struct ExceptionHandler *next;       // Previous handler (stack)
-    struct CljPersistentVector *pool;   // Autorelease pool (weak vector) for cleanup after longjmp
+    CljPersistentVector *pool;           // Autorelease pool (weak vector) for cleanup after longjmp
     CLJException *exception;             // Exception stored in handler (replaces g_current_exception)
 #ifdef DEBUG
     int saved_callstack_depth;           // Clojure call stack depth at TRY entry (restored on exception)
@@ -112,53 +111,34 @@ typedef struct GlobalExceptionStack {
 extern THREAD_LOCAL GlobalExceptionStack global_exception_stack;
 
 // ============================================================================
-// CLOJURE CALL STACK (thread-local, push/pop around every function call)
-// Only active in DEBUG builds; compiled away in Release.
+// CLOJURE CALL STACK (push/pop around every function call + special form)
+// Backed by a weak CljPersistentVector of symbol IDs — no fixed limit,
+// no string copies.  Only active in DEBUG builds; compiled away in Release.
 // ============================================================================
 
-#define CLJ_CALLSTACK_MAX 64
-#define CLJ_CALLSTACK_NAME_MAX 96
-
-/** @brief One frame in the Clojure-level call stack. */
-typedef struct {
-    // Stable per-thread storage for frame labels.
-    // We copy names on push so stacktrace formatting never dereferences stale pointers
-    // after function/namespace objects are released during unwind.
-    char names[CLJ_CALLSTACK_MAX][CLJ_CALLSTACK_NAME_MAX];
-    const char *frames[CLJ_CALLSTACK_MAX];
-    int depth;
-} CljCallStack;
-
 #ifdef DEBUG
-/** @brief Clojure call stack for exception stacktraces. */
-extern CljCallStack g_clj_callstack;
+/** @brief Clojure call stack (weak vector of symbol IDs). */
+extern CljPersistentVector *g_clj_callstack;
 
-/** @brief Push a Clojure function name onto the call stack. */
-static inline void clj_callstack_push(const char *name) {
-    if (g_clj_callstack.depth < CLJ_CALLSTACK_MAX) {
-        int idx = g_clj_callstack.depth;
-        const char *src = (name && name[0] != '\0') ? name : "<anonymous>";
-        strncpy(g_clj_callstack.names[idx], src, CLJ_CALLSTACK_NAME_MAX - 1);
-        g_clj_callstack.names[idx][CLJ_CALLSTACK_NAME_MAX - 1] = '\0';
-        g_clj_callstack.frames[idx] = g_clj_callstack.names[idx];
-        g_clj_callstack.depth++;
-    }
-}
+/** @brief Push a symbol frame onto the call stack (ID may be a CljSymbol* or NULL). */
+void clj_callstack_push(ID frame);
 
 /** @brief Pop the top frame from the Clojure call stack. */
-static inline void clj_callstack_pop(void) {
-    if (g_clj_callstack.depth > 0) g_clj_callstack.depth--;
-}
+void clj_callstack_pop(void);
 
 /** @brief Build a human-readable Clojure stacktrace string from the current call stack.
  *  @return New CljString (rc=1) or NULL if stack is empty. Caller must RELEASE.
  */
 struct CljString *clj_stacktrace_build(void);
 
-#define _TRY_SAVE_CALLSTACK(h)     ((h)->saved_callstack_depth = g_clj_callstack.depth)
-#define _CATCH_RESTORE_CALLSTACK(h) (g_clj_callstack.depth = (h)->saved_callstack_depth)
+#define _TRY_SAVE_CALLSTACK(h) \
+    ((h)->saved_callstack_depth = (int)vector_count(g_clj_callstack))
+#define _CATCH_RESTORE_CALLSTACK(h) \
+    (g_clj_callstack \
+     ? vector_truncate(g_clj_callstack, (unsigned)(h)->saved_callstack_depth) \
+     : (void)0)
 #else
-static inline void clj_callstack_push(const char *name) { (void)name; }
+static inline void clj_callstack_push(ID frame) { (void)frame; }
 static inline void clj_callstack_pop(void) {}
 #define _TRY_SAVE_CALLSTACK(h)     ((void)0)
 #define _CATCH_RESTORE_CALLSTACK(h) ((void)0)

@@ -14,6 +14,8 @@
 #include "value.h"   /* IS_IMMEDIATE for AUTORELEASE macro */
 #include "memory.h"
 #include "strings.h"
+#include "vector.h"
+#include "symbol.h"  /* CljSymbol->cname for stacktrace formatting */
 #if defined(ESP_PLATFORM)
 #include "esp_debug_helpers.h"
 #include "freertos/FreeRTOS.h"
@@ -128,33 +130,48 @@ struct CljString* stacktrace(void);
 THREAD_LOCAL GlobalExceptionStack global_exception_stack = {0};
 
 #ifdef DEBUG
-// Clojure call stack (function names, innermost frame at [depth-1]).
-CljCallStack g_clj_callstack = { .depth = 0 };
-static char g_clj_stacktrace_buf[CLJ_CALLSTACK_MAX * 40];
+/* Clojure call stack — weak vector of symbol IDs (no string copies). */
+CljPersistentVector *g_clj_callstack = NULL;
 
-/**
- * @brief Build a human-readable Clojure stacktrace from the current call stack.
- * @return New CljString (rc=1) listing frames from innermost to outermost, or NULL if empty.
- */
-struct CljString *clj_stacktrace_build(void) {
-    int depth = g_clj_callstack.depth;
-    if (depth <= 0) return NULL;
-    if (depth > CLJ_CALLSTACK_MAX) {
-        depth = CLJ_CALLSTACK_MAX;
+void clj_callstack_push(ID frame) {
+    if (!g_clj_callstack) {
+        g_clj_callstack = make_vector(64, WEAK);
     }
-    char *buf = g_clj_stacktrace_buf;
-    int buf_size = (int)sizeof(g_clj_stacktrace_buf);
+    CljPersistentVector *updated = vector_conj(g_clj_callstack, frame);
+    if (updated != g_clj_callstack) {
+        ASSIGN(g_clj_callstack, (ID)updated);
+    }
+}
+
+void clj_callstack_pop(void) {
+    if (!g_clj_callstack || vector_count(g_clj_callstack) == 0u) return;
+    CljPersistentVector *updated = vector_popped(g_clj_callstack);
+    if (updated != g_clj_callstack) {
+        ASSIGN(g_clj_callstack, (ID)updated);
+    }
+}
+
+struct CljString *clj_stacktrace_build(void) {
+    unsigned int depth = vector_count(g_clj_callstack);
+    if (depth == 0u) return NULL;
+
+    /* Estimate: "Clojure call stack:\n" + depth × "  NN: <name>\n" */
+    char buf[2048];
+    int buf_size = (int)sizeof(buf);
     int pos = 0;
     pos += mini_snprintf(buf + pos, buf_size - pos, "Clojure call stack:\n");
-    for (int i = depth - 1; i >= 0 && pos < buf_size - 1; i--) {
-        int frame_num = depth - i;
-        const char *name = g_clj_callstack.names[i];
-        if (!name || name[0] == '\0') {
-            name = "<anonymous>";
+    for (int i = (int)depth - 1; i >= 0 && pos < buf_size - 1; i--) {
+        int frame_num = (int)depth - i;
+        ID frame = vector_nth(g_clj_callstack, (unsigned int)i);
+        const char *name = "<anonymous>";
+        if (frame && TAG(frame) == CLJ_SYMBOL) {
+            const CljSymbol *sym = (const CljSymbol *)frame;
+            if (sym->cname && sym->cname[0] != '\0') {
+                name = sym->cname;
+            }
         }
         pos += mini_snprintf(buf + pos, buf_size - pos, "  %2d: %s\n",
-                             frame_num,
-                             name);
+                             frame_num, name);
     }
     return make_string(buf);
 }
@@ -361,10 +378,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
     // Prefer Clojure-level call stack (useful to end users).
     // Avoid native backtrace symbolization here: in deep/error-heavy paths this can
     // exhaust the remaining stack and crash while constructing the exception object.
-    exc->stacktrace = clj_stacktrace_build();
-    if (!exc->stacktrace) {
-        exc->stacktrace = make_string("Clojure call stack unavailable");
-    }
+    exc->stacktrace = clj_stacktrace_build(); /* NULL when depth==0 → no trace printed */
     exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field

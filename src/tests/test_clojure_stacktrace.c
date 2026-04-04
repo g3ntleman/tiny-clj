@@ -50,7 +50,7 @@ TEST(test_clojure_stacktrace_cleared_after_catch) {
         (void)ex;
     } END_TRY
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, g_clj_callstack.depth,
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0u, vector_count(g_clj_callstack),
         "callstack depth must be restored to 0 after CATCH");
 }
 

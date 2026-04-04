@@ -476,7 +476,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     // It's a native C function (CljCFunc)
     CljCFunc *native_func = (CljCFunc *)fn;
     CLJ_ASSERT(native_func && native_func->fn);
-    clj_callstack_push(native_func->name_sym ? native_func->name_sym->cname : NULL);
+    clj_callstack_push((ID)native_func->name_sym);
     ID result;
     if (UNLIKELY((native_func->base.flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE) != 0u)) {
       extern void builtin_set_eval_state(EvalState * st);
@@ -497,7 +497,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (!func) {
     return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
   }
-  clj_callstack_push(func->name_sym ? func->name_sym->cname : NULL);
+  clj_callstack_push((ID)func->name_sym);
   CljNamespace *saved_ns = st ? st->current_ns : NULL;
   bool switched_ns = false;
   if (st && func->ns && st->current_ns != func->ns) {
@@ -1986,6 +1986,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
       // Saves ~500 bytes of stack per if-level by avoiding
       // eval_special_if → eval_body → eval_body_with_params → eval_ast_call recursion.
       if (dispatch_op_sym == SYM_IF) {
+        clj_callstack_push((ID)dispatch_op_sym);
         unsigned int argc = args ? vector_count(args) : 0;
         if (argc >= 2) {
           ID cond_expr = vector_nth(args, 0);
@@ -1993,31 +1994,37 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
           bool truthy = clj_is_truthy(cond_val);
           ID branch = truthy ? vector_nth(args, 1) : (argc >= 3 ? vector_nth(args, 2) : NULL);
           if (!branch) {
+            clj_callstack_pop();
             g_eval_ast_call_depth--;
             return NULL;
           }
           // If branch is an AST call, restart eval_ast_call without new stack frame
           if (TAG(branch) == CLJ_AST_CALL) {
+            clj_callstack_pop();
             call = as_ast_call(branch);
             goto tail_restart;
           }
           // Otherwise evaluate the branch expression
           result = ctx ? eval_body_with_params(branch, ctx)
                        : eval_body(branch, effective_env, effective_st, NULL);
+          clj_callstack_pop();
           g_eval_ast_call_depth--;
           return result;
         }
+        clj_callstack_pop();
         g_eval_ast_call_depth--;
         return NULL;
       }
 
       // --- Tail-call optimized: inline when ---
       if (dispatch_op_sym == SYM_WHEN) {
+        clj_callstack_push((ID)dispatch_op_sym);
         unsigned int argc = args ? vector_count(args) : 0;
         ID cond_expr = (argc >= 1) ? vector_nth(args, 0) : NULL;
         ID cond_val = eval_arg_from_expr_with_context(cond_expr, effective_env, effective_st, ctx);
         bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
         if (!truthy) {
+          clj_callstack_pop();
           g_eval_ast_call_depth--;
           return NULL;
         }
@@ -2034,23 +2041,28 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
         if (argc >= 2) {
           ID last_expr = vector_nth(args, argc - 1);
           if (!last_expr) {
+            clj_callstack_pop();
             g_eval_ast_call_depth--;
             return NULL;
           }
           if (TAG(last_expr) == CLJ_AST_CALL) {
+            clj_callstack_pop();
             call = as_ast_call(last_expr);
             goto tail_restart;
           }
           result = ctx ? eval_body_with_params(last_expr, ctx)
                        : eval_body(last_expr, effective_env, effective_st, NULL);
+          clj_callstack_pop();
           g_eval_ast_call_depth--;
           return result;
         }
+        clj_callstack_pop();
         g_eval_ast_call_depth--;
         return NULL;
       }
 
       if (dispatch_op_sym == SYM_DEF) {
+        clj_callstack_push((ID)dispatch_op_sym);
 #if defined(META_ENABLED) && META_ENABLED
         // Preserve def form metadata by attaching it to the args vector.
         if (call && call->args) {
@@ -2061,18 +2073,25 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
         }
 #endif
         result = eval_def(args, effective_env, effective_st);
+        clj_callstack_pop();
         handled = true;
       } else if (dispatch_op_sym == SYM_DOSEQ) {
+        clj_callstack_push((ID)dispatch_op_sym);
         result = eval_doseq(args, effective_env, effective_st, ctx);
+        clj_callstack_pop();
         handled = true;
       } else if (dispatch_op_sym == SYM_DOTIMES) {
+        clj_callstack_push((ID)dispatch_op_sym);
         result = eval_dotimes(args, effective_env, effective_st, ctx);
+        clj_callstack_pop();
         handled = true;
       } else if (is_special_symbol(dispatch_op_sym)) {
         CljSpecialSymbol *special = (CljSpecialSymbol *)dispatch_op_sym;
         if (special->eval_fn) {
+          clj_callstack_push((ID)dispatch_op_sym);
           SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
           result = fn(args, effective_env, effective_st, ctx);
+          clj_callstack_pop();
           handled = true;
         }
       }
