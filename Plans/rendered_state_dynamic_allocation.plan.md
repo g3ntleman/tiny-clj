@@ -9,7 +9,7 @@ overview: >
   Timeline-Feldern. Dirty-Rect-Vergleich kann auf dem Diff zweier retained
   Szenen-Snapshots basieren. Der einzige grosse Buffer bleibt der globale
   RGB-Pixel-Buffer (g_render_buffer), der bereits geteilt ist.
-status: active
+status: completed
 todos:
   - id: baseline-test
     content: >
