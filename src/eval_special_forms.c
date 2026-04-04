@@ -26,6 +26,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#define EVAL_SPECIAL_LOOP_COOPERATE_MASK 0xFFu /* every 256 loop/recur iterations */
+
+__attribute__((weak)) void tinyclj_eval_loop_cooperate(void) {}
+
 static INLINE bool sym_name_eq(ID obj, const char *name) {
   CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
   if (!obj || TAG(obj) != CLJ_SYMBOL)
@@ -446,12 +450,13 @@ static inline ID eval_expr_with_local_autorelease_pool(ID expr,
     return NULL;
   }
 
-  uint32_t restore = autorelease_pool_mark();
-  ID result = eval_body(expr, env, st, ctx);
-  if (preserve_result && result && !IS_IMMEDIATE(result)) {
-    RETAIN(result);
-  }
-  autorelease_pool_drain_to_depth(restore);
+  ID result = NULL;
+  WITH_AUTORELEASE_POOL({
+    result = eval_body(expr, env, st, ctx);
+    if (preserve_result && result && !IS_IMMEDIATE(result)) {
+      RETAIN(result);
+    }
+  });
   if (preserve_result && result && !IS_IMMEDIATE(result)) {
     AUTORELEASE(result);
   }
@@ -712,7 +717,14 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
   // Evaluate body until no recur happens.
   ID result = NULL;
   unsigned int argc = args_count(args);
+  uint32_t loop_iteration = 0u;
   for (;;) {
+    loop_iteration++;
+    if ((loop_iteration & EVAL_SPECIAL_LOOP_COOPERATE_MASK) == 0u) {
+      // Allow platform-specific schedulers/watchdogs to make progress during
+      // long-running compile/eval loops.
+      tinyclj_eval_loop_cooperate();
+    }
     recur_arg_count = 0;
 
     for (unsigned int i = 1; i < argc; i++) {
@@ -723,12 +735,14 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
       if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
         result = body_expr;
       } else {
-        uint32_t restore = autorelease_pool_mark();
-        result = eval_body(body_expr, env, st, &loop_ctx);
-        if (preserve_result && recur_arg_count <= 0 && result && !IS_IMMEDIATE(result)) {
-          RETAIN(result);
-        }
-        autorelease_pool_drain_to_depth(restore);
+        ID body_result = NULL;
+        WITH_AUTORELEASE_POOL({
+          body_result = eval_body(body_expr, env, st, &loop_ctx);
+          if (preserve_result && recur_arg_count <= 0 && body_result && !IS_IMMEDIATE(body_result)) {
+            RETAIN(body_result);
+          }
+        });
+        result = body_result;
         if (preserve_result && recur_arg_count <= 0 && result && !IS_IMMEDIATE(result)) {
           AUTORELEASE(result);
         }

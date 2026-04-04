@@ -607,65 +607,69 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     }
 
     // Bound autoreleased temporaries produced while evaluating this iteration's body.
-    uint32_t iteration_pool_mark = autorelease_pool_mark();
+    bool continue_tco = false;
+    ID final_result = NULL;
+    WITH_AUTORELEASE_POOL({
+      // Evaluate function body with context (stack-only, no allocations)
+      EvalContext eval_ctx;
+      memset(&eval_ctx, 0, sizeof(eval_ctx));
+      eval_ctx.env = NULL;
+      eval_ctx.env_stack = call_env_stack; // Closure environment stack (vector of maps)
+      eval_ctx.frame = call_frame;         // Stack-based frame for parameters
+      eval_ctx.captured_frames = func->captured_frames;
+      eval_ctx.st = st;
+      eval_ctx.current_fn = fn;
+      eval_ctx.recur_args = recur_args;
+      eval_ctx.recur_arg_count = &recur_arg_count;
+      eval_ctx.recur_param_count = param_count; // Fixed for this function
+      // If an exception is thrown, longjmp will jump to the outer handler and this function
+      // will never return, so the loop will not continue
+      ID new_result = eval_body_with_params(func->body, &eval_ctx);
+      // Check if recur was triggered in THIS function
+      // With C stack, nested functions have their own stack frames, so recur_arg_count
+      // only changes if recur was used in THIS function
+      if (recur_arg_count >= 0) {
+        // Tail call detected: recur was used in this function
+        CLJ_ASSERT(recur_arg_count <= param_count);
+        // new_result may be borrowed/autoreleased (e.g. list literals).
+        // Do not release it here; recur ignores this value semantically.
 
-    // Evaluate function body with context (stack-only, no allocations)
-    EvalContext eval_ctx = {
-        .env = NULL,
-        .env_stack = call_env_stack, // Closure environment stack (vector of maps)
-        .frame = call_frame,         // Stack-based frame for parameters
-        .captured_frames = func->captured_frames,
-        .st = st,
-        .current_fn = fn,
-        .recur_args = recur_args,
-        .recur_arg_count = &recur_arg_count,
-        .recur_param_count = param_count // Fixed for this function
-    };
-    // If an exception is thrown, longjmp will jump to the outer handler and this function
-    // will never return, so the loop will not continue
-    ID new_result = eval_body_with_params(func->body, &eval_ctx);
-    // Check if recur was triggered in THIS function
-    // With C stack, nested functions have their own stack frames, so recur_arg_count
-    // only changes if recur was used in THIS function
-    if (recur_arg_count >= 0) {
-      // Tail call detected: recur was used in this function
-      CLJ_ASSERT(recur_arg_count <= param_count);
-      // new_result may be borrowed/autoreleased (e.g. list literals).
-      // Do not release it here; recur ignores this value semantically.
+        // Update argc and copy new arguments from recur_args
+        CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
+        current_argc = recur_arg_count;
+        for (int i = 0; i < current_argc; i++) {
+          // Ownership note:
+          // eval_handle_recur() RETAINs each evaluated recur arg and stores it in recur_args[].
+          // frame_set_bindings() below RETAINs again for the call frame. We must keep
+          // recur_args[] populated until the next loop iteration's cleanup releases the
+          // transfer retain; clearing here leaks one retain per recur step.
+          current_args[i] = recur_args[i];
+        }
+        used_recur_slots = current_argc;
 
-      // Update argc and copy new arguments from recur_args
-      CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
-      current_argc = recur_arg_count;
-      for (int i = 0; i < current_argc; i++) {
-        // Ownership note:
-        // eval_handle_recur() RETAINs each evaluated recur arg and stores it in recur_args[].
-        // frame_set_bindings() below RETAINs again for the call frame. We must keep
-        // recur_args[] populated until the next loop iteration's cleanup releases the
-        // transfer retain; clearing here leaks one retain per recur step.
-        current_args[i] = recur_args[i];
+        // Recreate call frame with new parameters (stack-allocated)
+        frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
+        continue_tco = true;
+      } else {
+        // No recur - this is the final result.
+        // Preserve the final heap object across pool drain, then re-attach it
+        // to the caller-visible pool.
+        if (new_result && !IS_IMMEDIATE(new_result)) {
+          RETAIN(new_result);
+        }
+        final_result = new_result;
       }
-      used_recur_slots = current_argc;
+    });
 
-      // Recreate call frame with new parameters (stack-allocated)
-      frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
-
-      autorelease_pool_drain_to_depth(iteration_pool_mark);
-
+    if (continue_tco) {
       // Continue loop - recur_arg_count will be reset at the start of the next iteration
       continue;
     }
 
-    // No recur - this is the final result.
-    // Preserve the final heap object across this iteration drain, then re-attach it
-    // to the caller-visible pool.
-    if (new_result && !IS_IMMEDIATE(new_result)) {
-      RETAIN(new_result);
-    }
-    autorelease_pool_drain_to_depth(iteration_pool_mark);
-    if (new_result && !IS_IMMEDIATE(new_result)) {
-      result = AUTORELEASE(new_result);
+    if (final_result && !IS_IMMEDIATE(final_result)) {
+      result = AUTORELEASE(final_result);
     } else {
-      result = new_result;
+      result = final_result;
     }
     break;
   } while (true);
