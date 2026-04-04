@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#if !defined(ESP_PLATFORM)
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
 // Global line editor instance
@@ -175,6 +179,16 @@ static inline bool editor_is_valid(const LineEditor *editor) {
     return editor != NULL;
 }
 
+static uint16_t editor_terminal_cols(void) {
+#if !defined(ESP_PLATFORM)
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 1) {
+        return (uint16_t)ws.ws_col;
+    }
+#endif
+    return 80;
+}
+
 static uint16_t buffer_row_count(const StringBuffer *buf) {
     if (!buf || !buf->str) return 1;
     uint16_t rows = 1;
@@ -196,6 +210,7 @@ static void editor_compute_row_col(const LineEditor *editor, uint16_t pos,
                                    uint16_t *row_out, uint16_t *col_out) {
     uint16_t row = 0;
     uint16_t col = (uint16_t)(editor ? editor->prompt_len + 1 : 1);
+    uint16_t cols = editor_terminal_cols();
     if (!editor || !editor->buffer.str) {
         if (row_out) *row_out = 0;
         if (col_out) *col_out = 1;
@@ -209,6 +224,10 @@ static void editor_compute_row_col(const LineEditor *editor, uint16_t pos,
             col = (uint16_t)(editor->prompt_len + 1);
         } else {
             col++;
+            if (col > cols) {
+                row++;
+                col = 1;
+            }
         }
     }
     if (row_out) *row_out = row;
@@ -220,6 +239,7 @@ static uint16_t editor_find_pos_for_row_col(const LineEditor *editor, uint16_t t
     const char *s = editor->buffer.str->data;
     uint16_t row = 0;
     uint16_t col = (uint16_t)(editor->prompt_len + 1);
+    uint16_t cols = editor_terminal_cols();
     uint16_t best_pos = 0;
 
     for (uint16_t pos = 0; pos <= editor->buffer.length; pos++) {
@@ -233,6 +253,10 @@ static uint16_t editor_find_pos_for_row_col(const LineEditor *editor, uint16_t t
             col = (uint16_t)(editor->prompt_len + 1);
         } else {
             col++;
+            if (col > cols) {
+                row++;
+                col = 1;
+            }
         }
     }
     return best_pos;
@@ -582,18 +606,36 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
             return 3;
         case 'C': // Right arrow
             if (editor->cursor_pos < editor->buffer.length) {
-                editor_move_cursor_or_redraw(editor,
-                                             (uint16_t)(editor->cursor_pos + 1),
-                                             ESC_RIGHT,
-                                             0);
+                uint16_t next_pos = (uint16_t)(editor->cursor_pos + 1);
+                if (!buffer_has_newline(&editor->buffer)) {
+                    uint16_t cur_row = 0, cur_col = 1, next_row = 0, next_col = 1;
+                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, &cur_col);
+                    editor_compute_row_col(editor, next_pos, &next_row, &next_col);
+                    if (next_row != cur_row) {
+                        editor_move_cursor_to_pos(editor, next_pos);
+                    } else {
+                        editor_move_cursor_or_redraw(editor, next_pos, ESC_RIGHT, 0);
+                    }
+                } else {
+                    editor_move_cursor_or_redraw(editor, next_pos, ESC_RIGHT, 0);
+                }
             }
             return 3;
         case 'D': // Left arrow
             if (editor->cursor_pos > 0) {
-                editor_move_cursor_or_redraw(editor,
-                                             (uint16_t)(editor->cursor_pos - 1),
-                                             ESC_LEFT,
-                                             0);
+                uint16_t prev_pos = (uint16_t)(editor->cursor_pos - 1);
+                if (!buffer_has_newline(&editor->buffer)) {
+                    uint16_t cur_row = 0, cur_col = 1, prev_row = 0, prev_col = 1;
+                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, &cur_col);
+                    editor_compute_row_col(editor, prev_pos, &prev_row, &prev_col);
+                    if (prev_row != cur_row) {
+                        editor_move_cursor_to_pos(editor, prev_pos);
+                    } else {
+                        editor_move_cursor_or_redraw(editor, prev_pos, ESC_LEFT, 0);
+                    }
+                } else {
+                    editor_move_cursor_or_redraw(editor, prev_pos, ESC_LEFT, 0);
+                }
             }
             return 3;
         case 'H': // Home
