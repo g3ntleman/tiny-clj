@@ -237,8 +237,42 @@ static inline void exception_handler_free(ExceptionHandler *h) {
     CLJ_FREE(h);
 }
 
+#if CLJ_HAS_CLEANUP_ATTRIBUTE
+typedef struct {
+    ExceptionHandler *handler;
+    bool finalized;
+} ExceptionTryScopeGuard;
+
+static inline void exception_try_scope_guard_cleanup(ExceptionTryScopeGuard *guard) {
+    if (!guard || guard->finalized || !guard->handler) {
+        return;
+    }
+    exception_handler_unlink(guard->handler);
+    exception_handler_free(guard->handler);
+#ifdef DEBUG
+    fputs("FATAL: return/goto/break inside TRY before CATCH/END_TRY\n", stderr);
+    abort();
+#endif
+}
+
+#define _TRY_SCOPE_GUARD_DECL(handler_expr) \
+    ExceptionTryScopeGuard _try_scope_guard __attribute__((cleanup(exception_try_scope_guard_cleanup))) = { \
+        .handler = (handler_expr), .finalized = false \
+    }
+
+#define _TRY_SCOPE_GUARD_FINALIZE() \
+    do { \
+        _try_scope_guard.finalized = true; \
+        _try_scope_guard.handler = NULL; \
+    } while (0)
+#else
+#define _TRY_SCOPE_GUARD_DECL(handler_expr) ((void)(handler_expr))
+#define _TRY_SCOPE_GUARD_FINALIZE() ((void)0)
+#endif
+
 #define TRY { \
     ExceptionHandler *_h = exception_handler_alloc_or_abort(); \
+    _TRY_SCOPE_GUARD_DECL(_h); \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
     _TRY_SAVE_CALLSTACK(_h); \
@@ -249,12 +283,14 @@ static inline void exception_handler_free(ExceptionHandler *h) {
         /* Success path: pop stack only */ \
         exception_handler_unlink(_h); \
         exception_handler_free(_h); \
+        _TRY_SCOPE_GUARD_FINALIZE(); \
     } else { \
         /* Exception path: restore Clojure call stack then get exception */ \
         _CATCH_RESTORE_CALLSTACK(_h); \
         CLJException *ex = _h->exception; \
         exception_handler_unlink(_h); \
         exception_handler_free(_h); \
+        _TRY_SCOPE_GUARD_FINALIZE(); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 
