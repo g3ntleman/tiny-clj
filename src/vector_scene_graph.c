@@ -906,6 +906,112 @@ bool vg_text_local_bounds(const VgTextData *txt, VgRectData *out_bounds) {
     return true;
 }
 
+typedef struct {
+    int8_t x1;
+    int8_t y1;
+    int8_t x2;
+    int8_t y2;
+} VgGlyphStrokeSeg;
+
+typedef struct {
+    uint8_t advance;
+    uint8_t segment_count;
+    const VgGlyphStrokeSeg *segments;
+} VgHvStrokeGlyph;
+
+#define VG_SEG(x1, y1, x2, y2) { (int8_t)(x1), (int8_t)(y1), (int8_t)(x2), (int8_t)(y2) }
+
+static const VgGlyphStrokeSeg g_hv_glyph_A[] = {VG_SEG(0, 8, 0, 2), VG_SEG(0, 2, 4, 0), VG_SEG(4, 0, 8, 2), VG_SEG(8, 2, 8, 8), VG_SEG(0, 5, 8, 5)};
+static const VgGlyphStrokeSeg g_hv_glyph_B[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 5, 0), VG_SEG(5, 0, 7, 2), VG_SEG(7, 2, 5, 4), VG_SEG(5, 4, 0, 4), VG_SEG(6, 4, 8, 6), VG_SEG(8, 6, 6, 8), VG_SEG(6, 8, 0, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_C[] = {VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_D[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 5, 0), VG_SEG(5, 0, 8, 3), VG_SEG(8, 3, 8, 5), VG_SEG(8, 5, 5, 8), VG_SEG(5, 8, 0, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_E[] = {VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8), VG_SEG(0, 4, 6, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_F[] = {VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8), VG_SEG(0, 4, 6, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_G[] = {VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 5), VG_SEG(8, 5, 4, 5)};
+static const VgGlyphStrokeSeg g_hv_glyph_H[] = {VG_SEG(0, 8, 0, 0), VG_SEG(8, 8, 8, 0), VG_SEG(0, 4, 8, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_I[] = {VG_SEG(0, 8, 8, 8), VG_SEG(0, 0, 8, 0), VG_SEG(4, 8, 4, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_J[] = {VG_SEG(8, 0, 8, 8), VG_SEG(8, 8, 4, 8), VG_SEG(4, 8, 0, 5)};
+static const VgGlyphStrokeSeg g_hv_glyph_K[] = {VG_SEG(0, 8, 0, 0), VG_SEG(8, 0, 0, 4), VG_SEG(0, 4, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_L[] = {VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_M[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 4, 3), VG_SEG(4, 3, 8, 0), VG_SEG(8, 0, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_N[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 8, 8), VG_SEG(8, 8, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_O[] = {VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 0), VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_P[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 4), VG_SEG(8, 4, 0, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_Q[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 5), VG_SEG(8, 5, 4, 8), VG_SEG(4, 8, 0, 8), VG_SEG(4, 5, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_R[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 4), VG_SEG(8, 4, 0, 4), VG_SEG(0, 4, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_S[] = {VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 4), VG_SEG(8, 4, 0, 4), VG_SEG(0, 4, 0, 0), VG_SEG(0, 0, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_T[] = {VG_SEG(0, 0, 8, 0), VG_SEG(4, 8, 4, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_U[] = {VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_V[] = {VG_SEG(0, 0, 4, 8), VG_SEG(4, 8, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_W[] = {VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 4, 5), VG_SEG(4, 5, 8, 8), VG_SEG(8, 8, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_X[] = {VG_SEG(0, 8, 8, 0), VG_SEG(0, 0, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_Y[] = {VG_SEG(0, 0, 4, 3), VG_SEG(4, 3, 8, 0), VG_SEG(4, 3, 4, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_Z[] = {VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 0, 8), VG_SEG(0, 8, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_0[] = {VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 0), VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_1[] = {VG_SEG(0, 8, 8, 8), VG_SEG(4, 8, 4, 0), VG_SEG(4, 0, 2, 2)};
+static const VgGlyphStrokeSeg g_hv_glyph_2[] = {VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 4), VG_SEG(8, 4, 0, 4), VG_SEG(0, 4, 0, 8), VG_SEG(0, 8, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_3[] = {VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 8), VG_SEG(8, 8, 0, 8), VG_SEG(0, 4, 8, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_4[] = {VG_SEG(0, 0, 0, 4), VG_SEG(0, 4, 8, 4), VG_SEG(8, 0, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_5[] = {VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 4), VG_SEG(8, 4, 0, 4), VG_SEG(0, 4, 0, 0), VG_SEG(0, 0, 8, 0)};
+static const VgGlyphStrokeSeg g_hv_glyph_6[] = {VG_SEG(0, 0, 0, 8), VG_SEG(0, 8, 8, 8), VG_SEG(8, 8, 8, 4), VG_SEG(8, 4, 0, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_7[] = {VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 8)};
+static const VgGlyphStrokeSeg g_hv_glyph_8[] = {VG_SEG(0, 8, 0, 0), VG_SEG(0, 0, 8, 0), VG_SEG(8, 0, 8, 8), VG_SEG(8, 8, 0, 8), VG_SEG(0, 4, 8, 4)};
+static const VgGlyphStrokeSeg g_hv_glyph_9[] = {VG_SEG(8, 8, 8, 0), VG_SEG(8, 0, 0, 0), VG_SEG(0, 0, 0, 4), VG_SEG(0, 4, 8, 4)};
+
+static const VgHvStrokeGlyph g_hv_letters[26] = {
+    {10u, (uint8_t)(sizeof(g_hv_glyph_A) / sizeof(g_hv_glyph_A[0])), g_hv_glyph_A},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_B) / sizeof(g_hv_glyph_B[0])), g_hv_glyph_B},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_C) / sizeof(g_hv_glyph_C[0])), g_hv_glyph_C},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_D) / sizeof(g_hv_glyph_D[0])), g_hv_glyph_D},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_E) / sizeof(g_hv_glyph_E[0])), g_hv_glyph_E},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_F) / sizeof(g_hv_glyph_F[0])), g_hv_glyph_F},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_G) / sizeof(g_hv_glyph_G[0])), g_hv_glyph_G},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_H) / sizeof(g_hv_glyph_H[0])), g_hv_glyph_H},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_I) / sizeof(g_hv_glyph_I[0])), g_hv_glyph_I},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_J) / sizeof(g_hv_glyph_J[0])), g_hv_glyph_J},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_K) / sizeof(g_hv_glyph_K[0])), g_hv_glyph_K},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_L) / sizeof(g_hv_glyph_L[0])), g_hv_glyph_L},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_M) / sizeof(g_hv_glyph_M[0])), g_hv_glyph_M},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_N) / sizeof(g_hv_glyph_N[0])), g_hv_glyph_N},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_O) / sizeof(g_hv_glyph_O[0])), g_hv_glyph_O},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_P) / sizeof(g_hv_glyph_P[0])), g_hv_glyph_P},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_Q) / sizeof(g_hv_glyph_Q[0])), g_hv_glyph_Q},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_R) / sizeof(g_hv_glyph_R[0])), g_hv_glyph_R},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_S) / sizeof(g_hv_glyph_S[0])), g_hv_glyph_S},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_T) / sizeof(g_hv_glyph_T[0])), g_hv_glyph_T},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_U) / sizeof(g_hv_glyph_U[0])), g_hv_glyph_U},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_V) / sizeof(g_hv_glyph_V[0])), g_hv_glyph_V},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_W) / sizeof(g_hv_glyph_W[0])), g_hv_glyph_W},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_X) / sizeof(g_hv_glyph_X[0])), g_hv_glyph_X},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_Y) / sizeof(g_hv_glyph_Y[0])), g_hv_glyph_Y},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_Z) / sizeof(g_hv_glyph_Z[0])), g_hv_glyph_Z},
+};
+
+static const VgHvStrokeGlyph g_hv_digits[10] = {
+    {10u, (uint8_t)(sizeof(g_hv_glyph_0) / sizeof(g_hv_glyph_0[0])), g_hv_glyph_0},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_1) / sizeof(g_hv_glyph_1[0])), g_hv_glyph_1},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_2) / sizeof(g_hv_glyph_2[0])), g_hv_glyph_2},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_3) / sizeof(g_hv_glyph_3[0])), g_hv_glyph_3},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_4) / sizeof(g_hv_glyph_4[0])), g_hv_glyph_4},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_5) / sizeof(g_hv_glyph_5[0])), g_hv_glyph_5},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_6) / sizeof(g_hv_glyph_6[0])), g_hv_glyph_6},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_7) / sizeof(g_hv_glyph_7[0])), g_hv_glyph_7},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_8) / sizeof(g_hv_glyph_8[0])), g_hv_glyph_8},
+    {10u, (uint8_t)(sizeof(g_hv_glyph_9) / sizeof(g_hv_glyph_9[0])), g_hv_glyph_9},
+};
+
+static const VgHvStrokeGlyph *vg_hv_stroke_glyph_lookup(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return &g_hv_letters[(size_t)(c - 'A')];
+    }
+    if (c >= '0' && c <= '9') {
+        return &g_hv_digits[(size_t)(c - '0')];
+    }
+    return NULL;
+}
+
+#undef VG_SEG
+
 static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransformFixed parent_t, VgStyle style) {
     if (!txt->text || txt->text[0] == '\0') {
         return;
@@ -1002,329 +1108,90 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
             } \
         } while (0)
 
-        switch (c) {
-            case ' ': adv = 5; break;
-            case '.':
-                /* Arcade 1x1 square at bottom of cell. */
-                GLCELLBOX(2, 7);
-                adv = 4;
-                break;
-            case ',':
-                /* Arcade small square + tail. */
-                GLCELLBOX(2, 7);
-                GL(3, 8, 2, 9);
-                adv = 4;
-                break;
-            case ':':
-                /* Vertically aligned compact squares (arcade-style punctuation). */
-                GLCELLBOX(2, 2);
-                GLCELLBOX(2, 5);
-                adv = 4;
-                break;
-            case ';':
-                /* Vertically aligned compact squares + tail. */
-                GLCELLBOX(2, 2);
-                GLCELLBOX(2, 5);
-                GL(1, 6, 0, 8);
-                adv = 4;
-                break;
-            case '!':
-                /* Arcade-style exclamation: center stem + bottom square. */
-                GL(2, 0, 2, 5);
-                GLCELLBOX(2, 7);
-                adv = 4;
-                break;
-            case '?':
-                /* Arcade-style question mark with detached square dot. */
-                GL(1, 1, 2, 1);
-                GL(2, 1, 3, 2);
-                GL(3, 2, 3, 3);
-                GL(3, 3, 2, 4);
-                GL(2, 4, 1, 4);
-                GL(2, 4, 2, 6);
-                GL(1, 1, 0, 2);
-                GL(0, 2, 0, 3);
-                GL(0, 3, 1, 4);
-                GLCELLBOX(2, 7);
-                adv = 6;
-                break;
-            case '%':
-                GL(0, 8, 5, 0);
-                GLCELLBOX(0, 1);
-                GLCELLBOX(4, 6);
-                adv = 7;
-                break;
-            case '(':
-                GLH(6, 0, 4, 2);
-                GLH(4, 2, 2, 6);
-                GLH(2, 6, 2, 12);
-                GLH(2, 12, 4, 16);
-                GLH(4, 16, 6, 18);
-                adv = 4;
-                break;
-            case ')':
-                GLH(2, 0, 4, 2);
-                GLH(4, 2, 6, 6);
-                GLH(6, 6, 6, 12);
-                GLH(6, 12, 4, 16);
-                GLH(4, 16, 2, 18);
-                adv = 4;
-                break;
-            case '-': GL(2, 5, 5, 5); break;
-            case '_': GL(0, 10, 5, 10); break;
-            case '/': GL(1, 9, 6, 0); break;
-            case '\\': GL(1, 0, 6, 9); break;
-
-            case 'A':
-                GL(0, 8, 0, 2);
-                GL(0, 2, 4, 0);
-                GL(4, 0, 8, 2);
-                GL(8, 2, 8, 8);
-                GL(0, 5, 8, 5);
-                adv = 10;
-                break;
-            case 'B':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 5, 0);
-                GL(5, 0, 7, 2);
-                GL(7, 2, 5, 4);
-                GL(5, 4, 0, 4);
-                GL(6, 4, 8, 6);
-                GL(8, 6, 6, 8);
-                GL(6, 8, 0, 8);
-                adv = 10;
-                break;
-            case 'C':
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                adv = 10;
-                break;
-            case 'D':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 5, 0);
-                GL(5, 0, 8, 3);
-                GL(8, 3, 8, 5);
-                GL(8, 5, 5, 8);
-                GL(5, 8, 0, 8);
-                adv = 10;
-                break;
-            case 'E':
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                GL(0, 4, 6, 4);
-                adv = 10;
-                break;
-            case 'F':
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                GL(0, 4, 6, 4);
-                adv = 10;
-                break;
-            case 'G':
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 5);
-                GL(8, 5, 4, 5);
-                adv = 10;
-                break;
-            case 'H':
-                GL(0, 8, 0, 0);
-                GL(8, 8, 8, 0);
-                GL(0, 4, 8, 4);
-                adv = 10;
-                break;
-            case 'I':
-                GL(0, 8, 8, 8);
-                GL(0, 0, 8, 0);
-                GL(4, 8, 4, 0);
-                adv = 10;
-                break;
-            case 'J':
-                /* Arcade: 88 80 40 03 (y-flipped into renderer coordinates). */
-                GL(8, 0, 8, 8);
-                GL(8, 8, 4, 8);
-                GL(4, 8, 0, 5);
-                adv = 10;
-                break;
-            case 'K':
-                GL(0, 8, 0, 0);
-                GL(8, 0, 0, 4);
-                GL(0, 4, 8, 8);
-                adv = 10;
-                break;
-            case 'L':
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                adv = 10;
-                break;
-            case 'M':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 4, 3);
-                GL(4, 3, 8, 0);
-                GL(8, 0, 8, 8);
-                adv = 10;
-                break;
-            case 'N':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 8, 8);
-                GL(8, 8, 8, 0);
-                adv = 10;
-                break;
-            case 'O':
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 0);
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                adv = 10;
-                break;
-            case 'P':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 4);
-                GL(8, 4, 0, 4);
-                adv = 10;
-                break;
-            case 'Q':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 5);
-                GL(8, 5, 4, 8);
-                GL(4, 8, 0, 8);
-                GL(4, 5, 8, 8);
-                adv = 10;
-                break;
-            case 'R':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 4);
-                GL(8, 4, 0, 4);
-                GL(0, 4, 8, 8);
-                adv = 10;
-                break;
-            case 'S':
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 4);
-                GL(8, 4, 0, 4);
-                GL(0, 4, 0, 0);
-                GL(0, 0, 8, 0);
-                adv = 10;
-                break;
-            case 'T':
-                GL(0, 0, 8, 0);
-                GL(4, 8, 4, 0);
-                adv = 10;
-                break;
-            case 'U':
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 0);
-                adv = 10;
-                break;
-            case 'V':
-                GL(0, 0, 4, 8);
-                GL(4, 8, 8, 0);
-                adv = 10;
-                break;
-            case 'W':
-                GL(0, 0, 0, 8);
-                GL(0, 8, 4, 5);
-                GL(4, 5, 8, 8);
-                GL(8, 8, 8, 0);
-                adv = 10;
-                break;
-            case 'X':
-                GL(0, 8, 8, 0);
-                GL(0, 0, 8, 8);
-                adv = 10;
-                break;
-            case 'Y':
-                GL(0, 0, 4, 3);
-                GL(4, 3, 8, 0);
-                GL(4, 3, 4, 8);
-                adv = 10;
-                break;
-            case 'Z':
-                GL(0, 0, 8, 0);
-                GL(8, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                adv = 10;
-                break;
-            case '0':
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 0);
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 8);
-                adv = 10;
-                break;
-            case '1':
-                GL(0, 8, 8, 8);
-                GL(4, 8, 4, 0);
-                GL(4, 0, 2, 2);
-                adv = 10;
-                break;
-            case '2':
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 4);
-                GL(8, 4, 0, 4);
-                GL(0, 4, 0, 8);
-                GL(0, 8, 8, 8);
-                adv = 10;
-                break;
-            case '3':
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 8);
-                GL(8, 8, 0, 8);
-                GL(0, 4, 8, 4);
-                adv = 10;
-                break;
-            case '4':
-                GL(0, 0, 0, 4);
-                GL(0, 4, 8, 4);
-                GL(8, 0, 8, 8);
-                adv = 10;
-                break;
-            case '5':
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 4);
-                GL(8, 4, 0, 4);
-                GL(0, 4, 0, 0);
-                GL(0, 0, 8, 0);
-                adv = 10;
-                break;
-            case '6':
-                GL(0, 0, 0, 8);
-                GL(0, 8, 8, 8);
-                GL(8, 8, 8, 4);
-                GL(8, 4, 0, 4);
-                adv = 10;
-                break;
-            case '7':
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 8);
-                adv = 10;
-                break;
-            case '8':
-                GL(0, 8, 0, 0);
-                GL(0, 0, 8, 0);
-                GL(8, 0, 8, 8);
-                GL(8, 8, 0, 8);
-                GL(0, 4, 8, 4);
-                adv = 10;
-                break;
-            case '9':
-                GL(8, 8, 8, 0);
-                GL(8, 0, 0, 0);
-                GL(0, 0, 0, 4);
-                GL(0, 4, 8, 4);
-                adv = 10;
-                break;
-
-            default:
-                GL(0, 0, 5, 0); GL(5, 0, 5, 10); GL(5, 10, 0, 10); GL(0, 10, 0, 0);
-                break;
+        const VgHvStrokeGlyph *hv_glyph = vg_hv_stroke_glyph_lookup(c);
+        if (hv_glyph) {
+            for (uint8_t seg_i = 0; seg_i < hv_glyph->segment_count; seg_i++) {
+                const VgGlyphStrokeSeg *seg = &hv_glyph->segments[seg_i];
+                GL(seg->x1, seg->y1, seg->x2, seg->y2);
+            }
+            adv = (int)hv_glyph->advance;
+        } else {
+            switch (c) {
+                case ' ': adv = 5; break;
+                case '.':
+                    /* Arcade 1x1 square at bottom of cell. */
+                    GLCELLBOX(2, 7);
+                    adv = 4;
+                    break;
+                case ',':
+                    /* Arcade small square + tail. */
+                    GLCELLBOX(2, 7);
+                    GL(3, 8, 2, 9);
+                    adv = 4;
+                    break;
+                case ':':
+                    /* Vertically aligned compact squares (arcade-style punctuation). */
+                    GLCELLBOX(2, 2);
+                    GLCELLBOX(2, 5);
+                    adv = 4;
+                    break;
+                case ';':
+                    /* Vertically aligned compact squares + tail. */
+                    GLCELLBOX(2, 2);
+                    GLCELLBOX(2, 5);
+                    GL(1, 6, 0, 8);
+                    adv = 4;
+                    break;
+                case '!':
+                    /* Arcade-style exclamation: center stem + bottom square. */
+                    GL(2, 0, 2, 5);
+                    GLCELLBOX(2, 7);
+                    adv = 4;
+                    break;
+                case '?':
+                    /* Arcade-style question mark with detached square dot. */
+                    GL(1, 1, 2, 1);
+                    GL(2, 1, 3, 2);
+                    GL(3, 2, 3, 3);
+                    GL(3, 3, 2, 4);
+                    GL(2, 4, 1, 4);
+                    GL(2, 4, 2, 6);
+                    GL(1, 1, 0, 2);
+                    GL(0, 2, 0, 3);
+                    GL(0, 3, 1, 4);
+                    GLCELLBOX(2, 7);
+                    adv = 6;
+                    break;
+                case '%':
+                    GL(0, 8, 5, 0);
+                    GLCELLBOX(0, 1);
+                    GLCELLBOX(4, 6);
+                    adv = 7;
+                    break;
+                case '(':
+                    GLH(6, 0, 4, 2);
+                    GLH(4, 2, 2, 6);
+                    GLH(2, 6, 2, 12);
+                    GLH(2, 12, 4, 16);
+                    GLH(4, 16, 6, 18);
+                    adv = 4;
+                    break;
+                case ')':
+                    GLH(2, 0, 4, 2);
+                    GLH(4, 2, 6, 6);
+                    GLH(6, 6, 6, 12);
+                    GLH(6, 12, 4, 16);
+                    GLH(4, 16, 2, 18);
+                    adv = 4;
+                    break;
+                case '-': GL(2, 5, 5, 5); break;
+                case '_': GL(0, 10, 5, 10); break;
+                case '/': GL(1, 9, 6, 0); break;
+                case '\\': GL(1, 0, 6, 9); break;
+                default:
+                    GL(0, 0, 5, 0); GL(5, 0, 5, 10); GL(5, 10, 0, 10); GL(0, 10, 0, 0);
+                    break;
+            }
         }
 
         if (is_hv_mono_alnum) {
@@ -1470,11 +1337,13 @@ void vg_render_node_fixed_clipped(const VgNode *node, VgTransformFixed world_t, 
     g_active_clip = prev_clip;
 }
 
-bool vg_render_slot_if_changed(const VgRenderSlot *slot,
-                               VgRenderSlotState *state,
-                               VgFrameBuffer *fb,
-                               uint32_t snapshot_id) {
-    if (!slot || !state || !fb) {
+bool vg_render_slot_compute_redraw(const VgRenderSlot *slot,
+                                   const VgRenderSlotState *state,
+                                   uint32_t snapshot_id,
+                                   bool force_render,
+                                   VgClipRect *out_slot_rect,
+                                   VgClipRect *out_dirty_rect) {
+    if (!slot || !state) {
         return false;
     }
     VgClipRect slot_rect = vg_clip_rect_expand(slot->clip_rect, slot->guard_px);
@@ -1485,14 +1354,34 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
                          state->last_guard_px != slot->guard_px ||
                          !vg_clip_rect_equal(state->last_clip_rect, slot->clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
-    if (!props_changed && !snapshot_changed) {
+    if (!props_changed && !snapshot_changed && !force_render) {
         return false;
     }
+    if (out_slot_rect) {
+        *out_slot_rect = slot_rect;
+    }
+    if (out_dirty_rect) {
+        VgClipRect dirty_rect = slot_rect;
+        if (state->initialized) {
+            VgClipRect prev_rect = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
+            dirty_rect = vg_clip_rect_union(prev_rect, slot_rect);
+        }
+        *out_dirty_rect = dirty_rect;
+    }
+    return true;
+}
 
-    VgClipRect dirty_rect = slot_rect;
-    if (state->initialized) {
-        VgClipRect prev_rect = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
-        dirty_rect = vg_clip_rect_union(prev_rect, slot_rect);
+bool vg_render_slot_if_changed(const VgRenderSlot *slot,
+                               VgRenderSlotState *state,
+                               VgFrameBuffer *fb,
+                               uint32_t snapshot_id) {
+    if (!slot || !state || !fb) {
+        return false;
+    }
+    VgClipRect slot_rect = {0};
+    VgClipRect dirty_rect = {0};
+    if (!vg_render_slot_compute_redraw(slot, state, snapshot_id, false, &slot_rect, &dirty_rect)) {
+        return false;
     }
     vg_framebuffer_clear_rect(fb, dirty_rect, slot->clear_color);
 

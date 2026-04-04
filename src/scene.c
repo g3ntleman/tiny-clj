@@ -1996,21 +1996,14 @@ bool vg_render_frame_slot_record_result_at_ms(ID frame_scene_record,
         return false;
     }
 
-    bool props_changed = !state->initialized ||
-                         state->last_visible != slot.visible ||
-                         state->last_opaque != slot.opaque ||
-                         state->last_clear_color != slot.clear_color ||
-                         state->last_guard_px != slot.guard_px ||
-                         !vg_clip_rect_equal(state->last_clip_rect, slot.clip_rect);
-    bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
-    if (!props_changed && !snapshot_changed && !force_render) {
+    VgClipRect dirty = {0};
+    if (!vg_render_slot_compute_redraw(&slot,
+                                       state,
+                                       snapshot_id,
+                                       force_render,
+                                       NULL,
+                                       &dirty)) {
         return false;
-    }
-
-    VgClipRect dirty = vg_clip_rect_expand(slot.clip_rect, slot.guard_px);
-    if (state->initialized) {
-        VgClipRect prev = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
-        dirty = vg_clip_rect_union(prev, dirty);
     }
     uint32_t dirty_pixels = clip_rect_area_on_framebuffer(dirty, fb);
     vg_framebuffer_clear_rect(fb, dirty, slot.clear_color);

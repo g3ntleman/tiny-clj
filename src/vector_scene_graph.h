@@ -209,6 +209,24 @@ typedef struct {
     uint8_t last_guard_px;
 } VgRenderSlotState;
 
+/**
+ * @brief Computes whether one slot requires a redraw and returns affected rects.
+ *
+ * @param slot Current slot configuration.
+ * @param state Previous slot render state.
+ * @param snapshot_id Snapshot generation used for change detection.
+ * @param force_render Forces redraw even when slot properties/snapshot are unchanged.
+ * @param out_slot_rect Receives expanded current slot rect when non-NULL.
+ * @param out_dirty_rect Receives union of previous/current expanded slot rect when non-NULL.
+ * @return true when the slot should be rendered this frame.
+ */
+bool vg_render_slot_compute_redraw(const VgRenderSlot *slot,
+                                   const VgRenderSlotState *state,
+                                   uint32_t snapshot_id,
+                                   bool force_render,
+                                   VgClipRect *out_slot_rect,
+                                   VgClipRect *out_dirty_rect);
+
 typedef enum {
     VG_PATCH_TRANSFORM = 1,
     VG_PATCH_TEXT = 2,
