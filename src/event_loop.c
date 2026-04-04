@@ -14,6 +14,7 @@
 #include "to_string.h"
 #include "value.h"
 #include "gpio.h"
+#include "sound_engine.h"
 #include "mini_format.h"
 #include <stdbool.h>
 #include <stdarg.h>
@@ -332,6 +333,19 @@ static inline void event_loop_ingress_lock_release(void) {
     atomic_flag_clear_explicit(&g_event_loop_ingress_lock, memory_order_release);
 }
 
+static inline ID event_loop_shared_retain(ID value) {
+    event_loop_ingress_lock_acquire();
+    ID retained = RETAIN(value);
+    event_loop_ingress_lock_release();
+    return retained;
+}
+
+static inline void event_loop_shared_release(ID value) {
+    event_loop_ingress_lock_acquire();
+    RELEASE(value);
+    event_loop_ingress_lock_release();
+}
+
 static inline bool event_loop_value_equals(ID a, ID b) {
     return (a == b) || (a && b && clj_equal(a, b));
 }
@@ -355,9 +369,11 @@ static void event_loop_ingress_slot_cleanup(EventLoopIngressSlot *slot) {
             slot->native_cleanup(slot->native_ctx);
         }
     } else {
+        event_loop_ingress_lock_acquire();
         RELEASE(slot->coalesce_key);
         RELEASE(slot->arg);
         RELEASE(slot->fn);
+        event_loop_ingress_lock_release();
     }
     memset(slot, 0, sizeof(*slot));
 }
@@ -512,7 +528,13 @@ static EventLoopIngressPushResult event_loop_ingress_push_with_coalescing(EventL
     }
 
     uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
-    g_event_loop_ingress_queue[tail] = entry;
+    EventLoopIngressSlot *queued = &g_event_loop_ingress_queue[tail];
+    *queued = entry;
+    if (queued->kind == EVENT_LOOP_INGRESS_KIND_CLOJURE) {
+        queued->fn = RETAIN(entry.fn);
+        queued->arg = RETAIN(entry.arg);
+        queued->coalesce_key = RETAIN(entry.coalesce_key);
+    }
     g_event_loop_ingress_count++;
     g_event_loop_ingress_accepted_count++;
     if ((uint32_t)g_event_loop_ingress_count > g_event_loop_ingress_high_watermark) {
@@ -980,7 +1002,7 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     if (!fn_zero_arity) return false;
     EventLoopIngressSlot slot = {
         .kind = EVENT_LOOP_INGRESS_KIND_CLOJURE,
-        .fn = RETAIN(fn_zero_arity),
+        .fn = fn_zero_arity,
         .arg = NULL,
         .coalesce_key = NULL,
         .has_arg = false,
@@ -990,11 +1012,7 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
     };
     EventLoopIngressPushResult push_result =
         event_loop_ingress_push_with_coalescing(slot);
-    if (push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED) {
-        return true;
-    }
-    RELEASE(slot.fn);
-    return false;
+    return push_result == EVENT_LOOP_INGRESS_PUSH_ENQUEUED;
 }
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
@@ -1010,9 +1028,9 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
                                      &coalesce_key);
     EventLoopIngressSlot slot = {
         .kind = EVENT_LOOP_INGRESS_KIND_CLOJURE,
-        .fn = RETAIN(fn_one_arity),
-        .arg = RETAIN(arg),
-        .coalesce_key = RETAIN(coalesce_key),
+        .fn = fn_one_arity,
+        .arg = arg,
+        .coalesce_key = coalesce_key,
         .has_arg = true,
         .coalesce_enabled = coalesce_enabled,
         .coalesce_keep_first = coalesce_keep_first,
@@ -1029,14 +1047,8 @@ bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
             event_loop_debug_log_coalesced_ingress_event(fn_one_arity, arg);
         }
 #endif
-        RELEASE(slot.coalesce_key);
-        RELEASE(slot.arg);
-        RELEASE(slot.fn);
         return true;
     }
-    RELEASE(slot.coalesce_key);
-    RELEASE(slot.arg);
-    RELEASE(slot.fn);
     return false;
 }
 
@@ -1191,6 +1203,12 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
 
+#if TINYCLJ_SOUND_ENABLED
+    if (sound_engine_tick_is_running()) {
+        sound_engine_debug_log_deltas_if_due(tick_start_ns);
+    }
+#endif
+
     // Promote ISR-raised drain requests into regular event-loop tasks.
     gpio_poll_drain();
 
@@ -1230,7 +1248,7 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
 
     // Get first task (FIFO)
     ID entry = vector_nth(task_vec->backing, 0);
-    RETAIN(entry);
+    event_loop_shared_retain(entry);
     vector_remove_at(task_vec, 0);
 
     CljObject *fn = NULL;
@@ -1244,9 +1262,9 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
             RELEASE(task_map);
             return false;
         }
-        RETAIN(fn);
+        event_loop_shared_retain(fn);
         RETAIN(result_chan);
-        RETAIN(arg);
+        event_loop_shared_retain(arg);
         RELEASE(task_map);
     } else {
         fn = entry;
@@ -1261,7 +1279,7 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
             result_channel_close(result_chan);
             RELEASE(result_chan);
         }
-        RELEASE(fn);
+        event_loop_shared_release(fn);
         return false;
     }
     
@@ -1275,11 +1293,22 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
          */
         eval_bind_task_stack_anchor(&eval_task_stack_anchor);
         WITH_AUTORELEASE_POOL({
+            ID call_result = NULL;
             if (has_arg) {
                 ID call_args[1] = {arg};
-                result = eval_function_call(fn, call_args, 1, env, st);
+                call_result = eval_function_call(fn, call_args, 1, env, st);
             } else {
-                result = eval_function_call(fn, NULL, 0, env, st);
+                call_result = eval_function_call(fn, NULL, 0, env, st);
+            }
+            if (call_result && !IS_IMMEDIATE(call_result)) {
+                /*
+                 * eval_function_call returns pool-managed heap refs. Keep one
+                 * explicit retain so the result survives this local pool drain
+                 * until post-call bookkeeping (result-channel put/logging).
+                 */
+                result = RETAIN(call_result);
+            } else {
+                result = call_result;
             }
         });
     } CATCH(ex) {
@@ -1309,8 +1338,8 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         event_loop_warn_if_slow_tick(elapsed_ns, tick_end_ns);
     }
     if (!IS_IMMEDIATE(result)) RELEASE(result);
-    RELEASE(arg);
-    RELEASE(fn);
+    event_loop_shared_release(arg);
+    event_loop_shared_release(fn);
     return true;
 }
 

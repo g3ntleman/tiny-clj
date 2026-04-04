@@ -559,6 +559,53 @@ TEST(test_event_loop_ingress_concurrent_producers_fifo_drain) {
     TEST_ASSERT_EQUAL_INT(expected, as_fixnum(marker));
 }
 
+TEST(test_event_loop_ingress_nil_return_concurrent_stress_regression) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-nil-stress-marker (atom 0)) "
+        "  (fn event-loop-ingress-nil-stress-task [] "
+        "    (swap! event-loop-ingress-nil-stress-marker (fn [x] (+ x 1))) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    enum { THREADS = 4, TASKS_PER_THREAD = 8, ROUNDS = 40 };
+    pthread_t threads[THREADS];
+    IngressProducerArgs args[THREADS];
+
+    int total_expected = 0;
+    for (int round = 0; round < ROUNDS; round++) {
+        for (int i = 0; i < THREADS; i++) {
+            args[i].fn = fn;
+            args[i].count = TASKS_PER_THREAD;
+            args[i].success_count = 0;
+            int rc = pthread_create(&threads[i], NULL, event_loop_ingress_producer_thread, &args[i]);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+        }
+        for (int i = 0; i < THREADS; i++) {
+            int rc = pthread_join(threads[i], NULL);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+            total_expected += args[i].success_count;
+        }
+
+        while (event_loop_has_pending_tasks()) {
+            TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                                     "run_next should execute queued ingress task");
+        }
+        TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(),
+                                  "ingress queue should be empty after each stress round");
+    }
+
+    ID marker = eval_string("@event-loop-ingress-nil-stress-marker", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(total_expected, as_fixnum(marker));
+}
+
 TEST(test_event_loop_native_ingress_callback_can_call_clojure_on_drain_thread) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
