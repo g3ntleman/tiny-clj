@@ -10,6 +10,7 @@
 
 #include "gpio.h"
 #include "sound_engine.h"
+#include "sound_tick_scheduler.h"
 #include "esp32-idf/main/vector_handheld_config.h"
 
 #include "esp_timer.h"
@@ -45,11 +46,15 @@ static PwmVoice g_pwm_voices[] = {
 
 static esp_timer_handle_t g_sound_timer = NULL;
 static _Atomic bool g_sound_tick_in_callback = false;
-static _Atomic uint32_t g_sound_scheduled_ticks = 0u;
+static _Atomic bool g_sound_timer_running = false;
 static _Atomic uint8_t g_sound_pwm_min_stable_duty = SOUND_PWM_MIN_STABLE_DUTY;
+static SoundTickScheduler g_sound_tick_scheduler;
 
 /* Keep callback work within one tick budget. */
 #define SOUND_TICK_BUDGET_US (VG_SOUND_TICK_MS * 1000)
+#define SOUND_TICK_PERIOD_US ((uint64_t)VG_SOUND_TICK_MS * 1000ull)
+#define SOUND_TICK_PERIOD_NS (SOUND_TICK_PERIOD_US * 1000ull)
+#define SOUND_TICK_MAX_CATCHUP_TICKS 2u
 
 static int sound_backend_active_voice_count(void) {
     int voice_count = g_sound_engine.voice_count;
@@ -98,22 +103,36 @@ static uint8_t sound_backend_volume_to_half_duty(uint8_t volume) {
     return (uint8_t)mapped;
 }
 
-static uint32_t sound_backend_normalize_due_ticks(uint32_t ticks) {
-    return (ticks == 0u) ? 1u : ticks;
+static inline uint64_t sound_backend_monotonic_now_ns(void) {
+    int64_t now_us = esp_timer_get_time();
+    if (now_us <= 0) {
+        return 0u;
+    }
+    return (uint64_t)now_us * 1000ull;
 }
 
-static uint64_t sound_backend_ticks_to_delay_us(uint32_t ticks) {
-    return (uint64_t)ticks * (uint64_t)VG_SOUND_TICK_MS * 1000ull;
-}
-
-static void sound_backend_schedule_next_timer(uint32_t ticks) {
-    if (!g_sound_timer || !sound_engine_tick_is_running()) {
+static void sound_backend_start_periodic_timer(void) {
+    if (!g_sound_timer) {
         return;
     }
-    uint32_t normalized_ticks = sound_backend_normalize_due_ticks(ticks);
-    atomic_store_explicit(&g_sound_scheduled_ticks, normalized_ticks, memory_order_release);
+    bool was_running = atomic_exchange_explicit(&g_sound_timer_running, true, memory_order_acq_rel);
+    if (was_running) {
+        return;
+    }
+    if (esp_timer_start_periodic(g_sound_timer, SOUND_TICK_PERIOD_US) != ESP_OK) {
+        atomic_store_explicit(&g_sound_timer_running, false, memory_order_release);
+    }
+}
+
+static void sound_backend_stop_periodic_timer(void) {
+    if (!g_sound_timer) {
+        return;
+    }
+    bool was_running = atomic_exchange_explicit(&g_sound_timer_running, false, memory_order_acq_rel);
+    if (!was_running) {
+        return;
+    }
     (void)esp_timer_stop(g_sound_timer);
-    (void)esp_timer_start_once(g_sound_timer, sound_backend_ticks_to_delay_us(normalized_ticks));
 }
 
 static void sound_timer_callback(void *arg) {
@@ -130,22 +149,37 @@ static void sound_timer_callback(void *arg) {
      * them later into event-loop ingress callbacks from the sound thread.
      */
     if (atomic_exchange_explicit(&g_sound_tick_in_callback, true, memory_order_acq_rel)) {
-        g_sound_engine.telemetry.tick_overrun_count++;
+        sound_telemetry_add_tick_overruns(1u);
+        return;
+    }
+
+    if (!sound_engine_tick_is_running()) {
+        atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
+        return;
+    }
+
+    uint64_t now_ns = sound_backend_monotonic_now_ns();
+    uint32_t skipped_ticks = 0u;
+    uint32_t due = sound_tick_scheduler_ticks_due(&g_sound_tick_scheduler, now_ns, &skipped_ticks);
+    if (skipped_ticks > 0u) {
+        sound_telemetry_add_tick_overruns(skipped_ticks);
+    }
+    if (due == 0u) {
+        atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
         return;
     }
 
     int64_t start_us = esp_timer_get_time();
-    uint32_t due = atomic_exchange_explicit(&g_sound_scheduled_ticks, 0u, memory_order_acq_rel);
     for (uint32_t i = 0; i < due; i++) {
+        if (!sound_engine_tick_is_running()) {
+            break;
+        }
         sound_engine_tick();
     }
     int64_t elapsed_us = esp_timer_get_time() - start_us;
-    int64_t budget_us = (int64_t)SOUND_TICK_BUDGET_US * (due > 0u ? (int64_t)due : 1ll);
+    int64_t budget_us = (int64_t)SOUND_TICK_BUDGET_US * (int64_t)due;
     if (elapsed_us > budget_us) {
-        g_sound_engine.telemetry.tick_overrun_count++;
-    }
-    if (sound_engine_tick_is_running()) {
-        sound_backend_schedule_next_timer(sound_engine_ticks_until_deadline());
+        sound_telemetry_add_tick_overruns(1u);
     }
     atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
 }
@@ -161,14 +195,15 @@ void sound_backend_init(int voice_count) {
         sound_backend_reset_voice_cache(&g_pwm_voices[i]);
     }
     atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
-    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
+    atomic_store_explicit(&g_sound_timer_running, false, memory_order_release);
+    sound_tick_scheduler_init(&g_sound_tick_scheduler, SOUND_TICK_PERIOD_NS, SOUND_TICK_MAX_CATCHUP_TICKS);
 }
 
 void sound_backend_shutdown(void) {
     sound_tick_stop();
     sound_backend_silence_pwm_voices();
     atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
-    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
+    atomic_store_explicit(&g_sound_timer_running, false, memory_order_release);
     if (g_sound_timer) {
         esp_timer_delete(g_sound_timer);
         g_sound_timer = NULL;
@@ -239,16 +274,16 @@ void sound_tick_start(void) {
         }
     }
 
-    (void)sound_engine_tick_mark_running();
-    sound_backend_schedule_next_timer(0u);
+    bool started_now = sound_engine_tick_mark_running();
+    if (started_now) {
+        sound_tick_scheduler_start(&g_sound_tick_scheduler, sound_backend_monotonic_now_ns());
+    }
+    sound_backend_start_periodic_timer();
 }
 
 void sound_tick_stop(void) {
     if (!sound_engine_tick_is_running()) return;
-    if (g_sound_timer) {
-        esp_timer_stop(g_sound_timer);
-    }
-    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
+    sound_backend_stop_periodic_timer();
     sound_engine_tick_mark_stopped();
     sound_backend_silence_pwm_voices();
 }
@@ -257,10 +292,7 @@ void sound_tick_sleep(void) {
     if (!sound_engine_tick_is_running()) {
         return;
     }
-    if (g_sound_timer) {
-        esp_timer_stop(g_sound_timer);
-    }
-    atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
+    sound_backend_stop_periodic_timer();
     sound_engine_tick_mark_stopped();
 }
 
@@ -269,7 +301,7 @@ void sound_tick_kick(void) {
         sound_tick_start();
         return;
     }
-    sound_backend_schedule_next_timer(0u);
+    sound_backend_start_periodic_timer();
 }
 
 bool sound_backend_host_get_status(SoundHostStatus *out) {

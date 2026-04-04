@@ -11,6 +11,7 @@
 #include "memory.h"
 #include "symbol.h"
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,6 +69,198 @@ static inline bool sound_interp_debug_enabled(void) {
     return false;
 }
 #endif
+
+/* ========================================================================= */
+/* Telemetry helpers                                                         */
+/* ========================================================================= */
+
+#ifdef DEBUG
+typedef struct {
+    atomic_uint_fast32_t cmd_drop_count;
+    atomic_uint_fast32_t tick_overrun_count;
+    atomic_uint_fast32_t queue_pending_count;
+    atomic_uint_fast32_t queue_high_watermark;
+} SoundDebugTelemetryAtomic;
+
+typedef struct {
+    uint64_t last_log_ns;
+    uint32_t prev_cmd_drop_count;
+    uint32_t prev_tick_overrun_count;
+    uint32_t prev_queue_high_watermark;
+    bool baseline_ready;
+} SoundDebugTelemetryLogState;
+
+static SoundDebugTelemetryAtomic g_sound_debug_telemetry;
+static SoundDebugTelemetryLogState g_sound_debug_log_state;
+
+static inline void sound_telemetry_debug_add_cmd_drop(uint32_t count) {
+    if (count == 0u) {
+        return;
+    }
+    (void)atomic_fetch_add_explicit(&g_sound_debug_telemetry.cmd_drop_count, count, memory_order_relaxed);
+}
+
+static inline void sound_telemetry_debug_add_tick_overrun(uint32_t count) {
+    if (count == 0u) {
+        return;
+    }
+    (void)atomic_fetch_add_explicit(&g_sound_debug_telemetry.tick_overrun_count, count, memory_order_relaxed);
+}
+
+static inline void sound_telemetry_debug_note_queue_pending(uint32_t pending) {
+    atomic_store_explicit(&g_sound_debug_telemetry.queue_pending_count, pending, memory_order_relaxed);
+    uint_fast32_t observed =
+        atomic_load_explicit(&g_sound_debug_telemetry.queue_high_watermark, memory_order_relaxed);
+    while ((uint32_t)observed < pending &&
+           !atomic_compare_exchange_weak_explicit(&g_sound_debug_telemetry.queue_high_watermark,
+                                                  &observed,
+                                                  (uint_fast32_t)pending,
+                                                  memory_order_relaxed,
+                                                  memory_order_relaxed)) {
+    }
+}
+
+static inline void sound_telemetry_debug_reset(void) {
+    atomic_store_explicit(&g_sound_debug_telemetry.cmd_drop_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_sound_debug_telemetry.tick_overrun_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_sound_debug_telemetry.queue_pending_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_sound_debug_telemetry.queue_high_watermark, 0u, memory_order_relaxed);
+    memset(&g_sound_debug_log_state, 0, sizeof(g_sound_debug_log_state));
+}
+#else
+static inline void sound_telemetry_debug_add_cmd_drop(uint32_t count) {
+    (void)count;
+}
+
+static inline void sound_telemetry_debug_add_tick_overrun(uint32_t count) {
+    (void)count;
+}
+
+static inline void sound_telemetry_debug_note_queue_pending(uint32_t pending) {
+    (void)pending;
+}
+
+static inline void sound_telemetry_debug_reset(void) {
+}
+#endif
+
+/**
+ * @brief Increment the command-queue drop counter.
+ *
+ * @param void
+ * @return void
+ */
+void sound_telemetry_note_cmd_drop(void) {
+    g_sound_engine.telemetry.cmd_drop_count++;
+    sound_telemetry_debug_add_cmd_drop(1u);
+}
+
+/**
+ * @brief Increment the SFX command drop counter.
+ *
+ * @param void
+ * @return void
+ */
+void sound_telemetry_note_sfx_drop(void) {
+    g_sound_engine.telemetry.sfx_drop_count++;
+}
+
+/**
+ * @brief Increment the finished-notification drop counter.
+ *
+ * @param void
+ * @return void
+ */
+void sound_telemetry_note_finished_drop(void) {
+    g_sound_engine.telemetry.finished_drop_count++;
+}
+
+/**
+ * @brief Add one or more tick-overrun events to telemetry counters.
+ *
+ * @param count Number of overruns to add; zero is ignored.
+ * @return void
+ */
+void sound_telemetry_add_tick_overruns(uint32_t count) {
+    if (count == 0u) {
+        return;
+    }
+    g_sound_engine.telemetry.tick_overrun_count += count;
+    sound_telemetry_debug_add_tick_overrun(count);
+}
+
+/**
+ * @brief Update queue high-watermark telemetry with current pending depth.
+ *
+ * @param pending Current pending command count.
+ * @return void
+ */
+void sound_telemetry_note_queue_pending(uint32_t pending) {
+    if (pending > g_sound_engine.telemetry.queue_high_watermark) {
+        g_sound_engine.telemetry.queue_high_watermark = pending;
+    }
+    sound_telemetry_debug_note_queue_pending(pending);
+}
+
+/**
+ * @brief Emit throttled DEBUG-only sound telemetry deltas from non-RT context.
+ *
+ * @param now_ns Current monotonic timestamp in nanoseconds.
+ * @return void
+ */
+void sound_engine_debug_log_deltas_if_due(uint64_t now_ns) {
+#ifdef DEBUG
+    static const uint64_t k_period_ns = 1000000000ull;
+    if (now_ns == 0u) {
+        return;
+    }
+
+    SoundDebugTelemetryLogState *log_state = &g_sound_debug_log_state;
+    uint32_t cmd_drop_count =
+        (uint32_t)atomic_load_explicit(&g_sound_debug_telemetry.cmd_drop_count, memory_order_relaxed);
+    uint32_t tick_overrun_count =
+        (uint32_t)atomic_load_explicit(&g_sound_debug_telemetry.tick_overrun_count, memory_order_relaxed);
+    uint32_t queue_pending_count =
+        (uint32_t)atomic_load_explicit(&g_sound_debug_telemetry.queue_pending_count, memory_order_relaxed);
+    uint32_t queue_high_watermark =
+        (uint32_t)atomic_load_explicit(&g_sound_debug_telemetry.queue_high_watermark, memory_order_relaxed);
+
+    if (!log_state->baseline_ready) {
+        log_state->baseline_ready = true;
+        log_state->last_log_ns = now_ns;
+        log_state->prev_cmd_drop_count = cmd_drop_count;
+        log_state->prev_tick_overrun_count = tick_overrun_count;
+        log_state->prev_queue_high_watermark = queue_high_watermark;
+        return;
+    }
+
+    if (now_ns <= log_state->last_log_ns || (now_ns - log_state->last_log_ns) < k_period_ns) {
+        return;
+    }
+
+    uint32_t cmd_drop_delta = cmd_drop_count - log_state->prev_cmd_drop_count;
+    uint32_t tick_overrun_delta = tick_overrun_count - log_state->prev_tick_overrun_count;
+    uint32_t queue_high_watermark_delta = queue_high_watermark - log_state->prev_queue_high_watermark;
+
+    if (tick_overrun_delta > 0u || cmd_drop_delta > 0u || queue_high_watermark_delta > 0u) {
+        fprintf(stderr,
+                "[sound-debug] delta=1s overruns=+%u cmd-drops=+%u queue-pending=%u queue-hwm=%u (+%u)\n",
+                (unsigned int)tick_overrun_delta,
+                (unsigned int)cmd_drop_delta,
+                (unsigned int)queue_pending_count,
+                (unsigned int)queue_high_watermark,
+                (unsigned int)queue_high_watermark_delta);
+        fflush(stderr);
+    }
+
+    log_state->last_log_ns = now_ns;
+    log_state->prev_cmd_drop_count = cmd_drop_count;
+    log_state->prev_tick_overrun_count = tick_overrun_count;
+    log_state->prev_queue_high_watermark = queue_high_watermark;
+#else
+    (void)now_ns;
+#endif
+}
 
 /* ========================================================================= */
 /* MIDI note -> frequency table (A4 = 440 Hz, equal temperament)             */
@@ -215,7 +408,7 @@ static void sound_finished_ingress_run(void *ctx, EvalState *st) {
 
     ID event_payload = sound_make_finished_event(finished_ctx->track_id);
     if (!event_payload) {
-        g_sound_engine.telemetry.finished_drop_count++;
+        sound_telemetry_note_finished_drop();
         return;
     }
 
@@ -641,7 +834,7 @@ static void sound_queue_finished_notification(ID track_id) {
         .track_id = track_id,
     };
     if (!lockfree_spsc_queue_push(&g_sound_engine.finished_queue.spsc, &notification)) {
-        g_sound_engine.telemetry.finished_drop_count++;
+        sound_telemetry_note_finished_drop();
     }
 }
 
@@ -657,7 +850,7 @@ static void sound_engine_enqueue_finished_notifications(void) {
         SoundFinishedIngressCtx *ctx =
             (SoundFinishedIngressCtx *)CLJ_MALLOC(sizeof(SoundFinishedIngressCtx));
         if (!ctx) {
-            g_sound_engine.telemetry.finished_drop_count++;
+            sound_telemetry_note_finished_drop();
             RELEASE(fn);
             continue;
         }
@@ -668,7 +861,7 @@ static void sound_engine_enqueue_finished_notifications(void) {
         if (!event_loop_enqueue_ingress_native(sound_finished_ingress_run,
                                                ctx,
                                                sound_finished_ingress_cleanup)) {
-            g_sound_engine.telemetry.finished_drop_count++;
+            sound_telemetry_note_finished_drop();
             sound_finished_ingress_cleanup(ctx);
         }
     }
@@ -687,6 +880,7 @@ static void notify_finished(ID track_id) {
 
 void sound_engine_init(int voice_count) {
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
+    sound_telemetry_debug_reset();
     g_sound_engine_callback_epoch = ++g_sound_engine_callback_epoch_counter;
     sound_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
@@ -733,6 +927,7 @@ void sound_engine_shutdown(void) {
 
     sound_backend_shutdown();
     memset(&g_sound_engine, 0, sizeof(g_sound_engine));
+    sound_telemetry_debug_reset();
 }
 
 bool sound_engine_play_music(ID track_id, ID byte_array_obj, int32_t repeat) {
@@ -751,7 +946,7 @@ bool sound_engine_play_music(ID track_id, ID byte_array_obj, int32_t repeat) {
     };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) {
-        g_sound_engine.telemetry.cmd_drop_count++;
+        sound_telemetry_note_cmd_drop();
         RELEASE(cmd.retained_obj);
     }
     if (ok) {
@@ -763,7 +958,7 @@ bool sound_engine_play_music(ID track_id, ID byte_array_obj, int32_t repeat) {
 bool sound_engine_stop_track(ID track_id) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_TRACK, .track_id = track_id };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
-    if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (!ok) sound_telemetry_note_cmd_drop();
     if (ok) {
         sound_tick_kick();
     }
@@ -773,7 +968,7 @@ bool sound_engine_stop_track(ID track_id) {
 void sound_engine_stop_music(void) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_MUSIC };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
-        g_sound_engine.telemetry.cmd_drop_count++;
+        sound_telemetry_note_cmd_drop();
     } else {
         sound_tick_kick();
     }
@@ -794,8 +989,8 @@ bool sound_engine_play_sfx(ID sfx_id, ID byte_array_obj) {
     };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) {
-        g_sound_engine.telemetry.cmd_drop_count++;
-        g_sound_engine.telemetry.sfx_drop_count++;
+        sound_telemetry_note_cmd_drop();
+        sound_telemetry_note_sfx_drop();
         RELEASE(cmd.retained_obj);
     }
     if (ok) {
@@ -807,7 +1002,7 @@ bool sound_engine_play_sfx(ID sfx_id, ID byte_array_obj) {
 void sound_engine_stop_all(void) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_ALL };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
-        g_sound_engine.telemetry.cmd_drop_count++;
+        sound_telemetry_note_cmd_drop();
     } else {
         sound_tick_kick();
     }
@@ -818,7 +1013,7 @@ bool sound_engine_set_track_volume(ID track_id, int32_t vol) {
     if (vol > 255) vol = 255;
     SoundCmd cmd = { .type = SOUND_CMD_SET_TRACK_VOL, .track_id = track_id, .int_param = vol };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
-    if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (!ok) sound_telemetry_note_cmd_drop();
     if (ok) {
         sound_tick_kick();
     }
@@ -830,7 +1025,7 @@ void sound_engine_set_music_volume(int32_t vol) {
     if (vol > 255) vol = 255;
     SoundCmd cmd = { .type = SOUND_CMD_SET_MUSIC_VOL, .int_param = vol };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
-        g_sound_engine.telemetry.cmd_drop_count++;
+        sound_telemetry_note_cmd_drop();
     } else {
         sound_tick_kick();
     }
@@ -1011,14 +1206,12 @@ static void tick_drain_commands(void) {
     }
 
     if (!lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc)) {
-        g_sound_engine.telemetry.tick_overrun_count++;
+        sound_telemetry_add_tick_overruns(1u);
     }
 
     /* Update watermark */
     uint32_t pending = lockfree_spsc_queue_count(&g_sound_engine.cmd_queue.spsc);
-    if (pending > g_sound_engine.telemetry.queue_high_watermark) {
-        g_sound_engine.telemetry.queue_high_watermark = pending;
-    }
+    sound_telemetry_note_queue_pending(pending);
 }
 
 /* Maximum events per tick to prevent infinite loops (e.g. NOTE+END with no delay in infinite loop) */
@@ -1096,7 +1289,7 @@ static void tick_process_due_stream(SoundStream *s) {
         }
     }
     if (s->active && s->current_tick >= s->next_event_tick && events_this_tick >= MAX_EVENTS_PER_TICK) {
-        g_sound_engine.telemetry.tick_overrun_count++;
+        sound_telemetry_add_tick_overruns(1u);
     }
 }
 
@@ -1123,7 +1316,7 @@ static void tick_process_due_sfx(void) {
         }
         if (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick &&
             events_this_tick >= MAX_EVENTS_PER_TICK) {
-            g_sound_engine.telemetry.tick_overrun_count++;
+            sound_telemetry_add_tick_overruns(1u);
         }
 
         if (!sfx->stream.active) {

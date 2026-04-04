@@ -844,9 +844,6 @@
     (= articulation :staccato) (max 20 (quot (normal-gate-ms dur gate-percent) 2))
     :else (normal-gate-ms dur gate-percent)))
 
-(def ^:private default-envelope
-  [1.0 1.0 0.2])
-
 (defn- compute-note-flags
   [articulation rearticulate note-val next-note-val]
   (let [legato? (and (= articulation :legato)
@@ -871,29 +868,34 @@
 
 (defn- compile-track-envelope-levels
   [opts]
-  (let [envelope (or (get opts :envelope) default-envelope)]
-    (when (not (vector? envelope))
-      (fail "compile-track :envelope must be a vector"))
-    (when (or (< (count envelope) 1) (> (count envelope) 8))
-      (fail "compile-track :envelope must contain 1..8 levels"))
-    (loop [i 0 out []]
-      (if (< i (count envelope))
-        (let [level (nth envelope i)]
-          (when (or (not (number? level)) (< level 0) (> level 1.0))
-            (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
-          (let [scaled-level (quot (+ (* level 256) 0.5) 1)
-                byte-level (if (> scaled-level 255) 255 scaled-level)]
-            (recur (+ i 1) (conj out byte-level))))
-        out))))
+  (let [envelope (get opts :envelope)]
+    (if (nil? envelope)
+      nil
+      (do
+        (when (not (vector? envelope))
+          (fail "compile-track :envelope must be a vector"))
+        (when (or (< (count envelope) 1) (> (count envelope) 8))
+          (fail "compile-track :envelope must contain 1..8 levels"))
+        (loop [i 0 out []]
+          (if (< i (count envelope))
+            (let [level (nth envelope i)]
+              (when (or (not (number? level)) (< level 0) (> level 1.0))
+                (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
+              (let [scaled-level (quot (+ (* level 256) 0.5) 1)
+                    byte-level (if (> scaled-level 255) 255 scaled-level)]
+                (recur (+ i 1) (conj out byte-level))))
+            out))))))
 
 (defn- compile-track-init-events!
   [acc channel-count volumes envelope-levels]
-  (let [acc1 (conj! acc (+ (* 6 16) 0))
-        acc2 (conj! acc1 (count envelope-levels))
-        acc3 (loop [i 0 out acc2]
-               (if (< i (count envelope-levels))
-                 (recur (+ i 1) (conj! out (nth envelope-levels i)))
-                 out))]
+  (let [acc3 (if (nil? envelope-levels)
+               acc
+               (let [acc1 (conj! acc (+ (* 6 16) 0))
+                     acc2 (conj! acc1 (count envelope-levels))]
+                 (loop [i 0 out acc2]
+                   (if (< i (count envelope-levels))
+                     (recur (+ i 1) (conj! out (nth envelope-levels i)))
+                     out))))]
     (loop [ch 0 out acc3]
       (if (< ch channel-count)
         (let [vol (or (nth volumes ch nil) 180)]
@@ -957,6 +959,7 @@
 (defn compile-track
   "Compiles generic or melody/backing steps into TRK1 bytes.
    Supports duration keywords, articulation, rearticulation and generic bend/noise options.
+   By default no TRK1 SET_ENV event is emitted; pass :envelope to opt in.
    Optional :inter-note-gap-ms (1..25) encodes a per-track non-legato gap hint for runtime."
   [steps opts]
   (let [cfg (normalize-playback-config steps opts "compile-track")

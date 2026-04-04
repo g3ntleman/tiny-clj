@@ -243,17 +243,12 @@ static inline void exception_handler_unlink(ExceptionHandler *h) {
     }
 }
 
-#if MEMORY_PROFILING_ENABLED
-// -----------------------------------------------------------------------------
-// Internal allocations for TRY/CATCH handler nodes (profiling-enabled builds)
-// -----------------------------------------------------------------------------
-//
-// We intentionally keep TRY/CATCH handler allocation "no-throw" (abort on OOM),
-// because failing to set up exception handling is a fatal condition.
-//
-
 static inline ExceptionHandler* exception_handler_alloc_or_abort(void) {
     ExceptionHandler *h = (ExceptionHandler*)CLJ_MALLOC(sizeof(ExceptionHandler));
+    if (!h) {
+        fputs("FATAL: CLJ_MALLOC failed in TRY block\n", stderr);
+        abort();
+    }
     return h;
 }
 
@@ -282,38 +277,6 @@ static inline void exception_handler_free(ExceptionHandler *h) {
         exception_handler_free(_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
-
-#else
-// -----------------------------------------------------------------------------
-// TRY/CATCH handler nodes (production builds: no profiling instrumentation)
-// -----------------------------------------------------------------------------
-
-#define TRY { \
-    ExceptionHandler *_h = (ExceptionHandler*)CLJ_MALLOC(sizeof(ExceptionHandler)); \
-    if (!_h) { \
-        fputs("FATAL: CLJ_MALLOC failed in TRY block\n", stderr); \
-        abort(); \
-    } \
-    _h->next = global_exception_stack.top; \
-    _h->exception = NULL; \
-    _TRY_SAVE_CALLSTACK(_h); \
-    global_exception_stack.top = _h; \
-    if (setjmp(_h->jump_state) == 0) {
-
-#define CATCH(ex) \
-        /* Success path: pop stack only */ \
-        exception_handler_unlink(_h); \
-        CLJ_FREE(_h); \
-    } else { \
-        /* Exception path: restore Clojure call stack then get exception */ \
-        _CATCH_RESTORE_CALLSTACK(_h); \
-        CLJException *ex = _h->exception; \
-        exception_handler_unlink(_h); \
-        CLJ_FREE(_h); \
-        if (ex) { \
-            /* Exception will be manually released in END_TRY */
-
-#endif // MEMORY_PROFILING_ENABLED
 
 #define END_TRY \
         } \

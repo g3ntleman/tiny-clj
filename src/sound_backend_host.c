@@ -641,7 +641,7 @@ static void *host_tick_thread_main(void *arg) {
         uint32_t skipped_ticks = 0u;
         uint32_t due = sound_tick_scheduler_ticks_due(&g_tick_scheduler, now_ns, &skipped_ticks);
         if (skipped_ticks > 0u) {
-            g_sound_engine.telemetry.tick_overrun_count += skipped_ticks;
+            sound_telemetry_add_tick_overruns(skipped_ticks);
         }
         if (due == 0u) {
             host_sound_sleep_until_ns(g_tick_scheduler.next_deadline_ns);

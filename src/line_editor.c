@@ -608,9 +608,9 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
             if (editor->cursor_pos < editor->buffer.length) {
                 uint16_t next_pos = (uint16_t)(editor->cursor_pos + 1);
                 if (!buffer_has_newline(&editor->buffer)) {
-                    uint16_t cur_row = 0, cur_col = 1, next_row = 0, next_col = 1;
-                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, &cur_col);
-                    editor_compute_row_col(editor, next_pos, &next_row, &next_col);
+                    uint16_t cur_row = 0, next_row = 0;
+                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, NULL);
+                    editor_compute_row_col(editor, next_pos, &next_row, NULL);
                     if (next_row != cur_row) {
                         editor_move_cursor_to_pos(editor, next_pos);
                     } else {
@@ -625,9 +625,9 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
             if (editor->cursor_pos > 0) {
                 uint16_t prev_pos = (uint16_t)(editor->cursor_pos - 1);
                 if (!buffer_has_newline(&editor->buffer)) {
-                    uint16_t cur_row = 0, cur_col = 1, prev_row = 0, prev_col = 1;
-                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, &cur_col);
-                    editor_compute_row_col(editor, prev_pos, &prev_row, &prev_col);
+                    uint16_t cur_row = 0, prev_row = 0;
+                    editor_compute_row_col(editor, editor->cursor_pos, &cur_row, NULL);
+                    editor_compute_row_col(editor, prev_pos, &prev_row, NULL);
                     if (prev_row != cur_row) {
                         editor_move_cursor_to_pos(editor, prev_pos);
                     } else {

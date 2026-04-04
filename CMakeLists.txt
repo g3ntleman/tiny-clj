@@ -589,6 +589,7 @@ add_executable(unit-tests
     subjective-c/tests/test_registry.c
     src/tests/tests_resolver.c
     src/tests/test_memory_macros.c
+    src/tests/test_mutex_macros.c
     src/tests/test_memory.c
     src/tests/test_closure_capture_minimal.c
     src/tests/test_parser.c

@@ -10,6 +10,8 @@
 
 #define FX_COLLISION_EVENT_HEADROOM_BYTES (4u * 1024u)
 #define FX_COLLISION_EVENT_MAX_PENDING 48u
+#define FX_COLLISION_STATE_CACHE_STACK_CAP 32u
+#define FX_COLLISION_STATE_CACHE_HEAP_CAP 96u
 typedef struct {
     ID callback_fn;
     ID rule_id;
@@ -292,18 +294,26 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
     bool any_triggered = false;
     uint8_t primary_slot = bundle->primary_slot_index;
     ID entity_index = fx_collision_scene_entity_map(bundle->primary_scene);
-    ViewerEntityStateCacheEntry stack_state_cache[32] = {0};
+    ViewerEntityStateCacheEntry stack_state_cache[FX_COLLISION_STATE_CACHE_STACK_CAP] = {0};
     ViewerEntityStateCacheEntry *state_cache = stack_state_cache;
-    uint32_t state_cache_capacity = rule_set->count > (UINT32_MAX / 2u)
+    uint32_t state_cache_capacity = FX_COLLISION_STATE_CACHE_STACK_CAP;
+    uint32_t desired_capacity = (rule_set->count > (UINT32_MAX / 2u))
         ? UINT32_MAX
         : (rule_set->count * 2u);
-    if (state_cache_capacity > 32u) {
-        state_cache = (ViewerEntityStateCacheEntry *)CLJ_HOST_MALLOC(sizeof(*state_cache) *
-                                                                     (size_t)state_cache_capacity);
-        if (!state_cache) {
-            return false;
+    if (desired_capacity > state_cache_capacity) {
+        uint32_t capped_capacity = desired_capacity;
+        if (capped_capacity > FX_COLLISION_STATE_CACHE_HEAP_CAP) {
+            capped_capacity = FX_COLLISION_STATE_CACHE_HEAP_CAP;
         }
-        memset(state_cache, 0, sizeof(*state_cache) * (size_t)state_cache_capacity);
+        if (capped_capacity > state_cache_capacity) {
+            ViewerEntityStateCacheEntry *heap_cache =
+                (ViewerEntityStateCacheEntry *)CLJ_HOST_MALLOC(sizeof(*heap_cache) * (size_t)capped_capacity);
+            if (heap_cache) {
+                memset(heap_cache, 0, sizeof(*heap_cache) * (size_t)capped_capacity);
+                state_cache = heap_cache;
+                state_cache_capacity = capped_capacity;
+            }
+        }
     }
     uint32_t state_cache_count = 0u;
     for (uint32_t i = 0; i < rule_set->count; i++) {
@@ -374,4 +384,3 @@ bool fx_collision_detect_step(ViewerSceneBundle *bundle,
     }
     return any_triggered;
 }
-

@@ -38,8 +38,21 @@
   [which]
   (str trk1-cache-root "/" (name which) ".meta.edn"))
 
+(declare write-trk1-cache!)
+
+(defn- recover-track-duration-ms
+  [song]
+  (try
+    (require 'tiny-fx.trk1)
+    ((var tiny-fx.trk1/track-duration-ms) (:steps song) (:opts song))
+    (catch Exception _ nil)
+    (finally
+      (try
+        (ns-unload 'tiny-fx.trk1)
+        (catch Exception _ false)))))
+
 (defn- read-trk1-cache
-  [which]
+  [which song]
   (let [track-bytes (try
                       (slurp-bytes (trk1-cache-path which))
                       (catch Exception _ nil))
@@ -47,10 +60,18 @@
                    (let [s (slurp (trk1-cache-meta-path which))]
                      (if s (read-string s) nil))
                    (catch Exception _ nil))
-        duration-ms (:duration-ms meta-map)]
-    (if (and track-bytes (integer? duration-ms))
-      {:track-bytes track-bytes
-       :duration-ms duration-ms}
+        cached-duration-ms (:duration-ms meta-map)]
+    (if track-bytes
+      (let [duration-ms (if (integer? cached-duration-ms)
+                          cached-duration-ms
+                          (recover-track-duration-ms song))
+            safe-duration-ms (if (integer? duration-ms) duration-ms 0)]
+        (if (and (not (integer? cached-duration-ms))
+                 (integer? duration-ms))
+          (write-trk1-cache! which track-bytes duration-ms)
+          nil)
+        {:track-bytes track-bytes
+         :duration-ms safe-duration-ms})
       nil)))
 
 (defn- write-trk1-cache!
@@ -86,7 +107,7 @@
 
 (defn- load-song-track
   [which song]
-  (or (read-trk1-cache which)
+  (or (read-trk1-cache which song)
       (let [prepared (compile-song-track song)
             track-bytes (:track-bytes prepared)
             duration-ms (:duration-ms prepared)]

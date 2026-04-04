@@ -216,6 +216,46 @@ TEST(test_sound_demos_play_demo_caches_trk1_and_unloads_compiler_namespace) {
                              "play-demo! should unload tiny-fx.trk1 even if it was already loaded");
 }
 
+TEST(test_sound_demos_play_demo_recovers_missing_cache_meta_without_recompile) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = eval_string(
+        "(do "
+        "  (require 'tiny-fx.sound-demos) "
+        "  (require 'tiny-clj.fs) "
+        "  ((var tiny-clj.fs/spit-bytes) \"/data/tiny-fx/sound-demos/rondo-alla-turca.trk1\" nil) "
+        "  ((var tiny-clj.fs/spit-bytes) \"/data/tiny-fx/sound-demos/rondo-alla-turca.meta.edn\" nil) "
+        "  (let [first-total (:total (heap (tiny-fx.sound-demos/play-demo! :rondo-alla-turca))) "
+        "        _ ((var tiny-clj.fs/spit-bytes) \"/data/tiny-fx/sound-demos/rondo-alla-turca.meta.edn\" nil) "
+        "        second-ret (heap (tiny-fx.sound-demos/play-demo! :rondo-alla-turca)) "
+        "        second-total (:total second-ret) "
+        "        repaired-meta (slurp \"/data/tiny-fx/sound-demos/rondo-alla-turca.meta.edn\") "
+        "        repaired-map (if repaired-meta (read-string repaired-meta) nil)] "
+        "    {:first first-total "
+        "     :second second-total "
+        "     :duration-ms (:duration-ms repaired-map)}))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(is_map(result), "result should be a map");
+
+    ID first_obj = map_get(result, intern_symbol_global(":first"));
+    ID second_obj = map_get(result, intern_symbol_global(":second"));
+    ID duration_obj = map_get(result, intern_symbol_global(":duration-ms"));
+
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(first_obj), "first heap delta should be a fixnum");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(second_obj), "second heap delta should be a fixnum");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(duration_obj), "repaired duration-ms should be a fixnum");
+
+    int first_total = as_fixnum(first_obj);
+    int second_total = as_fixnum(second_obj);
+    int repaired_duration = as_fixnum(duration_obj);
+
+    TEST_ASSERT_TRUE_MESSAGE(first_total > 0, "first compile heap delta should be positive");
+    TEST_ASSERT_TRUE_MESSAGE(second_total <= (first_total / 3),
+                             "second play with missing meta should hit cache/migration path, not recompile");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4500, repaired_duration, "cache metadata repair should persist duration-ms");
+}
+
 TEST(test_assets_edn_sound_demos_loader_contract) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     

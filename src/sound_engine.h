@@ -236,6 +236,16 @@ typedef struct {
 extern SoundEngine g_sound_engine;
 
 /* ========================================================================= */
+/* Telemetry helpers (thread-safe writers for cross-thread counters)         */
+/* ========================================================================= */
+
+void sound_telemetry_note_cmd_drop(void);
+void sound_telemetry_note_sfx_drop(void);
+void sound_telemetry_note_finished_drop(void);
+void sound_telemetry_add_tick_overruns(uint32_t count);
+void sound_telemetry_note_queue_pending(uint32_t pending);
+
+/* ========================================================================= */
 /* Public API (called from Clojure native functions)                         */
 /* ========================================================================= */
 
@@ -316,6 +326,10 @@ bool sound_backend_supports_min_stable_duty(void);
 bool sound_engine_tick_mark_running(void);
 void sound_engine_tick_mark_stopped(void);
 bool sound_engine_tick_is_running(void);
+
+/* DEBUG-only runloop diagnostics.
+ * Called from non-RT context (event-loop thread). No-op in non-DEBUG builds. */
+void sound_engine_debug_log_deltas_if_due(uint64_t now_ns);
 
 void sound_tick_start(void);
 void sound_tick_stop(void);

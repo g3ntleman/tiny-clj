@@ -447,6 +447,27 @@ static void *event_loop_ingress_producer_thread(void *arg) {
     return NULL;
 }
 
+static int event_loop_ingress_run_producer_round(ID fn,
+                                                 int producer_threads,
+                                                 int tasks_per_thread,
+                                                 pthread_t *threads,
+                                                 IngressProducerArgs *args) {
+    int total_success = 0;
+    for (int i = 0; i < producer_threads; i++) {
+        args[i].fn = fn;
+        args[i].count = tasks_per_thread;
+        args[i].success_count = 0;
+        int rc = pthread_create(&threads[i], NULL, event_loop_ingress_producer_thread, &args[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
+    }
+    for (int i = 0; i < producer_threads; i++) {
+        int rc = pthread_join(threads[i], NULL);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
+        total_success += args[i].success_count;
+    }
+    return total_success;
+}
+
 typedef struct {
     const char *expr;
     pthread_t producer_thread;
@@ -525,22 +546,8 @@ TEST(test_event_loop_ingress_concurrent_producers_fifo_drain) {
     pthread_t threads[THREADS];
     IngressProducerArgs args[THREADS];
 
-    for (int i = 0; i < THREADS; i++) {
-        args[i].fn = fn;
-        args[i].count = TASKS_PER_THREAD;
-        args[i].success_count = 0;
-        int rc = pthread_create(&threads[i], NULL, event_loop_ingress_producer_thread, &args[i]);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
-    }
-    for (int i = 0; i < THREADS; i++) {
-        int rc = pthread_join(threads[i], NULL);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
-    }
-
-    int expected = 0;
-    for (int i = 0; i < THREADS; i++) {
-        expected += args[i].success_count;
-    }
+    int expected =
+        event_loop_ingress_run_producer_round(fn, THREADS, TASKS_PER_THREAD, threads, args);
     TEST_ASSERT_EQUAL_INT_MESSAGE(THREADS * TASKS_PER_THREAD, expected,
                                   "all producer enqueues should succeed within ingress capacity");
 
@@ -579,18 +586,8 @@ TEST(test_event_loop_ingress_nil_return_concurrent_stress_regression) {
 
     int total_expected = 0;
     for (int round = 0; round < ROUNDS; round++) {
-        for (int i = 0; i < THREADS; i++) {
-            args[i].fn = fn;
-            args[i].count = TASKS_PER_THREAD;
-            args[i].success_count = 0;
-            int rc = pthread_create(&threads[i], NULL, event_loop_ingress_producer_thread, &args[i]);
-            TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_create failed");
-        }
-        for (int i = 0; i < THREADS; i++) {
-            int rc = pthread_join(threads[i], NULL);
-            TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, "pthread_join failed");
-            total_expected += args[i].success_count;
-        }
+        total_expected +=
+            event_loop_ingress_run_producer_round(fn, THREADS, TASKS_PER_THREAD, threads, args);
 
         while (event_loop_has_pending_tasks()) {
             TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),

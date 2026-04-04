@@ -94,6 +94,60 @@ void exception_print_native_backtrace(void);
 #endif
 #endif
 
+#ifndef CLJ_JOIN2
+#define CLJ_JOIN2(a, b) a##b
+#endif
+
+#ifndef CLJ_JOIN
+#define CLJ_JOIN(a, b) CLJ_JOIN2(a, b)
+#endif
+
+#if defined(__clang__)
+#if __has_attribute(cleanup)
+#define CLJ_HAS_CLEANUP_ATTRIBUTE 1
+#else
+#define CLJ_HAS_CLEANUP_ATTRIBUTE 0
+#endif
+#elif defined(__GNUC__)
+#define CLJ_HAS_CLEANUP_ATTRIBUTE 1
+#else
+#define CLJ_HAS_CLEANUP_ATTRIBUTE 0
+#endif
+
+typedef void (*CljScopeReleaseFn)(void);
+
+typedef struct {
+    CljScopeReleaseFn release_fn;
+    bool armed;
+    bool once;
+} CljScopeGuard;
+
+static inline void clj_scope_guard_cleanup(CljScopeGuard *guard) {
+    if (!guard || !guard->armed || !guard->release_fn) {
+        return;
+    }
+    guard->release_fn();
+    guard->armed = false;
+}
+
+/*
+ * WITH_MUTEX(lock) expects lock_acquire()/lock_release() functions.
+ * Example: WITH_MUTEX(event_loop_ingress_lock) { ... }
+ */
+#if CLJ_HAS_CLEANUP_ATTRIBUTE
+#define WITH_MUTEX(lock) \
+    for (CljScopeGuard CLJ_JOIN(_clj_scope_guard_, __LINE__) __attribute__((cleanup(clj_scope_guard_cleanup))) = { \
+             .release_fn = lock##_release, .armed = false, .once = true }; \
+         CLJ_JOIN(_clj_scope_guard_, __LINE__).once && \
+             ((lock##_acquire()), CLJ_JOIN(_clj_scope_guard_, __LINE__).armed = true, true); \
+         CLJ_JOIN(_clj_scope_guard_, __LINE__).once = false)
+#else
+#define WITH_MUTEX(lock) \
+    for (bool CLJ_JOIN(_clj_mutex_once_, __LINE__) = ((lock##_acquire()), true); \
+         CLJ_JOIN(_clj_mutex_once_, __LINE__); \
+         (lock##_release()), CLJ_JOIN(_clj_mutex_once_, __LINE__) = false)
+#endif
+
 /**
  * INLINE - Conditional inlining macro for profiling support
  *

@@ -7,6 +7,12 @@
 #include "tests_common.h"
 #include "ast.h"
 
+static int g_eval_loop_cooperate_hook_calls = 0;
+
+void tinyclj_eval_loop_cooperate(void) {
+    g_eval_loop_cooperate_hook_calls++;
+}
+
 // ============================================================================
 // TEST: Special Form Dispatch Functionality
 // ============================================================================
@@ -221,6 +227,25 @@ TEST(test_special_case_grouped_constants_list) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_keyword(result));
     TEST_ASSERT_EQUAL_STRING(":hit", as_symbol(result)->cname);
+}
+
+TEST(test_special_loop_invokes_cooperate_hook_for_long_recur) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    g_eval_loop_cooperate_hook_calls = 0;
+
+    ID result = eval_string(
+        "(loop [i 0 acc 0] "
+        "  (if (< i 5000) "
+        "    (recur (+ i 1) (+ acc i)) "
+        "    acc))",
+        g_test_eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "loop result should be a fixnum");
+    TEST_ASSERT_EQUAL_INT(12497500, as_fixnum(result));
+    TEST_ASSERT_TRUE_MESSAGE(g_eval_loop_cooperate_hook_calls > 0,
+                             "long-running loop/recur should invoke cooperate hook");
 }
 
 TEST(test_special_case_test_constants_are_not_evaluated) {

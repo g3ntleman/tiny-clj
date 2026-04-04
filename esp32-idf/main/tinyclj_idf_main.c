@@ -299,6 +299,12 @@ void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
     tinyclj_esp32_sleep_ms(timeout_ms - elapsed_ms);
 }
 
+void tinyclj_eval_loop_cooperate(void) {
+    // One RTOS tick (not ms) so the idle task can run and task-WDT stays happy
+    // during heavy Clojure compile/eval loops.
+    vTaskDelay(1);
+}
+
 static size_t g_uart_bytes_read = 0;
 static size_t g_uart_bytes_written = 0;
 

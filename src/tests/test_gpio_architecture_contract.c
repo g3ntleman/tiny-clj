@@ -341,19 +341,21 @@ TEST(test_gpio_architecture_sound_backend_uses_shared_pwm_backend) {
     CLJ_FREE(src);
 }
 
-TEST(test_gpio_architecture_sound_backend_normalizes_zero_tick_rearm) {
+TEST(test_gpio_architecture_sound_backend_uses_periodic_scheduler_without_one_shot_rearm_churn) {
     size_t len = 0;
     char *src = read_sound_backend_esp32_source(&len);
     TEST_ASSERT_TRUE(len > 0);
 
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_backend_normalize_due_ticks"),
-                                 "sound backend should normalize zero-tick rearm requests");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "uint32_t normalized_ticks = sound_backend_normalize_due_ticks(ticks);"),
-                                 "sound backend should normalize ticks before scheduling esp_timer");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_backend_ticks_to_delay_us(normalized_ticks)"),
-                                 "sound backend should arm esp_timer using normalized tick delays");
-    TEST_ASSERT_NULL_MESSAGE(strstr(src, "if (ticks == 0u) {\n        return 1u;\n    }\n    return (uint64_t)ticks *"),
-                             "sound backend should not map zero ticks to a 1us spin delay");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"sound_tick_scheduler.h\""),
+                                 "sound backend should share deadline/catch-up logic via the scheduler helper");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_tick_scheduler_start"),
+                                 "sound backend should (re)arm scheduler deadlines on tick start");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "sound_tick_scheduler_ticks_due"),
+                                 "sound backend callback should derive due ticks from scheduler state");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "esp_timer_start_periodic"),
+                                 "sound backend should keep a periodic esp_timer while tick thread is running");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "esp_timer_start_once"),
+                             "sound backend should avoid one-shot start/stop rearm churn per callback");
 
     CLJ_FREE(src);
 }

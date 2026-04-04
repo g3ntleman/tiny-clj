@@ -1,5 +1,6 @@
 #include "vector_scene_graph.h"
 #include "gfx.h"
+#include "memory.h"
 #include "value.h"
 
 #include <ctype.h>
@@ -8,6 +9,7 @@
 #include <string.h>
 
 _Static_assert(VG_SCALE_ONE == CLJ_FIXED_SCALE, "VG_SCALE_ONE must match CLJ_FIXED_SCALE");
+#define VG_DIRTY_PLAN_STACK_CAP 64u
 
 static GfxClip g_active_clip = {false, 0, 0, 0, 0};
 
@@ -200,20 +202,46 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
         return 0u;
     }
 
-    bool assigned[leaf_count];
-    for (size_t i = 0; i < leaf_count; i++) {
-        assigned[i] = false;
+    uint8_t assigned_stack[VG_DIRTY_PLAN_STACK_CAP];
+    size_t cluster_members_stack[VG_DIRTY_PLAN_STACK_CAP];
+    uint8_t *assigned = assigned_stack;
+    size_t *cluster_members = cluster_members_stack;
+    bool using_heap_scratch = false;
+
+    if (leaf_count > VG_DIRTY_PLAN_STACK_CAP) {
+        size_t assigned_bytes = leaf_count * sizeof(*assigned);
+        if (leaf_count > (SIZE_MAX / sizeof(*cluster_members))) {
+            out_rects[0] = merged;
+            return 1u;
+        }
+        size_t cluster_bytes = leaf_count * sizeof(*cluster_members);
+        if (assigned_bytes > (SIZE_MAX - cluster_bytes)) {
+            out_rects[0] = merged;
+            return 1u;
+        }
+        size_t scratch_bytes = assigned_bytes + cluster_bytes;
+        uint8_t *scratch = (uint8_t *)CLJ_HOST_MALLOC(scratch_bytes);
+        if (!scratch) {
+            out_rects[0] = merged;
+            return 1u;
+        }
+        memset(scratch, 0, scratch_bytes);
+        assigned = scratch;
+        cluster_members = (size_t *)(void *)(scratch + assigned_bytes);
+        using_heap_scratch = true;
+    } else {
+        memset(assigned_stack, 0, leaf_count * sizeof(*assigned_stack));
     }
 
     size_t out_i = 0u;
+    size_t plan_result = 0u;
     for (size_t i = 0; i < leaf_count; i++) {
         if (assigned[i] || vg_clip_rect_is_empty(dirty_leaves[i])) {
             continue;
         }
 
-        size_t cluster_members[leaf_count];
         size_t cluster_count = 0u;
-        assigned[i] = true;
+        assigned[i] = 1u;
         cluster_members[cluster_count++] = i;
 
         /*
@@ -227,7 +255,7 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
                     continue;
                 }
                 if (clip_rects_overlap(dirty_leaves[member_index], dirty_leaves[j])) {
-                    assigned[j] = true;
+                    assigned[j] = 1u;
                     cluster_members[cluster_count++] = j;
                 }
             }
@@ -248,7 +276,8 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
         if (cluster_union_fits_budget && cluster_union_is_worth_it) {
             if (out_i >= out_capacity) {
                 out_rects[0] = merged;
-                return 1u;
+                plan_result = 1u;
+                goto cleanup;
             }
             out_rects[out_i++] = cluster_union;
             continue;
@@ -265,7 +294,8 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
         if (cluster_leaves_fit) {
             if (out_i + cluster_count > out_capacity) {
                 out_rects[0] = merged;
-                return 1u;
+                plan_result = 1u;
+                goto cleanup;
             }
             for (size_t m = 0; m < cluster_count; m++) {
                 out_rects[out_i++] = dirty_leaves[cluster_members[m]];
@@ -279,7 +309,8 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
             if (area <= pixel_budget) {
                 if (out_i >= out_capacity) {
                     out_rects[0] = merged;
-                    return 1u;
+                    plan_result = 1u;
+                    goto cleanup;
                 }
                 out_rects[out_i++] = leaf;
                 continue;
@@ -290,12 +321,19 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
                                       out_capacity,
                                       &out_i)) {
                 out_rects[0] = merged;
-                return 1u;
+                plan_result = 1u;
+                goto cleanup;
             }
         }
     }
 
-    return out_i;
+    plan_result = out_i;
+
+cleanup:
+    if (using_heap_scratch) {
+        CLJ_HOST_FREE(assigned);
+    }
+    return plan_result;
 }
 
 #define VG_FP_SHIFT CLJ_FIXED_FRAC_BITS
@@ -1061,7 +1099,6 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
         // Digits and uppercase letters are always rendered with the HV glyph set.
         bool is_hv_mono_alnum = ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
         const int hv_mono_lsb = 1;
-        const int hv_mono_advance = 10;
         int x0 = pen_x + (is_hv_mono_alnum ? hv_mono_lsb : 0);
         int adv = 8;
         bool is_arcade_ascii_symbol =
@@ -1194,9 +1231,6 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
             }
         }
 
-        if (is_hv_mono_alnum) {
-            adv = hv_mono_advance;
-        }
         pen_x += adv;
         if (pen_x < 0) pen_x = 0;
 #undef GL
@@ -1206,58 +1240,19 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
     }
 }
 
-static void render_node(const VgNode *node, VgTransformFixed parent_t, VgFrameBuffer *fb) {
-    if (!node || !fb) {
-        return;
+static bool resolve_node_style(const VgNode *node, VgStyle *out_style) {
+    if (!node || !out_style) {
+        return false;
     }
-    VgStyle style = node->style;
-    if (style.stroke_width == 0) {
-        style.stroke_width = 1;
+    *out_style = node->style;
+    if (out_style->stroke_width == 0) {
+        out_style->stroke_width = 1;
     }
-    if (!style.visible) {
-        return;
-    }
-    VgTransformFixed node_t = parent_t;
-    if (node->has_transform) {
-        VgTransformFixed local_t = vg_transform_fixed_from_transform(node->transform);
-        node_t = vg_transform_fixed_compose(parent_t, local_t);
-    }
-
-    switch (node->type) {
-        case VG_NODE_GROUP:
-            for (size_t i = 0; i < node->data.group.child_count; i++) {
-                render_node(node->data.group.children[i], node_t, fb);
-            }
-            break;
-        case VG_NODE_LINE:
-            draw_line_node(fb, &node->data.line, node_t, style);
-            break;
-        case VG_NODE_POLYLINE:
-            draw_polyline_node(fb, &node->data.polyline, node_t, style);
-            break;
-        case VG_NODE_RECT:
-            draw_rect_node(fb, &node->data.rect, node_t, style);
-            break;
-        case VG_NODE_TRI:
-            draw_tri_node(fb, &node->data.tri, node_t, style);
-            break;
-        case VG_NODE_VTEXT:
-            draw_text_node(fb, &node->data.text, node_t, style);
-            break;
-        default:
-            break;
-    }
+    return out_style->visible;
 }
 
-static void render_node_with_world_transform(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+static void render_leaf_node(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb, VgStyle style) {
     if (!node || !fb) {
-        return;
-    }
-    VgStyle style = node->style;
-    if (style.stroke_width == 0) {
-        style.stroke_width = 1;
-    }
-    if (!style.visible) {
         return;
     }
     switch (node->type) {
@@ -1279,6 +1274,39 @@ static void render_node_with_world_transform(const VgNode *node, VgTransformFixe
         default:
             break;
     }
+}
+
+static void render_node(const VgNode *node, VgTransformFixed parent_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    VgStyle style = {0};
+    if (!resolve_node_style(node, &style)) {
+        return;
+    }
+    VgTransformFixed node_t = parent_t;
+    if (node->has_transform) {
+        VgTransformFixed local_t = vg_transform_fixed_from_transform(node->transform);
+        node_t = vg_transform_fixed_compose(parent_t, local_t);
+    }
+    if (node->type == VG_NODE_GROUP) {
+        for (size_t i = 0; i < node->data.group.child_count; i++) {
+            render_node(node->data.group.children[i], node_t, fb);
+        }
+        return;
+    }
+    render_leaf_node(node, node_t, fb, style);
+}
+
+static void render_node_with_world_transform(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    VgStyle style = {0};
+    if (!resolve_node_style(node, &style)) {
+        return;
+    }
+    render_leaf_node(node, world_t, fb, style);
 }
 
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb) {

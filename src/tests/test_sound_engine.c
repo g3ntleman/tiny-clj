@@ -11,6 +11,9 @@
 #include "../event_loop.h"
 #include "byte_array.h"
 #include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 static uint32_t g_test_backend_set_voice_call_count = 0u;
 static uint32_t g_test_backend_set_voice_nonzero_count = 0u;
@@ -30,6 +33,77 @@ void tinyclj_sound_backend_observe_set_voice(int voice_index,
 static void reset_test_backend_set_voice_counters(void) {
   g_test_backend_set_voice_call_count = 0u;
   g_test_backend_set_voice_nonzero_count = 0u;
+}
+
+typedef bool (*SoundEngineStderrCaptureAction)(void *ctx);
+
+static char *sound_engine_capture_stderr(SoundEngineStderrCaptureAction action, void *ctx) {
+  if (!action) {
+    return NULL;
+  }
+
+  FILE *tmp = tmpfile();
+  if (!tmp) {
+    return NULL;
+  }
+
+  int stderr_fd = fileno(stderr);
+  int saved_stderr = dup(stderr_fd);
+  if (saved_stderr < 0) {
+    fclose(tmp);
+    return NULL;
+  }
+
+  fflush(stderr);
+  if (dup2(fileno(tmp), stderr_fd) < 0) {
+    close(saved_stderr);
+    fclose(tmp);
+    return NULL;
+  }
+
+  (void)action(ctx);
+
+  fflush(stderr);
+  (void)dup2(saved_stderr, stderr_fd);
+  close(saved_stderr);
+
+  if (fseek(tmp, 0, SEEK_END) != 0) {
+    fclose(tmp);
+    return NULL;
+  }
+  long size = ftell(tmp);
+  if (size < 0) {
+    fclose(tmp);
+    return NULL;
+  }
+  if (fseek(tmp, 0, SEEK_SET) != 0) {
+    fclose(tmp);
+    return NULL;
+  }
+
+  char *buf = (char *)CLJ_MALLOC((size_t)size + 1u);
+  if (!buf) {
+    fclose(tmp);
+    return NULL;
+  }
+  size_t read_n = fread(buf, 1u, (size_t)size, tmp);
+  buf[read_n] = '\0';
+  fclose(tmp);
+  return buf;
+}
+
+static int sound_engine_count_substring(const char *haystack, const char *needle) {
+  if (!haystack || !needle || needle[0] == '\0') {
+    return 0;
+  }
+  int count = 0;
+  size_t needle_len = strlen(needle);
+  const char *scan = haystack;
+  while ((scan = strstr(scan, needle)) != NULL) {
+    count++;
+    scan += needle_len;
+  }
+  return count;
 }
 
 /* ========================================================================= */
@@ -2467,8 +2541,8 @@ TEST(test_sound_tiny_fx_trk1_compile_track_emits_legato_flag) {
 
   TestDecodedTrk1Event evt0;
   TestDecodedTrk1Event evt1;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 1, &evt0));
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt1));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 1, &evt1));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_VOL, evt0.event_type);
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt1.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt1.note_flags);
@@ -2493,7 +2567,7 @@ TEST(test_sound_tiny_fx_trk1_compile_track_emits_retrigger_flag_for_same_follow_
   END_TRY
 
   TestDecodedTrk1Event evt2;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 3, &evt2));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_RETRIGGER, evt2.note_flags);
 }
@@ -2517,7 +2591,7 @@ TEST(test_sound_tiny_fx_trk1_compile_track_melody_backing_preserves_articulation
   END_TRY
 
   TestDecodedTrk1Event evt2;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 3, &evt2));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt2.note_flags);
 }
@@ -2548,7 +2622,7 @@ TEST(test_sound_tiny_fx_trk1_compile_track_emits_track_envelope_once) {
   TEST_ASSERT_EQUAL_UINT8(26u, evt0.envelope_levels[4]);
 }
 
-TEST(test_sound_tiny_fx_trk1_compile_track_uses_default_track_envelope) {
+TEST(test_sound_tiny_fx_trk1_compile_track_omits_default_track_envelope) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   ID result = NULL;
@@ -2561,17 +2635,13 @@ TEST(test_sound_tiny_fx_trk1_compile_track_uses_default_track_envelope) {
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should apply the default :envelope when omitted");
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should compile without a default :envelope");
   }
   END_TRY
 
   TestDecodedTrk1Event evt0;
   TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
-  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_ENV, evt0.event_type);
-  TEST_ASSERT_EQUAL_UINT8(3u, evt0.envelope_point_count);
-  TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
-  TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[1]);
-  TEST_ASSERT_EQUAL_UINT8(51u, evt0.envelope_levels[2]);
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_VOL, evt0.event_type);
 }
 
 TEST(test_sound_tiny_fx_trk1_compile_track_encodes_inter_note_gap_option_in_header_flags) {
@@ -3251,6 +3321,106 @@ TEST(test_sound_tick_scheduler_caps_catchup_and_resyncs_deadline) {
   TEST_ASSERT_EQUAL_UINT32(0u, skipped);
   TEST_ASSERT_EQUAL_UINT32(1u, sound_tick_scheduler_ticks_due(&scheduler, 6000000u, &skipped));
   TEST_ASSERT_EQUAL_UINT32(0u, skipped);
+}
+
+typedef struct {
+  uint64_t baseline_ns;
+  uint64_t sample1_ns;
+  uint64_t sample2_ns;
+} SoundDebugNoChangeLogCtx;
+
+static bool sound_debug_no_change_log_action(void *ctx) {
+  SoundDebugNoChangeLogCtx *log_ctx = (SoundDebugNoChangeLogCtx *)ctx;
+  if (!log_ctx) {
+    return false;
+  }
+  sound_engine_debug_log_deltas_if_due(log_ctx->baseline_ns);
+  sound_engine_debug_log_deltas_if_due(log_ctx->sample1_ns);
+  sound_engine_debug_log_deltas_if_due(log_ctx->sample2_ns);
+  return true;
+}
+
+TEST(test_sound_debug_delta_logger_silent_without_changes) {
+  sound_engine_init(1);
+
+  SoundDebugNoChangeLogCtx ctx = {
+      .baseline_ns = 1000000000ull,
+      .sample1_ns = 2000000000ull,
+      .sample2_ns = 3000000000ull,
+  };
+  char *stderr_output = sound_engine_capture_stderr(sound_debug_no_change_log_action, &ctx);
+  TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "failed to capture stderr for sound debug logger");
+  TEST_ASSERT_NULL_MESSAGE(strstr(stderr_output, "[sound-debug]"),
+                           "logger should stay silent when telemetry counters do not change");
+  CLJ_FREE(stderr_output);
+
+  sound_engine_shutdown();
+}
+
+typedef struct {
+  uint64_t baseline_ns;
+  uint64_t first_due_ns;
+  uint64_t within_window_ns;
+  uint64_t second_due_ns;
+} SoundDebugOverrunLogCtx;
+
+static bool sound_debug_overrun_log_action(void *ctx) {
+  SoundDebugOverrunLogCtx *log_ctx = (SoundDebugOverrunLogCtx *)ctx;
+  if (!log_ctx) {
+    return false;
+  }
+  sound_engine_debug_log_deltas_if_due(log_ctx->baseline_ns);
+  sound_telemetry_add_tick_overruns(1u);
+  sound_engine_debug_log_deltas_if_due(log_ctx->first_due_ns);
+  sound_engine_debug_log_deltas_if_due(log_ctx->within_window_ns);
+  sound_engine_debug_log_deltas_if_due(log_ctx->second_due_ns);
+  return true;
+}
+
+TEST(test_sound_debug_delta_logger_throttles_to_one_log_per_window) {
+  sound_engine_init(1);
+
+  SoundDebugOverrunLogCtx ctx = {
+      .baseline_ns = 1000000000ull,
+      .first_due_ns = 2000000000ull,
+      .within_window_ns = 2500000000ull,
+      .second_due_ns = 3000000000ull,
+  };
+  char *stderr_output = sound_engine_capture_stderr(sound_debug_overrun_log_action, &ctx);
+  TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "failed to capture stderr for sound debug throttling");
+#ifdef DEBUG
+  TEST_ASSERT_EQUAL_INT_MESSAGE(1,
+                                sound_engine_count_substring(stderr_output, "[sound-debug]"),
+                                "expected exactly one log line for one overrun delta window");
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stderr_output, "overruns=+1"),
+                               "expected overrun delta in debug log output");
+#else
+  TEST_ASSERT_NULL_MESSAGE(strstr(stderr_output, "[sound-debug]"),
+                           "non-DEBUG build must not emit sound debug logs");
+#endif
+  CLJ_FREE(stderr_output);
+
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_debug_delta_logger_disabled_in_non_debug_builds) {
+#ifdef DEBUG
+  TEST_IGNORE_MESSAGE("requires non-DEBUG build");
+#else
+  sound_engine_init(1);
+  SoundDebugOverrunLogCtx ctx = {
+      .baseline_ns = 1000000000ull,
+      .first_due_ns = 2000000000ull,
+      .within_window_ns = 2500000000ull,
+      .second_due_ns = 3000000000ull,
+  };
+  char *stderr_output = sound_engine_capture_stderr(sound_debug_overrun_log_action, &ctx);
+  TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "failed to capture stderr for non-debug logger check");
+  TEST_ASSERT_NULL_MESSAGE(strstr(stderr_output, "[sound-debug]"),
+                           "non-DEBUG build should keep debug logger disabled");
+  CLJ_FREE(stderr_output);
+  sound_engine_shutdown();
+#endif
 }
 
 /* ========================================================================= */

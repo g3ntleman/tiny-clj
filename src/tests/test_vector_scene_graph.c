@@ -1834,6 +1834,26 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_falls_back_to_union_when_ou
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], expected_union));
 }
 
+TEST(test_vector_scene_graph_dirty_union_tree_large_leaf_count_uses_scratch_path_without_behavior_change) {
+    enum { kLeafCount = 80 };
+    VgClipRect leaves[kLeafCount];
+    for (int i = 0; i < kLeafCount; i++) {
+        leaves[i] = (VgClipRect){.x = (int16_t)(i * 3), .y = 0, .w = 1, .h = 1};
+    }
+    VgClipRect planned[kLeafCount];
+    memset(planned, 0, sizeof(planned));
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves,
+                                                  (size_t)kLeafCount,
+                                                  1u,
+                                                  planned,
+                                                  (size_t)kLeafCount);
+
+    TEST_ASSERT_EQUAL_UINT((size_t)kLeafCount, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], leaves[0]));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[kLeafCount - 1], leaves[kLeafCount - 1]));
+}
+
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
     VgSlotChangeTracker tracker;
     TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
