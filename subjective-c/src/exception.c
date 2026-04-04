@@ -137,32 +137,26 @@ void clj_callstack_push(ID frame) {
     if (!g_clj_callstack) {
         g_clj_callstack = make_vector(64, WEAK);
     }
-    CljPersistentVector *updated = vector_conj(g_clj_callstack, frame);
-    if (updated != g_clj_callstack) {
-        ASSIGN(g_clj_callstack, (ID)updated);
-    }
+    vector_conj_inplace(&g_clj_callstack, frame);
 }
 
 void clj_callstack_pop(void) {
     if (!g_clj_callstack || vector_count(g_clj_callstack) == 0u) return;
-    CljPersistentVector *updated = vector_popped(g_clj_callstack);
-    if (updated != g_clj_callstack) {
-        ASSIGN(g_clj_callstack, (ID)updated);
-    }
+    vector_pop_inplace(&g_clj_callstack);
 }
 
 struct CljString *clj_stacktrace_build(void) {
     unsigned int depth = vector_count(g_clj_callstack);
     if (depth == 0u) return NULL;
 
-    /* Estimate: "Clojure call stack:\n" + depth × "  NN: <name>\n" */
     char buf[2048];
     int buf_size = (int)sizeof(buf);
     int pos = 0;
+    ID *frames = vector_as_array(g_clj_callstack);
     pos += mini_snprintf(buf + pos, buf_size - pos, "Clojure call stack:\n");
     for (int i = (int)depth - 1; i >= 0 && pos < buf_size - 1; i--) {
         int frame_num = (int)depth - i;
-        ID frame = vector_nth(g_clj_callstack, (unsigned int)i);
+        ID frame = frames[i];
         const char *name = "<anonymous>";
         if (frame && TAG(frame) == CLJ_SYMBOL) {
             const CljSymbol *sym = (const CljSymbol *)frame;
