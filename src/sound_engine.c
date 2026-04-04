@@ -184,6 +184,8 @@ typedef struct {
 static uint32_t g_sound_engine_callback_epoch = 0u;
 static uint32_t g_sound_engine_callback_epoch_counter = 0u;
 
+#define SOUND_NON_LEGATO_INTER_NOTE_GAP_DEFAULT_TICKS 1u
+
 static void sound_deferred_release_run(void *ctx, EvalState *st) {
     (void)st;
     ID retained_obj = ctx;
@@ -263,6 +265,13 @@ static void stream_init(SoundStream *s,
     s->track_id = track_id;
     s->retained_obj = retained_obj;
     memset(&s->envelope, 0, sizeof(s->envelope));
+    uint8_t configured_gap_ticks =
+        (uint8_t)((header->flags & TRK1_FLAG_INTER_NOTE_GAP_MASK) >> TRK1_FLAG_INTER_NOTE_GAP_SHIFT);
+    if ((header->flags & TRK1_FLAG_INTER_NOTE_GAP_EXT) != 0u) {
+        configured_gap_ticks = (uint8_t)(configured_gap_ticks + 16u);
+    }
+    s->inter_note_gap_ticks =
+        configured_gap_ticks > 0u ? configured_gap_ticks : SOUND_NON_LEGATO_INTER_NOTE_GAP_DEFAULT_TICKS;
 }
 
 static bool sound_envelope_apply_points(SoundEnvelope *env,
@@ -352,6 +361,24 @@ static void sound_voice_apply_envelope_profile(SoundVoice *voice,
     voice->envelope_stage_index = 0u;
     voice->envelope_stage_remaining_ticks = voice->envelope_stage_ticks[0];
     voice->volume = sound_scale_volume_u8(voice->base_volume, voice->envelope_stage_levels[0]);
+}
+
+static uint32_t sound_note_effective_gate_ticks(uint32_t gate_ticks,
+                                                uint32_t delay_ticks,
+                                                uint8_t inter_note_gap_ticks,
+                                                uint16_t freq_hz,
+                                                uint8_t note_flags) {
+    if (freq_hz == 0u || (note_flags & TRK1_NOTE_FLAG_LEGATO) != 0u || delay_ticks == 0u) {
+        return gate_ticks;
+    }
+    if (inter_note_gap_ticks == 0u) {
+        return gate_ticks;
+    }
+    if (delay_ticks <= inter_note_gap_ticks) {
+        return 0u;
+    }
+    uint32_t max_gate_ticks = delay_ticks - inter_note_gap_ticks;
+    return gate_ticks < max_gate_ticks ? gate_ticks : max_gate_ticks;
 }
 
 static inline void sound_voice_apply_note(SoundVoice *voice,
@@ -483,32 +510,31 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
     bool has_delay = (control >> 7) & 1;
     uint8_t event_type = (control >> 4) & 0x07;
     uint8_t channel = control & 0x0F;
+    uint32_t delay_ticks = 0u;
+    bool note_event = false;
+    uint16_t note_freq_hz = 0u;
+    uint32_t note_gate_ticks = 0u;
+    uint8_t note_flags = 0u;
+    uint8_t note = 0u;
+    int note_voice_index = -1;
 
     switch (event_type) {
     case TRK1_EVT_NOTE:
     case TRK1_EVT_NOTE_HZ:
     case TRK1_EVT_NOTE_EX:
     case TRK1_EVT_NOTE_HZ_EX: {
-        uint16_t freq_hz = 0u;
-        uint32_t gate_ticks = 0u;
-        uint8_t note_flags = 0u;
-        uint8_t note = 0u;
-        if (!stream_decode_note_event(s, event_type, &freq_hz, &gate_ticks, &note_flags, &note)) {
+        if (!stream_decode_note_event(s,
+                                      event_type,
+                                      &note_freq_hz,
+                                      &note_gate_ticks,
+                                      &note_flags,
+                                      &note)) {
             s->active = false;
             return false;
         }
+        note_event = true;
         if (voice_count > 0) {
-            int vi = channel % voice_count;
-            sound_voice_apply_note(&voices[vi], &s->envelope, freq_hz, gate_ticks, s->track_volume, note_flags);
-            stream_log_note_event(s,
-                                  event_type,
-                                  channel,
-                                  vi,
-                                  note,
-                                  freq_hz,
-                                  gate_ticks,
-                                  note_flags,
-                                  voices[vi].volume);
+            note_voice_index = channel % voice_count;
         }
         break;
     }
@@ -569,12 +595,35 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
 
     /* Parse delay if present */
     if (has_delay && s->active) {
-        uint32_t delta = 0;
-        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &delta)) {
+        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &delay_ticks)) {
             s->active = false;
             return false;
         }
-        s->next_event_tick = s->current_tick + delta;
+        s->next_event_tick = s->current_tick + delay_ticks;
+    }
+
+    if (note_event && note_voice_index >= 0) {
+        uint32_t effective_gate_ticks =
+            sound_note_effective_gate_ticks(note_gate_ticks,
+                                            delay_ticks,
+                                            s->inter_note_gap_ticks,
+                                            note_freq_hz,
+                                            note_flags);
+        sound_voice_apply_note(&voices[note_voice_index],
+                               &s->envelope,
+                               note_freq_hz,
+                               effective_gate_ticks,
+                               s->track_volume,
+                               note_flags);
+        stream_log_note_event(s,
+                              event_type,
+                              channel,
+                              note_voice_index,
+                              note,
+                              note_freq_hz,
+                              effective_gate_ticks,
+                              note_flags,
+                              voices[note_voice_index].volume);
     }
 
     return true;

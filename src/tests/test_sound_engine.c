@@ -264,6 +264,15 @@ static bool decode_test_compiled_event(ID track_bytes,
   return true;
 }
 
+static ID make_test_trk1_two_note_ex_track_with_header_flags(uint8_t note1,
+                                                              uint8_t flags1,
+                                                              uint32_t gate1_ticks,
+                                                              uint32_t delay1_ticks,
+                                                              uint8_t note2,
+                                                              uint8_t flags2,
+                                                              uint32_t gate2_ticks,
+                                                              uint8_t header_flags);
+
 static ID make_test_trk1_two_note_ex_track(uint8_t note1,
                                            uint8_t flags1,
                                            uint32_t gate1_ticks,
@@ -271,6 +280,24 @@ static ID make_test_trk1_two_note_ex_track(uint8_t note1,
                                            uint8_t note2,
                                            uint8_t flags2,
                                            uint32_t gate2_ticks) {
+  return make_test_trk1_two_note_ex_track_with_header_flags(note1,
+                                                             flags1,
+                                                             gate1_ticks,
+                                                             delay1_ticks,
+                                                             note2,
+                                                             flags2,
+                                                             gate2_ticks,
+                                                             0u);
+}
+
+static ID make_test_trk1_two_note_ex_track_with_header_flags(uint8_t note1,
+                                                              uint8_t flags1,
+                                                              uint32_t gate1_ticks,
+                                                              uint32_t delay1_ticks,
+                                                              uint8_t note2,
+                                                              uint8_t flags2,
+                                                              uint32_t gate2_ticks,
+                                                              uint8_t header_flags) {
   uint8_t gate1_buf[4];
   uint8_t delay1_buf[4];
   uint8_t gate2_buf[4];
@@ -288,7 +315,7 @@ static ID make_test_trk1_two_note_ex_track(uint8_t note1,
 
   CljByteArray *ba = make_byte_array(total_len);
   uint8_t *d = ba->data;
-  write_test_trk1_header(d, 1, 0, stream_len);
+  write_test_trk1_header(d, 1, header_flags, stream_len);
 
   int off = TRK1_HEADER_SIZE;
   d[off++] = (1u << 7) | (TRK1_EVT_NOTE_EX << 4);
@@ -734,6 +761,95 @@ TEST(test_sound_legato_hold_preserves_voice_until_next_note) {
 
   TEST_ASSERT_EQUAL_UINT16(294, g_sound_engine.voices[0].freq_hz);
   TEST_ASSERT_EQUAL_UINT16(294, g_sound_engine.voices[0].applied_freq_hz);
+  TEST_ASSERT_FALSE(g_sound_engine.voices[0].hold_until_next_note);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_non_legato_note_leaves_short_gap_before_next_note) {
+  sound_engine_init(1);
+
+  ID track_sym = (ID)intern_symbol_global(":non-legato-gap-test");
+  ID ba = make_test_trk1_two_note_ex_track(60, 0, 3, 3, 62, 0, 3);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick(); /* parse first note */
+  TEST_ASSERT_EQUAL_UINT16(262u, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(1u, g_sound_engine.voices[0].gate_remaining_ticks);
+  TEST_ASSERT_FALSE(g_sound_engine.voices[0].hold_until_next_note);
+
+  sound_engine_tick(); /* first note gate expires */
+  TEST_ASSERT_EQUAL_UINT16(0u, g_sound_engine.voices[0].freq_hz);
+
+  sound_engine_tick(); /* explicit inter-note gap tick */
+  TEST_ASSERT_EQUAL_UINT16(0u, g_sound_engine.voices[0].freq_hz);
+
+  sound_engine_tick(); /* parse second note */
+  TEST_ASSERT_EQUAL_UINT16(294u, g_sound_engine.voices[0].freq_hz);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_legato_note_keeps_full_gate_without_gap_clamp) {
+  sound_engine_init(1);
+
+  ID track_sym = (ID)intern_symbol_global(":legato-gap-bypass-test");
+  ID ba = make_test_trk1_two_note_ex_track(60, TRK1_NOTE_FLAG_LEGATO, 3, 3, 62, 0, 3);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick(); /* parse first note */
+  TEST_ASSERT_EQUAL_UINT16(262u, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(2u, g_sound_engine.voices[0].gate_remaining_ticks);
+  TEST_ASSERT_TRUE(g_sound_engine.voices[0].hold_until_next_note);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_non_legato_gap_can_be_overridden_per_track_header) {
+  sound_engine_init(1);
+
+  uint8_t header_flags = (uint8_t)(2u << TRK1_FLAG_INTER_NOTE_GAP_SHIFT);
+  ID track_sym = (ID)intern_symbol_global(":non-legato-gap-header-test");
+  ID ba = make_test_trk1_two_note_ex_track_with_header_flags(60, 0, 3, 3, 62, 0, 3, header_flags);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick(); /* parse first note, gap clamp leaves only one tick gate */
+  TEST_ASSERT_EQUAL_UINT16(0u, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(0u, g_sound_engine.voices[0].gate_remaining_ticks);
+  TEST_ASSERT_FALSE(g_sound_engine.voices[0].hold_until_next_note);
+
+  sound_engine_tick(); /* inter-note gap tick */
+  TEST_ASSERT_EQUAL_UINT16(0u, g_sound_engine.voices[0].freq_hz);
+
+  sound_engine_tick(); /* advance to delayed second note tick */
+  TEST_ASSERT_EQUAL_UINT16(0u, g_sound_engine.voices[0].freq_hz);
+
+  sound_engine_tick(); /* parse second note */
+  TEST_ASSERT_EQUAL_UINT16(294u, g_sound_engine.voices[0].freq_hz);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_non_legato_gap_extended_header_supports_values_above_15) {
+  sound_engine_init(1);
+
+  uint8_t header_flags =
+      (uint8_t)(TRK1_FLAG_INTER_NOTE_GAP_EXT | (9u << TRK1_FLAG_INTER_NOTE_GAP_SHIFT)); /* gap=25 */
+  ID track_sym = (ID)intern_symbol_global(":non-legato-gap-extended-header-test");
+  ID ba = make_test_trk1_two_note_ex_track_with_header_flags(60, 0, 30, 30, 62, 0, 30, header_flags);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+
+  sound_engine_tick(); /* parse first note, gate=30 clamped by gap=25 -> 5 then decremented to 4 */
+  TEST_ASSERT_EQUAL_UINT16(262u, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(4u, g_sound_engine.voices[0].gate_remaining_ticks);
   TEST_ASSERT_FALSE(g_sound_engine.voices[0].hold_until_next_note);
 
   RELEASE(ba);
@@ -2456,6 +2572,63 @@ TEST(test_sound_tiny_fx_trk1_compile_track_uses_default_track_envelope) {
   TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
   TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[1]);
   TEST_ASSERT_EQUAL_UINT8(51u, evt0.envelope_levels[2]);
+}
+
+TEST(test_sound_tiny_fx_trk1_compile_track_encodes_inter_note_gap_option_in_header_flags) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
+        "      [{:notes [:A4] :duration :q}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120 :inter-note-gap-ms 5}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should accept :inter-note-gap-ms");
+  }
+  END_TRY
+
+  TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(result));
+  CljByteArray *arr = as_byte_array(result);
+  TEST_ASSERT_NOT_NULL(arr);
+
+  Trk1Header header;
+  TEST_ASSERT_TRUE(trk1_parse_header(arr->data, arr->length, &header));
+  uint8_t encoded_gap =
+      (uint8_t)((header.flags & TRK1_FLAG_INTER_NOTE_GAP_MASK) >> TRK1_FLAG_INTER_NOTE_GAP_SHIFT);
+  TEST_ASSERT_EQUAL_UINT8(5u, encoded_gap);
+}
+
+TEST(test_sound_tiny_fx_trk1_compile_track_encodes_extended_inter_note_gap_option_in_header_flags) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.trk1) "
+        "    (tiny-fx.trk1/compile-track "
+        "      [{:notes [:A4] :duration :q}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120 :inter-note-gap-ms 25}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.trk1/compile-track should accept :inter-note-gap-ms up to 25");
+  }
+  END_TRY
+
+  TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(result));
+  CljByteArray *arr = as_byte_array(result);
+  TEST_ASSERT_NOT_NULL(arr);
+
+  Trk1Header header;
+  TEST_ASSERT_TRUE(trk1_parse_header(arr->data, arr->length, &header));
+  TEST_ASSERT_BITS_HIGH(TRK1_FLAG_INTER_NOTE_GAP_EXT, header.flags);
+  uint8_t encoded_gap =
+      (uint8_t)((header.flags & TRK1_FLAG_INTER_NOTE_GAP_MASK) >> TRK1_FLAG_INTER_NOTE_GAP_SHIFT);
+  TEST_ASSERT_EQUAL_UINT8(9u, encoded_gap); /* 25 = 16 + 9 */
 }
 
 TEST(test_sound_tiny_breakout_audio_compiler_preserves_legacy_track_bytes) {

@@ -29,6 +29,9 @@
 
 #define TRK1_FLAG_DEFAULT_LOOP  0x01
 #define TRK1_FLAG_RESERVED_BIT1 0x02
+#define TRK1_FLAG_INTER_NOTE_GAP_EXT TRK1_FLAG_RESERVED_BIT1
+#define TRK1_FLAG_INTER_NOTE_GAP_SHIFT 4
+#define TRK1_FLAG_INTER_NOTE_GAP_MASK  0xF0
 
 #define TRK1_EVT_NOTE    0
 #define TRK1_EVT_SET_VOL 1
@@ -55,7 +58,7 @@
 
 typedef struct {
     uint8_t  version;
-    uint8_t  flags;
+    uint8_t  flags; /* TRK1_FLAG_* (high nibble optionally stores inter-note gap ticks) */
     uint8_t  channel_count;
     uint16_t tpq;
     uint16_t bpm;
@@ -135,6 +138,7 @@ typedef struct {
     ID       retained_obj;      /* kept alive while the stream is active */
     const uint8_t *stream_start; /* for repeat/loop rewind */
     SoundEnvelope envelope;
+    uint8_t inter_note_gap_ticks; /* 0 uses engine default */
 } SoundStream;
 
 /* ========================================================================= */

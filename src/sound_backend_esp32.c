@@ -83,6 +83,10 @@ static void sound_backend_silence_pwm_voices(void) {
 }
 
 static uint8_t sound_backend_volume_to_half_duty(uint8_t volume) {
+    if (volume == 0u) {
+        return 0u;
+    }
+
     uint8_t min_stable_duty =
         atomic_load_explicit(&g_sound_pwm_min_stable_duty, memory_order_relaxed);
     if (min_stable_duty > SOUND_PWM_HALF_DUTY_MAX) {

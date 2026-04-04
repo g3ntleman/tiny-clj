@@ -4,6 +4,9 @@
 (def ^:private sfx-keys
   #{:rocket-launch-sfx :laser-sfx})
 
+(def ^:private trk1-cache-root
+  "/data/tiny-fx/sound-demos")
+
 (defn bytes-asset-under-prefix
   "Loads raw bytes from `/assets/<ns-path>/<file-name>` via the embedded FS.
   Returns nil if the asset is missing or unreadable."
@@ -27,8 +30,43 @@
       nil))
   nil)
 
+(defn- trk1-cache-path
+  [which]
+  (str trk1-cache-root "/" (name which) ".trk1"))
+
+(defn- trk1-cache-meta-path
+  [which]
+  (str trk1-cache-root "/" (name which) ".meta.edn"))
+
+(defn- read-trk1-cache
+  [which]
+  (let [track-bytes (try
+                      (slurp-bytes (trk1-cache-path which))
+                      (catch Exception _ nil))
+        meta-map (try
+                   (let [s (slurp (trk1-cache-meta-path which))]
+                     (if s (read-string s) nil))
+                   (catch Exception _ nil))
+        duration-ms (:duration-ms meta-map)]
+    (if (and track-bytes (integer? duration-ms))
+      {:track-bytes track-bytes
+       :duration-ms duration-ms}
+      nil)))
+
+(defn- write-trk1-cache!
+  [which track-bytes duration-ms]
+  (if (and track-bytes (integer? duration-ms))
+    (try
+      (require 'tiny-clj.fs)
+      ((var tiny-clj.fs/spit-bytes) (trk1-cache-path which) track-bytes)
+      (spit (trk1-cache-meta-path which) (str {:duration-ms duration-ms}))
+      true
+      (catch Exception _ false))
+    false))
+
 (defn load-song
-  "Loads one demo song descriptor with :track-id, :steps, :opts and inferred :kind."
+  "Loads one demo song descriptor with :track-id, :steps, :opts and inferred :kind.
+  This function returns the source descriptor only (no compilation)."
   [which]
   (assoc (assets/edn-asset-under-prefix "tiny-fx/sound-demos"
                                         (str (name which) ".edn")
@@ -36,15 +74,39 @@
          :kind
          (if (contains? sfx-keys which) :sfx :music)))
 
+(defn- compile-song-track
+  [song]
+  (require 'tiny-fx.trk1)
+  (try
+    ((var tiny-fx.trk1/prepare-track) (:steps song) (:opts song))
+    (finally
+      (try
+        (ns-unload 'tiny-fx.trk1)
+        (catch Exception _ false)))))
+
+(defn- load-song-track
+  [which song]
+  (or (read-trk1-cache which)
+      (let [prepared (compile-song-track song)
+            track-bytes (:track-bytes prepared)
+            duration-ms (:duration-ms prepared)]
+        (write-trk1-cache! which track-bytes duration-ms)
+        {:track-bytes track-bytes
+         :duration-ms duration-ms})))
+
 (defn play-demo!
-  "Compiles and plays one bundled demo via explicit trk1/runtime composition."
+  "Plays one bundled demo.
+  The track is loaded from Flash cache when available; otherwise it is compiled
+  once, cached as TRK1 bytes, and the compiler namespace is unloaded."
   [which]
   (require 'tiny-fx.sound)
-  (require 'tiny-fx.trk1)
   (let [d (load-song which)
-        prepared (tiny-fx.trk1/prepare-track (:steps d) (:opts d))
-        track-bytes (:track-bytes prepared)
-        duration-ms (:duration-ms prepared)
+        track (load-song-track which d)
+        track-bytes (:track-bytes track)
+        duration-ms (:duration-ms track)
+        _ (try
+            (ns-unload 'tiny-fx.trk1)
+            (catch Exception _ false))
         status (if (= (:kind d) :sfx)
                  (if ((var tiny-fx.sound/sound-play-sfx!) (:track-id d) track-bytes) :playing :dropped)
                  (if ((var tiny-fx.sound/sound-play-music!) (:track-id d) track-bytes 1) :playing :stopped))]
