@@ -86,7 +86,7 @@ isProject: false
   `subjective-c/CMakeLists.txt`, `esp32-idf/components/subjective-c/CMakeLists.txt`,
   `esp32-idf/main/CMakeLists.txt`.
 - Architektur-Contract-Tests wurden erweitert, neue Unit-Tests hinzugefuegt:
-  `src/tests/test_subjective_c_thread.c`, `src/tests/test_render_driver.c`.
+  `src/tests/test_tread.c`, `src/tests/test_render_driver.c`.
 - Verifiziert: `./build/unit-tests --quiet` → `2153 Tests, 0 Failures, 8 Ignored`.
 
 ### Schicht-Modell
@@ -145,7 +145,7 @@ FreeRTOS-Semaphoren statt busy-poll. Das allein rechtfertigt die Abstraktion.
 
 ## Step 1 (RED) — Unit-Tests fuer Thread-Abstraktion
 
-**Neue Datei:** `src/tests/test_subjective_c_thread.c`
+**Neue Datei:** `src/tests/test_tread.c`
 
 ### Thread-Tests
 
@@ -670,7 +670,7 @@ TEST(test_boot_screen_covers_full_display)
 |---|---|---|
 | `subjective-c/src/subjective-c/thread.h` | NEU (Thread-API) | ja |
 | `subjective-c/src/thread.c` | NEU (host+esp32 backend) | ja |
-| `src/tests/test_subjective_c_thread.c` | NEU | ja |
+| `src/tests/test_tread.c` | NEU | ja |
 | `src/render_driver.h` | NEU | ja |
 | `src/render_driver.c` | NEU | ja |
 | `src/tests/test_render_driver.c` | NEU | ja |

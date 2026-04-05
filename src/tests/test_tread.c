@@ -4,7 +4,7 @@
 #include "test_registry.h"
 #include "thread.h"
 
-static atomic_uint g_subjective_c_once_runs = 0u;
+static atomic_uint g_tread_once_runs = 0u;
 
 typedef struct {
     SubjectiveCMutex *mutex;
@@ -55,7 +55,7 @@ static void tread_test_sleep_briefly(void *arg) {
 }
 
 static void tread_test_once_increment(void) {
-    (void)atomic_fetch_add_explicit(&g_subjective_c_once_runs, 1u, memory_order_relaxed);
+    (void)atomic_fetch_add_explicit(&g_tread_once_runs, 1u, memory_order_relaxed);
 }
 
 static void tread_test_run_once(void *arg) {
@@ -97,7 +97,7 @@ TEST(test_tread_create_with_name) {
         .mutex = mutex,
     };
     SubjectiveCThreadConfig config = {
-        .name = "subjective-c-thread-test",
+        .name = "tread-test",
         .stack_bytes = 0u,
         .priority = 0,
     };
@@ -227,12 +227,12 @@ TEST(test_tread_stack_high_water_mark_reports_platform_value) {
     tread_destroy(thread);
 }
 
-TEST(test_subjective_c_once_runs_initializer_once_across_threads) {
+TEST(test_tread_once_runs_initializer_once_across_threads) {
     SubjectiveCOnce once = SUBJECTIVE_C_ONCE_INIT;
     SubjectiveCThreadTestContext ctx = {
         .once = &once,
     };
-    atomic_store_explicit(&g_subjective_c_once_runs, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_tread_once_runs, 0u, memory_order_relaxed);
 
     SubjectiveCThread *threads[4] = {0};
     for (size_t i = 0; i < 4u; i++) {
@@ -246,5 +246,5 @@ TEST(test_subjective_c_once_runs_initializer_once_across_threads) {
 
     subjective_c_once_run(&once, tread_test_once_increment);
     TEST_ASSERT_EQUAL_UINT32(1u,
-                             atomic_load_explicit(&g_subjective_c_once_runs, memory_order_relaxed));
+                             atomic_load_explicit(&g_tread_once_runs, memory_order_relaxed));
 }

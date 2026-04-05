@@ -634,7 +634,7 @@ add_executable(unit-tests
     src/tests/test_macros.c
     src/tests/test_macro_expander_debug.c
     src/tests/test_threading_macros.c
-    src/tests/test_subjective_c_thread.c
+    src/tests/test_tread.c
     src/tests/test_predicates.c
     src/tests/test_require.c
     src/tests/test_require_perf.c
