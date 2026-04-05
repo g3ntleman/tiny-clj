@@ -95,6 +95,18 @@ vector layout and semantics stay simpler.
 - Nearby queue / runtime regression groups to extend if needed:
   - existing event-loop and timer-related test groups in `src/tests/`
 
+### Direct backing access sites in `event_loop.c` that must migrate
+
+These sites bypass the transient API and access `task_vec->backing` directly.
+After Phase 4 they will ignore the ring `head` and produce wrong results unless
+updated in Phase 6:
+
+- `vector_nth(task_vec->backing, 0)` — must use `vector_front_transient(task_vec)`
+- `vector_clear(task_vec->backing)` — must also reset `head` (or use a new
+  `vector_clear_transient(tvec)` helper)
+- `vector_count(task_vec->backing)` — safe (count is head-independent), but
+  prefer `vector_count(vector_persistent(task_vec))` for consistency
+
 Important current behavior to preserve:
 
 - persistent vectors expose contiguous logical indexing
@@ -112,21 +124,47 @@ Important current behavior to preserve:
 ### ESP32-only header shrink
 
 - On ESP32, `CljPersistentVector.count` and `CljPersistentVector.capacity`
-  become 16-bit fields.
-- On macOS host, keep the current wider fields unless a separate plan changes
-  that later.
+  become `uint16_t` fields (unsigned 16-bit, range 0–65535).
+- On macOS host, keep the current wider fields (`unsigned int` / `int`) unless
+  a separate plan changes that later.
 - `make_vector` and all growth/copy paths must reject capacities above the
   supported ESP32 limit clearly and deterministically.
+- The static `clj_empty_vector_singleton_data` mirror struct in `vector.c`
+  must also use conditional field widths matching `CljPersistentVector`.
 
 ### Option 2: transient vectors become ringbuffer-backed
 
-- Add a transient-only head/offset field.
+- Add a `uint16_t head` field to `CljTransientVector` (ESP32) or
+  `unsigned int head` (host). This field is transient-only; persistent vectors
+  never carry a head field.
 - Keep the persistent vector payload layout simple.
-- Logical indexing for transient operations must map through the head/offset.
-- `vector_persistent` must return a persistent snapshot/representation whose
-  logical order matches existing behavior.
-- Front removals in transient hot paths should no longer require repeated
-  element shifting in the common case.
+- Logical indexing for transient operations must map through the head/offset:
+  `physical = (head + logical) % capacity`.
+- `vector_push` appends at `(head + count) % capacity`; `vector_remove_at(0)`
+  increments `head` — both O(1). Arbitrary `insert_at`/`remove_at` at other
+  indices remain O(n) with wrap-aware shifting.
+- **Invariant: after every backing growth, `head` is reset to 0** (elements are
+  copied in logical order into the fresh backing).
+- Kein neues API nötig: Callers wie `event_loop.c` greifen direkt auf das
+  logische Element 0 zu via `backing->data[head % capacity]`.
+
+#### `vector_persistent` ownership change
+
+- Currently `vector_persistent()` returns a **borrowed** reference to the
+  backing (no allocation, no RETAIN).
+- After Phase 4, when `head == 0`: behavior stays unchanged (borrowed backing).
+- When `head != 0`: must allocate a new persistent vector with elements in
+  logical order. The returned vector is **owned** (rc=1). The caller must
+  RELEASE or AUTORELEASE it.
+- To avoid a split borrowed/owned contract, the simplest safe approach is:
+  make `vector_persistent()` always return an **owned** reference
+  (`RETAIN(backing)` when `head == 0`, new allocation when `head != 0`).
+  Update all callers to RELEASE/AUTORELEASE the result.
+- The `as_vector()` inline in `vector.h` calls `vector_persistent()` and
+  currently expects a borrowed result — must be updated accordingly.
+
+Front removals in transient hot paths should no longer require repeated
+element shifting in the common case.
 
 ### Public semantics stay stable
 
@@ -166,13 +204,15 @@ Implement the smallest safe change that makes phase-1 tests pass.
 
 Steps:
 
-1. Introduce conditional field widths for `count` and `capacity` in
-   `CljPersistentVector` for ESP32 only.
-2. Update helper signatures/locals only where needed so the code remains compact
+1. Introduce conditional field widths (`uint16_t` on ESP32, unchanged on host)
+   for `count` and `capacity` in `CljPersistentVector`.
+2. Update the `clj_empty_vector_singleton_data` mirror struct in `vector.c` to
+   use the same conditional field widths.
+3. Update helper signatures/locals only where needed so the code remains compact
    and correct.
-3. Add explicit capacity guards in `make_vector` and growth paths.
-4. Keep host layout unchanged.
-5. Remove any temporary debug scaffolding before leaving the phase.
+4. Add explicit capacity guards in `make_vector` and growth paths.
+5. Keep host layout unchanged.
+6. Remove any temporary debug scaffolding before leaving the phase.
 
 Exit criterion:
 
@@ -205,17 +245,29 @@ Implement option 2.
 
 Steps:
 
-1. Add transient-only ringbuffer state such as `head`/`offset`.
-2. Rework transient operations to use logical-to-physical index mapping.
-3. Preserve compact fast paths for append/pop when possible.
-4. Ensure `vector_persistent` returns a logically ordered persistent result.
-5. Keep ownership and COW rules compliant with `MEMORY_POLICY.md`.
+1. Add `head` field to `CljTransientVector` (`uint16_t` on ESP32,
+   `unsigned int` on host). Initialize to 0 in `make_vector_transient`.
+2. Rework transient operations to use logical-to-physical index mapping:
+   `physical = (head + logical) % backing->capacity`.
+3. `vector_push`: write at `(head + count) % capacity`, increment count.
+   `vector_remove_at(tvec, 0)`: increment `head`, decrement count — O(1).
+   Other `insert_at`/`remove_at` indices: O(n) wrap-aware shifting.
+4. **Growth invariant**: when backing must grow, copy elements in logical
+   order into the new backing and reset `head = 0`.
+5. Change `vector_persistent()` ownership contract:
+   - `head == 0`: return `RETAIN(backing)` (owned, no copy needed).
+   - `head != 0`: allocate new persistent vector in logical order (owned, rc=1).
+   - Update all existing callers to RELEASE/AUTORELEASE the result.
+   - Update the `as_vector()` inline helper and its callers accordingly.
+7. Keep ownership and COW rules compliant with `MEMORY_POLICY.md`.
 
 Constraints:
 
 - do not add a persistent-vector ring header field
 - do not change public vector contracts
-- avoid extra heap allocations in common transient queue operations
+- avoid extra heap allocations in common transient queue operations (the
+  `head == 0` fast path in `vector_persistent()` must remain allocation-free
+  apart from the RETAIN)
 
 Exit criterion:
 
@@ -249,11 +301,18 @@ Primary target:
 
 Steps:
 
-1. Replace front-removal hot paths with ringbuffer-aware transient operations.
-2. Keep task queue semantics unchanged.
-3. Keep the code path single and explicit; do not leave old competing queue
+1. Replace `vector_nth(task_vec->backing, 0)` with direktem Zugriff auf das
+   logische Element 0: `task_vec->backing->data[task_vec->head % capacity]`.
+2. `vector_remove_at(task_vec, 0)` — bereits O(1) nach Phase 4, kein
+   Code-Change nötig.
+3. Replace `vector_clear(task_vec->backing)` mit einem head-bewussten Clear:
+   backing leeren **und** `head = 0` zurücksetzen (inline, kein neues API).
+4. Audit alle verbleibenden `task_vec->backing` Direktzugriffe und head-aware
+   machen wo nötig.
+5. Keep task queue semantics unchanged.
+6. Keep the code path single and explicit; do not leave old competing queue
    logic behind.
-4. Remove dead comments or fallback logic once the new path is proven.
+7. Remove dead comments or fallback logic once the new path is proven.
 
 Exit criterion:
 
