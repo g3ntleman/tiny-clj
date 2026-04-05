@@ -11,6 +11,7 @@
 #include "map.h"
 #include "strings.h"
 #include "record.h"
+#include "thread.h"
 #include "to_string.h"
 #include "value.h"
 #include "gpio.h"
@@ -22,8 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <errno.h>
-#include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
 #if defined(ESP_PLATFORM)
@@ -116,8 +115,8 @@ static uint32_t g_event_loop_ingress_rejected_count = 0u;
 static uint32_t g_event_loop_ingress_drained_count = 0u;
 static uint32_t g_event_loop_ingress_high_watermark = 0u;
 static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
-static pthread_mutex_t g_event_loop_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_event_loop_wait_cond = PTHREAD_COND_INITIALIZER;
+static SubjectiveCMutex *g_event_loop_wait_mutex = NULL;
+static SubjectiveCCondVar *g_event_loop_wait_cond = NULL;
 static atomic_uint_fast64_t g_event_loop_wait_epoch = 1u;
 #if defined(ESP_PLATFORM)
 static atomic_uintptr_t g_event_loop_wait_task_handle = 0u;
@@ -148,19 +147,6 @@ static uint64_t event_loop_monotonic_now_ns(void) {
     return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
 }
 
-static struct timespec event_loop_deadline_from_now_ms(int timeout_ms) {
-    struct timespec deadline = {0};
-    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0 || timeout_ms <= 0) {
-        return deadline;
-    }
-    int64_t add_sec = (int64_t)(timeout_ms / 1000);
-    int64_t add_nsec = (int64_t)(timeout_ms % 1000) * 1000000ll;
-    int64_t nsec_total = (int64_t)deadline.tv_nsec + add_nsec;
-    deadline.tv_sec += (time_t)(add_sec + (nsec_total / 1000000000ll));
-    deadline.tv_nsec = (long)(nsec_total % 1000000000ll);
-    return deadline;
-}
-
 static inline void event_loop_notify_waiters(void) {
     (void)atomic_fetch_add_explicit(&g_event_loop_wait_epoch, 1u, memory_order_release);
 #if defined(ESP_PLATFORM)
@@ -180,11 +166,26 @@ static inline void event_loop_notify_waiters(void) {
     }
     return;
 #endif
-    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+    if (!g_event_loop_wait_mutex || !g_event_loop_wait_cond) {
         return;
     }
-    (void)pthread_cond_broadcast(&g_event_loop_wait_cond);
-    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+    subjective_c_mutex_lock(g_event_loop_wait_mutex);
+    subjective_c_condvar_broadcast(g_event_loop_wait_cond);
+    subjective_c_mutex_unlock(g_event_loop_wait_mutex);
+}
+
+static bool event_loop_wait_state_init(void) {
+#if defined(ESP_PLATFORM)
+    return true;
+#else
+    if (!g_event_loop_wait_mutex) {
+        g_event_loop_wait_mutex = subjective_c_mutex_create();
+    }
+    if (!g_event_loop_wait_cond) {
+        g_event_loop_wait_cond = subjective_c_condvar_create();
+    }
+    return g_event_loop_wait_mutex && g_event_loop_wait_cond;
+#endif
 }
 
 static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t observed_epoch) {
@@ -214,28 +215,28 @@ static void event_loop_wait_for_signal_or_timeout(int timeout_ms, uint64_t obser
     atomic_store_explicit(&g_event_loop_wait_task_handle, 0u, memory_order_release);
     return;
 #endif
-    if (pthread_mutex_lock(&g_event_loop_wait_mutex) != 0) {
+    if (!event_loop_wait_state_init()) {
         return;
     }
+    subjective_c_mutex_lock(g_event_loop_wait_mutex);
     if (timeout_ms < 0) {
         while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
-            if (pthread_cond_wait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex) != 0) {
+            if (!subjective_c_condvar_wait(g_event_loop_wait_cond,
+                                           g_event_loop_wait_mutex,
+                                           UINT32_MAX)) {
                 break;
             }
         }
     } else {
-        struct timespec deadline = event_loop_deadline_from_now_ms(timeout_ms);
         while (atomic_load_explicit(&g_event_loop_wait_epoch, memory_order_acquire) == observed_epoch) {
-            int rc = pthread_cond_timedwait(&g_event_loop_wait_cond, &g_event_loop_wait_mutex, &deadline);
-            if (rc == ETIMEDOUT) {
-                break;
-            }
-            if (rc != 0) {
+            if (!subjective_c_condvar_wait(g_event_loop_wait_cond,
+                                           g_event_loop_wait_mutex,
+                                           (uint32_t)timeout_ms)) {
                 break;
             }
         }
     }
-    (void)pthread_mutex_unlock(&g_event_loop_wait_mutex);
+    subjective_c_mutex_unlock(g_event_loop_wait_mutex);
 }
 
 static inline void event_loop_wait_state_reset(void) {
@@ -924,6 +925,7 @@ void event_loop_init(void) {
     (void)id_symbol_cache_init_global(
         g_event_loop_kw_cache,
         sizeof(g_event_loop_kw_cache) / sizeof(g_event_loop_kw_cache[0]));
+    (void)event_loop_wait_state_init();
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;

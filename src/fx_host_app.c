@@ -7,7 +7,6 @@
 #include <stdatomic.h>
 #include <time.h>
 #include <sched.h>
-#include <errno.h>
 #if defined(__APPLE__)
 #include <pthread/qos.h>
 #include <mach/mach_time.h>
@@ -35,6 +34,7 @@
 #include "platform.h"
 #include "gpio.h"
 #include "memory.h"
+#include "thread.h"
 #if !defined(__APPLE__)
 #include "MiniFB.h"
 #endif
@@ -658,8 +658,8 @@ static const VgPanelOps g_fx_panel_ops = {
     .set_sleep = fx_panel_set_sleep,
 };
 typedef struct {
-    pthread_t thread;
-    pthread_mutex_t mutex;
+    SubjectiveCThread *thread;
+    SubjectiveCMutex *mutex;
     atomic_bool running;
     bool started;
     VgRenderSlotState *slot_states;
@@ -681,7 +681,7 @@ typedef struct {
     VgClipRect last_overlay_clip_rects[FX_MAX_DIRTY_PLAN_RECTS];
     uint16_t last_overlay_clip_rect_count;
     uint_fast32_t last_overlay_frame_serial;
-    pthread_mutex_t transfer_rects_mutex;
+    SubjectiveCMutex *transfer_rects_mutex;
     atomic_uint_fast32_t animated_slots_mask;
     ViewerSceneBundle *collision_bundle;
     ViewerSpatialRuleSet *collision_rule_set;
@@ -742,15 +742,13 @@ static void fx_sync_and_publish_configured_slots(ViewerSceneBundle *bundle,
                                                  bool publish_changes) {
     bool locked = false;
     if (g_render_thread.started) {
-        if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
-            return;
-        }
+        subjective_c_mutex_lock(g_render_thread.mutex);
         locked = true;
     }
     fx_sync_configured_slots(bundle, rule_set, slot_change_tracker, publish_changes);
     fx_publish_slot_scene_snapshots_locked(bundle);
     if (locked) {
-        (void)pthread_mutex_unlock(&g_render_thread.mutex);
+        subjective_c_mutex_unlock(g_render_thread.mutex);
     }
 }
 
@@ -855,9 +853,10 @@ static size_t fx_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_capa
     if (!out_rects || out_capacity == 0u) {
         return 0u;
     }
-    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+    if (!g_render_thread.transfer_rects_mutex) {
         return 0u;
     }
+    subjective_c_mutex_lock(g_render_thread.transfer_rects_mutex);
     size_t count = (size_t)g_render_thread.last_transfer_clip_rect_count;
     if (count > out_capacity) {
         count = out_capacity;
@@ -865,7 +864,7 @@ static size_t fx_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_capa
     if (count > 0u) {
         memcpy(out_rects, g_render_thread.last_transfer_clip_rects, count * sizeof(VgClipRect));
     }
-    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    subjective_c_mutex_unlock(g_render_thread.transfer_rects_mutex);
     return count;
 }
 
@@ -879,9 +878,10 @@ static void fx_store_last_transfer_result(uint_fast32_t frame_serial,
     }
     atomic_store_explicit(&g_render_thread.last_transfer_rects, (uint32_t)stored_count, memory_order_relaxed);
     atomic_store_explicit(&g_render_thread.last_transfer_ns, transfer_ns, memory_order_relaxed);
-    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+    if (!g_render_thread.transfer_rects_mutex) {
         return;
     }
+    subjective_c_mutex_lock(g_render_thread.transfer_rects_mutex);
     g_render_thread.last_transfer_clip_rect_count = (uint16_t)stored_count;
     if (stored_count > 0u && rects) {
         memcpy(g_render_thread.last_transfer_clip_rects, rects, stored_count * sizeof(VgClipRect));
@@ -889,7 +889,7 @@ static void fx_store_last_transfer_result(uint_fast32_t frame_serial,
         memcpy(g_render_thread.last_overlay_clip_rects, rects, stored_count * sizeof(VgClipRect));
         g_render_thread.last_overlay_frame_serial = frame_serial;
     }
-    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    subjective_c_mutex_unlock(g_render_thread.transfer_rects_mutex);
 }
 
 static size_t fx_take_pending_overlay_rects(uint_fast32_t *io_last_presented_overlay_frame_serial,
@@ -902,12 +902,13 @@ static size_t fx_take_pending_overlay_rects(uint_fast32_t *io_last_presented_ove
     if (out_frame_serial) {
         *out_frame_serial = 0u;
     }
-    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+    if (!g_render_thread.transfer_rects_mutex) {
         return 0u;
     }
+    subjective_c_mutex_lock(g_render_thread.transfer_rects_mutex);
     uint_fast32_t overlay_frame_serial = g_render_thread.last_overlay_frame_serial;
     if (overlay_frame_serial == 0u || overlay_frame_serial == *io_last_presented_overlay_frame_serial) {
-        (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+        subjective_c_mutex_unlock(g_render_thread.transfer_rects_mutex);
         return 0u;
     }
     size_t count = (size_t)g_render_thread.last_overlay_clip_rect_count;
@@ -917,7 +918,7 @@ static size_t fx_take_pending_overlay_rects(uint_fast32_t *io_last_presented_ove
     if (count > 0u) {
         memcpy(out_rects, g_render_thread.last_overlay_clip_rects, count * sizeof(VgClipRect));
     }
-    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    subjective_c_mutex_unlock(g_render_thread.transfer_rects_mutex);
     *io_last_presented_overlay_frame_serial = overlay_frame_serial;
     if (out_frame_serial) {
         *out_frame_serial = overlay_frame_serial;
@@ -926,12 +927,12 @@ static size_t fx_take_pending_overlay_rects(uint_fast32_t *io_last_presented_ove
 }
 
 /* Render-thread loop: changed slots render immediately; animated slots tick continuously. */
-static void *fx_render_thread_main(void *arg) {
+static void fx_render_thread_main(void *arg) {
     VgFrameBuffer *fb = (VgFrameBuffer *)arg;
     if (!fb || !g_render_thread.slot_states || !g_render_thread.slot_seen_generations ||
         !g_render_thread.last_rendered_generation || !g_scene_slot_snapshots || !g_slot_render_priority ||
         g_fx_slot_count == 0u) {
-        return NULL;
+        return;
     }
     CLJ_ASSERT(!subjective_c_is_interpreter_thread());
     fx_set_realtime_thread_policy();
@@ -957,22 +958,12 @@ static void *fx_render_thread_main(void *arg) {
         uint64_t frame_skipped_total = 0u;
         VgClipRect frame_dirty_rects[FX_MAX_DIRTY_PLAN_RECTS] = {0};
         size_t frame_dirty_rect_count = 0u;
-        int publish_lock_rc = pthread_mutex_trylock(&g_render_thread.mutex);
-#ifdef DEBUG
-        if (publish_lock_rc != 0) {
-            /*
-             * Render thread must never block on publish lock. Busy is expected
-             * under contention; other errors indicate a threading bug.
-             */
-            CLJ_ASSERT(publish_lock_rc == EBUSY);
-        }
-#endif
-        if (publish_lock_rc != 0) {
+        if (!subjective_c_mutex_trylock(g_render_thread.mutex)) {
             /*
              * Keep render progress independent from interpreter/main-thread
              * publish work. If the publish lock is busy, skip this cycle.
              */
-            sched_yield();
+            subjective_c_thread_yield();
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
@@ -1132,7 +1123,7 @@ static void *fx_render_thread_main(void *arg) {
                                                       memory_order_relaxed,
                                                       memory_order_relaxed)) {
         }
-        (void)pthread_mutex_unlock(&g_render_thread.mutex);
+        subjective_c_mutex_unlock(g_render_thread.mutex);
         /*
          * Simulate SPI/I80 dirty-rect transfer into display GRAM.
          * The render buffer remains private to the render thread; only the
@@ -1161,7 +1152,6 @@ static void *fx_render_thread_main(void *arg) {
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
     }
-    return NULL;
 }
 
 /* Start dedicated render thread that owns slot rendering. */
@@ -1186,12 +1176,15 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     atomic_store_explicit(&g_render_thread.last_transfer_ns, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.animated_slots_mask, 0u, memory_order_release);
     fx_timeline_ingress_init();
-    if (pthread_mutex_init(&g_render_thread.mutex, NULL) != 0) {
+    g_render_thread.mutex = subjective_c_mutex_create();
+    if (!g_render_thread.mutex) {
         fx_timeline_ingress_shutdown();
         return false;
     }
-    if (pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL) != 0) {
-        (void)pthread_mutex_destroy(&g_render_thread.mutex);
+    g_render_thread.transfer_rects_mutex = subjective_c_mutex_create();
+    if (!g_render_thread.transfer_rects_mutex) {
+        subjective_c_mutex_destroy(g_render_thread.mutex);
+        g_render_thread.mutex = NULL;
         fx_timeline_ingress_shutdown();
         return false;
     }
@@ -1199,10 +1192,18 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     g_render_thread.last_overlay_clip_rect_count = 0u;
     g_render_thread.last_overlay_frame_serial = 0u;
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
-    if (subjective_c_pthread_create_named(&g_render_thread.thread, NULL, fx_render_thread_main, fb, "render") != 0) {
+    SubjectiveCThreadConfig cfg = {
+        .name = "render",
+        .stack_bytes = 0u,
+        .priority = 0,
+    };
+    g_render_thread.thread = subjective_c_thread_create(fx_render_thread_main, fb, &cfg);
+    if (!g_render_thread.thread) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
-        (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
-        (void)pthread_mutex_destroy(&g_render_thread.mutex);
+        subjective_c_mutex_destroy(g_render_thread.transfer_rects_mutex);
+        subjective_c_mutex_destroy(g_render_thread.mutex);
+        g_render_thread.transfer_rects_mutex = NULL;
+        g_render_thread.mutex = NULL;
         fx_timeline_ingress_shutdown();
         return false;
     }
@@ -1218,10 +1219,14 @@ static void stop_render_thread(void) {
     atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
     /* Wake blocked render wait to allow clean shutdown. */
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
-    (void)pthread_join(g_render_thread.thread, NULL);
+    (void)subjective_c_thread_join(g_render_thread.thread);
+    subjective_c_thread_destroy(g_render_thread.thread);
+    g_render_thread.thread = NULL;
     fx_timeline_ingress_shutdown();
-    (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
-    (void)pthread_mutex_destroy(&g_render_thread.mutex);
+    subjective_c_mutex_destroy(g_render_thread.transfer_rects_mutex);
+    subjective_c_mutex_destroy(g_render_thread.mutex);
+    g_render_thread.transfer_rects_mutex = NULL;
+    g_render_thread.mutex = NULL;
     fx_configure_render_thread_collision(NULL, NULL, false);
     g_render_thread.started = false;
 }

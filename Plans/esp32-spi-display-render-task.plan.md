@@ -71,6 +71,13 @@ isProject: false
   (`__attribute__((aligned(4)))`), konfigurierbare
   `TINYCLJ_RENDER_THREAD_STACK_BYTES`/`TINYCLJ_RENDER_THREAD_PRIORITY`,
   plus Stack-High-Water-Report beim Renderer-Stop.
+- Host-Follow-ups sind teilweise umgesetzt:
+  `fx_host_app.c` Render-Thread und `sound_backend_host.c` Tick-Thread
+  nutzen jetzt ebenfalls `subjective-c/thread`.
+- Weitere Host-/Runtime-Migrationen sind umgesetzt:
+  `fx_host_runloop.c`, `event_loop.c` und `atom.c` nutzen jetzt
+  ebenfalls `subjective-c/thread`-Primitiven statt direkter `pthread`
+  Mutex/Cond/Thread-Handles.
 - CMake-Wiring aktualisiert:
   `CMakeLists.txt`, `esp32-idf/components/tinyclj/CMakeLists.txt`,
   `subjective-c/CMakeLists.txt`, `esp32-idf/components/subjective-c/CMakeLists.txt`,
@@ -638,9 +645,12 @@ TEST(test_boot_screen_covers_full_display)
 - [x] Task-Stack baselineisiert (`TINYCLJ_RENDER_THREAD_STACK_BYTES`, default `4096`)
 
 ### Host-Refactor (optional, Follow-up)
-- [ ] `fx_host_app.c` Render-Thread auf `VgRenderDriver` umstellen
-- [ ] Sound-Backend-Threads auf `subjective-c/thread` umstellen
-- [ ] `atom.c` rwlock ggf. auf `SubjectiveCMutex` (niedrige Prio)
+- [x] `fx_host_app.c` Render-Thread auf `subjective-c/thread` umstellen
+- [ ] `fx_host_app.c` Render-Thread optional spaeter auf `VgRenderDriver` umstellen
+- [x] Sound-Backend-Threads auf `subjective-c/thread` umstellen
+- [x] `fx_host_runloop.c` auf `subjective-c/thread` umstellen
+- [x] `event_loop.c` Wait/Wake auf `SubjectiveCMutex`/`SubjectiveCCondVar` umstellen
+- [x] `atom.c` Lock auf `SubjectiveCMutex` umstellen
 
 ### Test-Suite
 ```

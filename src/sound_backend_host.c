@@ -15,6 +15,7 @@
 #include "exception.h"
 #include "sound_engine.h"
 #include "sound_tick_scheduler.h"
+#include "thread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -26,7 +27,6 @@
 #if defined(__APPLE__)
 #include <AudioUnit/AudioUnit.h>
 #include <mach/mach_time.h>
-#include <pthread.h>
 #include <errno.h>
 #include <unistd.h>
 
@@ -40,10 +40,10 @@
 static AudioComponentInstance g_output_unit = NULL;
 static SoundTickScheduler g_tick_scheduler;
 #ifndef TINY_CLJ_TEST_RUNNER
-static pthread_t g_tick_thread;
+static SubjectiveCThread *g_tick_thread = NULL;
 static atomic_bool g_tick_thread_running = false;
-static pthread_mutex_t g_tick_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_tick_wait_cond = PTHREAD_COND_INITIALIZER;
+static SubjectiveCMutex *g_tick_wait_mutex = NULL;
+static SubjectiveCCondVar *g_tick_wait_cond = NULL;
 #endif
 static atomic_bool g_tick_enabled = false;
 static atomic_bool g_sound_running = false;
@@ -186,19 +186,27 @@ static void host_sound_sleep_until_ns(uint64_t deadline_ns) {
         }
         return;
     }
+    if (!g_tick_wait_mutex || !g_tick_wait_cond) {
+        struct timespec ts;
+        ts.tv_sec = (time_t)(wait_ns / 1000000000ull);
+        ts.tv_nsec = (long)(wait_ns % 1000000000ull);
+        while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
+        }
+        return;
+    }
 
-    uint64_t abs_nsec = (uint64_t)realtime_now.tv_nsec + (wait_ns % 1000000000ull);
-    struct timespec deadline_rt = {
-        .tv_sec = realtime_now.tv_sec + (time_t)(wait_ns / 1000000000ull) + (time_t)(abs_nsec / 1000000000ull),
-        .tv_nsec = (long)(abs_nsec % 1000000000ull),
-    };
+    uint64_t wait_ms_64 = (wait_ns + 999999ull) / 1000000ull;
+    uint32_t wait_ms = (wait_ms_64 >= (uint64_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)wait_ms_64;
+    if (wait_ms == 0u) {
+        wait_ms = 1u;
+    }
 
-    pthread_mutex_lock(&g_tick_wait_mutex);
+    subjective_c_mutex_lock(g_tick_wait_mutex);
     if (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire) &&
         atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
-        (void)pthread_cond_timedwait(&g_tick_wait_cond, &g_tick_wait_mutex, &deadline_rt);
+        (void)subjective_c_condvar_wait(g_tick_wait_cond, g_tick_wait_mutex, wait_ms);
     }
-    pthread_mutex_unlock(&g_tick_wait_mutex);
+    subjective_c_mutex_unlock(g_tick_wait_mutex);
 }
 #endif
 
@@ -617,7 +625,7 @@ static bool host_sound_init_unit(void) {
 }
 
 #ifndef TINY_CLJ_TEST_RUNNER
-static void *host_tick_thread_main(void *arg) {
+static void host_tick_thread_main(void *arg) {
     (void)arg;
     /*
      * Ownership contract:
@@ -627,12 +635,12 @@ static void *host_tick_thread_main(void *arg) {
      */
     while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         if (!atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
-            pthread_mutex_lock(&g_tick_wait_mutex);
+            subjective_c_mutex_lock(g_tick_wait_mutex);
             while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire) &&
                    !atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
-                pthread_cond_wait(&g_tick_wait_cond, &g_tick_wait_mutex);
+                (void)subjective_c_condvar_wait(g_tick_wait_cond, g_tick_wait_mutex, UINT32_MAX);
             }
-            pthread_mutex_unlock(&g_tick_wait_mutex);
+            subjective_c_mutex_unlock(g_tick_wait_mutex);
             sound_tick_scheduler_start(&g_tick_scheduler, host_sound_monotonic_now_ns());
             continue;
         }
@@ -656,7 +664,6 @@ static void *host_tick_thread_main(void *arg) {
             sound_engine_tick();
         }
     }
-    return NULL;
 }
 #endif
 
@@ -685,16 +692,44 @@ void sound_backend_init(int voice_count) {
     (void)AudioOutputUnitStart(g_output_unit);
 
 #ifndef TINY_CLJ_TEST_RUNNER
+    g_tick_wait_mutex = subjective_c_mutex_create();
+    if (!g_tick_wait_mutex) {
+        atomic_store_explicit(&g_sound_available, false, memory_order_release);
+        host_sound_throw_init_failure("tick-thread-mutex", -1);
+        return;
+    }
+    g_tick_wait_cond = subjective_c_condvar_create();
+    if (!g_tick_wait_cond) {
+        subjective_c_mutex_destroy(g_tick_wait_mutex);
+        g_tick_wait_mutex = NULL;
+        atomic_store_explicit(&g_sound_available, false, memory_order_release);
+        host_sound_throw_init_failure("tick-thread-condvar", -1);
+        return;
+    }
     if (host_sound_init_failpoint_enabled("tick-thread")) {
+        subjective_c_condvar_destroy(g_tick_wait_cond);
+        subjective_c_mutex_destroy(g_tick_wait_mutex);
+        g_tick_wait_cond = NULL;
+        g_tick_wait_mutex = NULL;
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
         host_sound_throw_init_failure("tick-thread", -1);
         return;
     }
 
     atomic_store_explicit(&g_tick_thread_running, true, memory_order_release);
-    if (subjective_c_pthread_create_named(&g_tick_thread, NULL, host_tick_thread_main, NULL, "sound-tick") != 0) {
+    SubjectiveCThreadConfig cfg = {
+        .name = "sound-tick",
+        .stack_bytes = 0u,
+        .priority = 0,
+    };
+    g_tick_thread = subjective_c_thread_create(host_tick_thread_main, NULL, &cfg);
+    if (!g_tick_thread) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
+        subjective_c_condvar_destroy(g_tick_wait_cond);
+        subjective_c_mutex_destroy(g_tick_wait_mutex);
+        g_tick_wait_cond = NULL;
+        g_tick_wait_mutex = NULL;
         host_sound_throw_init_failure("tick-thread", -1);
     }
     sound_tick_start();
@@ -708,11 +743,17 @@ void sound_backend_shutdown(void) {
 #ifndef TINY_CLJ_TEST_RUNNER
     if (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
-        pthread_mutex_lock(&g_tick_wait_mutex);
-        pthread_cond_broadcast(&g_tick_wait_cond);
-        pthread_mutex_unlock(&g_tick_wait_mutex);
-        (void)pthread_join(g_tick_thread, NULL);
+        subjective_c_mutex_lock(g_tick_wait_mutex);
+        subjective_c_condvar_broadcast(g_tick_wait_cond);
+        subjective_c_mutex_unlock(g_tick_wait_mutex);
+        (void)subjective_c_thread_join(g_tick_thread);
     }
+    subjective_c_thread_destroy(g_tick_thread);
+    subjective_c_condvar_destroy(g_tick_wait_cond);
+    subjective_c_mutex_destroy(g_tick_wait_mutex);
+    g_tick_thread = NULL;
+    g_tick_wait_cond = NULL;
+    g_tick_wait_mutex = NULL;
 #endif
 
     host_sound_dispose_unit();
@@ -753,9 +794,9 @@ void sound_tick_start(void) {
         atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
         atomic_store_explicit(&g_sound_running, true, memory_order_release);
 #ifndef TINY_CLJ_TEST_RUNNER
-        pthread_mutex_lock(&g_tick_wait_mutex);
-        pthread_cond_broadcast(&g_tick_wait_cond);
-        pthread_mutex_unlock(&g_tick_wait_mutex);
+        subjective_c_mutex_lock(g_tick_wait_mutex);
+        subjective_c_condvar_broadcast(g_tick_wait_cond);
+        subjective_c_mutex_unlock(g_tick_wait_mutex);
 #endif
         return;
     }
@@ -763,9 +804,9 @@ void sound_tick_start(void) {
     atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
     atomic_store_explicit(&g_sound_running, true, memory_order_release);
 #ifndef TINY_CLJ_TEST_RUNNER
-    pthread_mutex_lock(&g_tick_wait_mutex);
-    pthread_cond_broadcast(&g_tick_wait_cond);
-    pthread_mutex_unlock(&g_tick_wait_mutex);
+    subjective_c_mutex_lock(g_tick_wait_mutex);
+    subjective_c_condvar_broadcast(g_tick_wait_cond);
+    subjective_c_mutex_unlock(g_tick_wait_mutex);
 #endif
 }
 
@@ -792,9 +833,9 @@ void sound_tick_kick(void) {
     atomic_store_explicit(&g_last_sound_kick_time_ns, now_ns, memory_order_release);
     atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
 #ifndef TINY_CLJ_TEST_RUNNER
-    pthread_mutex_lock(&g_tick_wait_mutex);
-    pthread_cond_broadcast(&g_tick_wait_cond);
-    pthread_mutex_unlock(&g_tick_wait_mutex);
+    subjective_c_mutex_lock(g_tick_wait_mutex);
+    subjective_c_condvar_broadcast(g_tick_wait_cond);
+    subjective_c_mutex_unlock(g_tick_wait_mutex);
 #endif
 }
 

@@ -480,7 +480,7 @@ TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
 TEST(test_breakout_runtime_startup_runloop_thread_start_is_idempotent) {
     EvalState *st_primary = NULL;
     EvalState *st_secondary = NULL;
-    pthread_t first_thread;
+    SubjectiveCThread *first_thread = NULL;
 
     runtime_init(&g_runtime);
     event_loop_init();
@@ -497,7 +497,7 @@ TEST(test_breakout_runtime_startup_runloop_thread_start_is_idempotent) {
 
     TEST_ASSERT_TRUE(start_runloop_thread(st_secondary));
     TEST_ASSERT_TRUE(g_runloop_thread.started);
-    TEST_ASSERT_TRUE(pthread_equal(first_thread, g_runloop_thread.thread));
+    TEST_ASSERT_EQUAL_PTR(first_thread, g_runloop_thread.thread);
     TEST_ASSERT_EQUAL_PTR(st_primary, g_runloop_thread.eval_state);
 
     stop_runloop_thread();
@@ -1399,7 +1399,8 @@ TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) 
 
 TEST(test_breakout_runtime_startup_redraw_overlay_keeps_last_non_empty_transfer_until_presented) {
     memset(&g_render_thread, 0, sizeof(g_render_thread));
-    TEST_ASSERT_EQUAL_INT(0, pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL));
+    g_render_thread.transfer_rects_mutex = subjective_c_mutex_create();
+    TEST_ASSERT_NOT_NULL(g_render_thread.transfer_rects_mutex);
 
     VgClipRect transfer_rect = {.x = 10, .y = 20, .w = 30, .h = 40};
     fx_store_last_transfer_result(5u, &transfer_rect, 1u, 123u);
@@ -1424,7 +1425,7 @@ TEST(test_breakout_runtime_startup_redraw_overlay_keeps_last_non_empty_transfer_
                                                              4u,
                                                              &overlay_frame_serial));
 
-    (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
+    subjective_c_mutex_destroy(g_render_thread.transfer_rects_mutex);
     memset(&g_render_thread, 0, sizeof(g_render_thread));
 }
 

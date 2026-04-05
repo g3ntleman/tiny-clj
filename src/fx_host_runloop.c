@@ -1,8 +1,6 @@
 #include "fx_host_runloop.h"
 
-#include <pthread.h>
 #include <stdio.h>
-#include <string.h>
 #include <time.h>
 
 #include "eval.h"
@@ -92,10 +90,10 @@ bool fx_drain_one_runloop_task(EvalState *st) {
     return ran;
 }
 
-static void *fx_runloop_thread_main(void *arg) {
+static void fx_runloop_thread_main(void *arg) {
     EvalState *st = (EvalState *)arg;
     if (!st) {
-        return NULL;
+        return;
     }
     /*
      * Ownership contract:
@@ -115,7 +113,6 @@ static void *fx_runloop_thread_main(void *arg) {
     /* Runloop thread owns its own autorelease pool state; drain/free before exit. */
     autorelease_pool_free();
     subjective_c_clear_interpreter_thread();
-    return NULL;
 }
 
 bool start_runloop_thread(EvalState *st) {
@@ -130,12 +127,13 @@ bool start_runloop_thread(EvalState *st) {
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, fx_runloop_monotonic_now_ns(), memory_order_relaxed);
     g_runloop_thread.eval_state = st;
     atomic_store_explicit(&g_runloop_thread.running, true, memory_order_release);
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, FX_RUNLOOP_STACK_SIZE);
-    int rc = subjective_c_pthread_create_named(&g_runloop_thread.thread, &attr, fx_runloop_thread_main, st, "interpreter");
-    pthread_attr_destroy(&attr);
-    if (rc != 0) {
+    SubjectiveCThreadConfig cfg = {
+        .name = "interpreter",
+        .stack_bytes = FX_RUNLOOP_STACK_SIZE,
+        .priority = 0,
+    };
+    g_runloop_thread.thread = subjective_c_thread_create(fx_runloop_thread_main, st, &cfg);
+    if (!g_runloop_thread.thread) {
         atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
         g_runloop_thread.eval_state = NULL;
         fx_runloop_liveness_reset();
@@ -152,10 +150,11 @@ void stop_runloop_thread(void) {
     }
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
     event_loop_wake();
-    (void)pthread_join(g_runloop_thread.thread, NULL);
+    (void)subjective_c_thread_join(g_runloop_thread.thread);
+    subjective_c_thread_destroy(g_runloop_thread.thread);
+    g_runloop_thread.thread = NULL;
     subjective_c_clear_interpreter_thread();
     g_runloop_thread.started = false;
-    memset(&g_runloop_thread.thread, 0, sizeof(pthread_t));
     g_runloop_thread.eval_state = NULL;
     fx_runloop_liveness_reset();
 }

@@ -131,6 +131,38 @@ static char *read_scene_header_source(size_t *out_len) {
     return NULL;
 }
 
+static char *read_fx_host_app_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/fx_host_app.c",
+        "../src/fx_host_app.c",
+        "../../src/fx_host_app.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/fx_host_app.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_sound_backend_host_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/sound_backend_host.c",
+        "../src/sound_backend_host.c",
+        "../../src/sound_backend_host.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/sound_backend_host.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
 TEST(test_panel_esp32_architecture_uses_board_profile_and_panel_adapter) {
     size_t len = 0;
     char *src = read_tinyclj_idf_display_source(&len);
@@ -308,6 +340,48 @@ TEST(test_panel_esp32_architecture_slot_tracker_uses_subjective_c_thread_primiti
                                  "expected slot tracker to store SubjectiveCMutex");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "pthread_mutex_t"),
                              "slot tracker should no longer expose pthread mutexes");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_host_render_thread_uses_subjective_c_thread_primitives) {
+    size_t len = 0;
+    char *src = read_fx_host_app_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"thread.h\""),
+                                 "expected host renderer to include subjective-c threading API");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCThread *thread;"),
+                                 "expected host renderer to store SubjectiveCThread");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCMutex *mutex;"),
+                                 "expected host renderer publish lock to use SubjectiveCMutex");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "subjective_c_thread_create"),
+                                 "expected host renderer to start via subjective_c_thread_create");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "subjective_c_pthread_create_named"),
+                             "host renderer should no longer create pthreads directly");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "pthread_mutex_t"),
+                             "host renderer should no longer expose raw pthread mutexes");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_host_sound_backend_uses_subjective_c_thread_primitives) {
+    size_t len = 0;
+    char *src = read_sound_backend_host_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"thread.h\""),
+                                 "expected host sound backend to include subjective-c threading API");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCThread *g_tick_thread"),
+                                 "expected host sound tick thread to use SubjectiveCThread");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCCondVar *g_tick_wait_cond"),
+                                 "expected host sound wait primitive to use SubjectiveCCondVar");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "subjective_c_condvar_wait"),
+                                 "expected host sound backend to wait via subjective_c_condvar_wait");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "subjective_c_pthread_create_named"),
+                             "host sound backend should no longer create pthreads directly");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "pthread_cond_t"),
+                             "host sound backend should no longer expose raw pthread condvars");
 
     CLJ_FREE(src);
 }

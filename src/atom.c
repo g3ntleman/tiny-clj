@@ -1,20 +1,18 @@
 #include "atom.h"
 #include "memory.h"
-#include "value.h"
 #include "eval.h"
 #include "exception.h"
-#include "runtime.h"
 #include "namespace.h"
 #include <stdlib.h>
 #include <stdbool.h>
 
 #if CLJ_ATOM_USE_MUTEX
 static inline void atom_lock(CljAtom *atom) {
-  (void)pthread_mutex_lock(&atom->mutex);
+  subjective_c_mutex_lock(atom->mutex);
 }
 
 static inline void atom_unlock(CljAtom *atom) {
-  (void)pthread_mutex_unlock(&atom->mutex);
+  subjective_c_mutex_unlock(atom->mutex);
 }
 #else
 static inline void atom_lock(CljAtom *atom) {
@@ -35,7 +33,11 @@ CljAtom *make_atom(ID value) {
 
   atom->base.type = CLJ_ATOM;
 #if CLJ_ATOM_USE_MUTEX
-  (void)pthread_mutex_init(&atom->mutex, NULL);
+  atom->mutex = subjective_c_mutex_create();
+  if (!atom->mutex) {
+    CLJ_FREE(atom);
+    return NULL;
+  }
 #endif
   // RETAIN handles nil and immediates safely (ignores them)
   atom->value = RETAIN(value);
@@ -197,6 +199,7 @@ void atom_destroy(CljAtom *atom) {
   if (!atom)
     return;
 #if CLJ_ATOM_USE_MUTEX
-  (void)pthread_mutex_destroy(&atom->mutex);
+  subjective_c_mutex_destroy(atom->mutex);
+  atom->mutex = NULL;
 #endif
 }

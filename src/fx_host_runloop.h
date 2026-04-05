@@ -3,9 +3,9 @@
 
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
 
 #include "namespace.h"
+#include "thread.h"
 
 typedef enum {
     FX_RUNLOOP_LIVENESS_HEALTHY = 0,
@@ -20,7 +20,7 @@ typedef struct {
 } ViewerRunloopLivenessSnapshot;
 
 typedef struct {
-    pthread_t thread;
+    SubjectiveCThread *thread;
     atomic_bool running;
     atomic_bool blocked_in_event_loop_wait;
     atomic_uint_fast64_t last_tick_ns;

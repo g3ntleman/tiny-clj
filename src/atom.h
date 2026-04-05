@@ -3,8 +3,8 @@
 
 #include "object.h"
 #include "common.h" // For CLJ_ASSERT
+#include "thread.h"
 #if defined(__APPLE__) || defined(__linux__)
-#include <pthread.h>
 #define CLJ_ATOM_USE_MUTEX 1
 #else
 #define CLJ_ATOM_USE_MUTEX 0
@@ -14,7 +14,7 @@
 typedef struct {
   CljObject base;
 #if CLJ_ATOM_USE_MUTEX
-  pthread_mutex_t mutex;
+  SubjectiveCMutex *mutex;
 #endif
   ID value; // The current value (can be any type, including NULL/nil)
 } CljAtom;
