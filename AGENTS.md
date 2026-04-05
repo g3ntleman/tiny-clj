@@ -41,6 +41,12 @@ Capture bug hypotheses as regression unit tests first, before (or alongside) the
 
 - Formulate the hypothesis so the test isolates the suspected mechanism (minimal repro, not just a large end-to-end test).
 
+## Task scope (mandatory)
+
+- Follow the **assigned task** only: deliver what the user asked for (investigation, test, change, etc.).
+- Do **not** add fixes, refactors, extra tests, or scope creep on your own initiative.
+- If you see **sensible follow-up work** beyond the brief (e.g. a fix after a failing repro test), **ask** whether to do it before implementing.
+
 ## Commit Messages
 
 Do not add any attribution to commits like

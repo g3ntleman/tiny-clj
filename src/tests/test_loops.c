@@ -269,6 +269,20 @@ TEST_SHARED(test_doseq_multiple_body_forms_execute_all) {
   TEST_ASSERT_EQUAL_INT(60, as_fixnum(vector_nth(vec, 1)));
 }
 
+// Regression: a later doseq body form may be (let [...] ...) referencing the loop
+// binding; the outer map-only env (doseq with ctx==NULL) must remain visible after
+// a fresh let frame is pushed.
+TEST_SHARED(test_doseq_second_body_let_sees_loop_binding) {
+  ID result = eval_string(
+      "(let [sum (atom 0)] "
+      "  (doseq [k [1 2]] "
+      "    nil "
+      "    (let [x k] (swap! sum + x))) "
+      "  @sum)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+}
+
 /* Target: 0 (raised to 64); TODO: find/fix remaining for LazySeq leak to lower again. */
 // Regression: for with vector binding (basic list comprehension)
 // Test uses doseq (side-effect) to avoid LazySeq ownership complexity

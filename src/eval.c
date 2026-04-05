@@ -26,7 +26,6 @@
 #include "memory_profiler.h"
 #include "value.h"
 #include "meta.h"
-#include "strings.h"
 #include "environment.h"
 #include "ast.h"
 #include "ast_canon.h"
@@ -1042,7 +1041,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
     // Use central symbol resolution function (DRY: handles environment stack and frames)
     if (ctx) {
-      CljPersistentMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
       // First check frame directly - frame lookups can legitimately return symbols
       // (e.g., macro parameters like (defmacro m [name] name) called with (m name))
       if (ctx->frame) {
@@ -1060,11 +1058,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
       }
 
-      // Then check env_stack and namespace.
-      // If there is no env_stack, we still must use ctx->env as the fallback environment
-      // (e.g. eval_body_vector_with_base_env tests pass bindings via ctx->env only).
-      CljPersistentMap *fallback_env = ctx_env_map ? ctx_env_map : ctx->env;
-      ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, NULL, body, get_eval_state(ctx, NULL));
+      // Then walk env_stack, then ctx->env (base map), then namespace.
+      // ctx->env must remain the fallback even when env_stack is non-empty:
+      // the top stack map may be a fresh let frame while outer bindings live
+      // only in ctx->env (e.g. doseq without EvalContext uses extend_env_with_binding).
+      ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx->env, NULL, body, get_eval_state(ctx, NULL));
       if (resolved_id != NOT_FOUND) {
         if (!resolved_id || resolved_id == SYM_NIL) {
           return NULL;
