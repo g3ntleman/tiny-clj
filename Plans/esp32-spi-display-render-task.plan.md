@@ -52,8 +52,8 @@ isProject: false
 
 - `thread_local.c` wird in diesem Plan als `thread.c` gefuehrt.
 - `thread_local.h` bleibt der TLS-Headername.
-- Die fruehere Arbeitsbezeichnung `tiny_thread.*` ist final als
-  `subjective-c/thread.h` + `subjective-c/thread.c` umgesetzt.
+- Die portable Thread-API ist konsolidiert unter
+  `subjective-c/thread.h` + `subjective-c/thread.c`.
 
 ### Status 2026-04-04
 
@@ -76,7 +76,7 @@ isProject: false
   `subjective-c/CMakeLists.txt`, `esp32-idf/components/subjective-c/CMakeLists.txt`,
   `esp32-idf/main/CMakeLists.txt`.
 - Architektur-Contract-Tests wurden erweitert, neue Unit-Tests hinzugefuegt:
-  `src/tests/test_tiny_thread.c`, `src/tests/test_render_driver.c`.
+  `src/tests/test_subjective_c_thread.c`, `src/tests/test_render_driver.c`.
 - Verifiziert: `./build/unit-tests --quiet` → `2149 Tests, 0 Failures, 8 Ignored`.
 
 ### Schicht-Modell
@@ -135,41 +135,41 @@ FreeRTOS-Semaphoren statt busy-poll. Das allein rechtfertigt die Abstraktion.
 
 ## Step 1 (RED) — Unit-Tests fuer Thread-Abstraktion
 
-**Neue Datei:** `src/tests/test_tiny_thread.c`
+**Neue Datei:** `src/tests/test_subjective_c_thread.c`
 
 ### Thread-Tests
 
 ```
-TEST(test_tiny_thread_create_join)
+TEST(test_subjective_c_thread_create_join)
   Thread erstellen, Funktion setzt Flag, join → Flag gesetzt
 
-TEST(test_tiny_thread_create_with_name)
+TEST(test_subjective_c_thread_create_with_name)
   Thread mit Name erstellen → kein Crash (Name ist best-effort)
 ```
 
 ### Mutex-Tests
 
 ```
-TEST(test_tiny_mutex_lock_unlock)
+TEST(test_subjective_c_mutex_lock_unlock)
   Lock → Unlock → kein Deadlock
 
-TEST(test_tiny_mutex_trylock_succeeds_when_free)
+TEST(test_subjective_c_mutex_trylock_succeeds_when_free)
   Trylock auf freiem Mutex → true
 
-TEST(test_tiny_mutex_trylock_fails_when_held)
+TEST(test_subjective_c_mutex_trylock_fails_when_held)
   Thread A lockt, Thread B trylock → false
 ```
 
 ### CondVar-Tests
 
 ```
-TEST(test_tiny_condvar_signal_wakes_waiter)
+TEST(test_subjective_c_condvar_signal_wakes_waiter)
   Thread A wartet, Thread B signalisiert → A wacht auf
 
-TEST(test_tiny_condvar_wait_timeout)
+TEST(test_subjective_c_condvar_wait_timeout)
   Warten mit 10ms Timeout, kein Signal → kehrt nach ~10ms zurueck
 
-TEST(test_tiny_condvar_signal_before_wait)
+TEST(test_subjective_c_condvar_signal_before_wait)
   Signal vor Wait → naechster Wait kehrt sofort zurueck
   (oder nicht — je nach Semantik. Dokumentieren.)
 ```
@@ -180,16 +180,15 @@ TEST(test_tiny_condvar_signal_before_wait)
 
 ## Step 2 (GREEN) — Thread-Abstraktion implementieren
 
-**Neue Dateien:**
-- `src/tiny_thread.h`
-- `src/tiny_thread_posix.c`
-- `src/tiny_thread_freertos.c`
+**Neue Dateien (Ist-Stand, ein shared Backend):**
+- `subjective-c/src/subjective-c/thread.h`
+- `subjective-c/src/thread.c`
 
-### tiny_thread.h
+### subjective-c/thread.h (Entwurfs-Skizze; final im Repo)
 
 ```c
-#ifndef TINY_CLJ_TINY_THREAD_H
-#define TINY_CLJ_TINY_THREAD_H
+#ifndef SUBJECTIVE_C_THREAD_H
+#define SUBJECTIVE_C_THREAD_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -197,41 +196,41 @@ TEST(test_tiny_condvar_signal_before_wait)
 
 /* --- Thread --- */
 
-typedef struct TinyThread TinyThread;
+typedef struct SubjectiveCThread SubjectiveCThread;
 
 typedef struct {
     const char *name;           // best-effort, kann NULL sein
     size_t stack_bytes;         // 0 = plattform-default
     int priority;               // plattform-spezifisch; 0 = default
-} TinyThreadConfig;
+} SubjectiveCThreadConfig;
 
-TinyThread *tiny_thread_create(void (*fn)(void *arg), void *arg,
-                               const TinyThreadConfig *config);
-bool tiny_thread_join(TinyThread *t);    // blockiert bis Thread endet
-void tiny_thread_destroy(TinyThread *t); // nach join: Ressourcen freigeben
+SubjectiveCThread *subjective_c_thread_create(void (*fn)(void *arg), void *arg,
+                               const SubjectiveCThreadConfig *config);
+bool subjective_c_thread_join(SubjectiveCThread *t);    // blockiert bis Thread endet
+void subjective_c_thread_destroy(SubjectiveCThread *t); // nach join: Ressourcen freigeben
 
 /* --- Mutex --- */
 
-typedef struct TinyMutex TinyMutex;
+typedef struct SubjectiveCMutex SubjectiveCMutex;
 
-TinyMutex *tiny_mutex_create(void);
-void tiny_mutex_destroy(TinyMutex *m);
-void tiny_mutex_lock(TinyMutex *m);
-void tiny_mutex_unlock(TinyMutex *m);
-bool tiny_mutex_trylock(TinyMutex *m);   // true = lock erhalten
+SubjectiveCMutex *subjective_c_mutex_create(void);
+void subjective_c_mutex_destroy(SubjectiveCMutex *m);
+void subjective_c_mutex_lock(SubjectiveCMutex *m);
+void subjective_c_mutex_unlock(SubjectiveCMutex *m);
+bool subjective_c_mutex_trylock(SubjectiveCMutex *m);   // true = lock erhalten
 
 /* --- CondVar --- */
 
-typedef struct TinyCondVar TinyCondVar;
+typedef struct SubjectiveCCondVar SubjectiveCCondVar;
 
-TinyCondVar *tiny_condvar_create(void);
-void tiny_condvar_destroy(TinyCondVar *cv);
-void tiny_condvar_signal(TinyCondVar *cv);
-void tiny_condvar_broadcast(TinyCondVar *cv);
+SubjectiveCCondVar *subjective_c_condvar_create(void);
+void subjective_c_condvar_destroy(SubjectiveCCondVar *cv);
+void subjective_c_condvar_signal(SubjectiveCCondVar *cv);
+void subjective_c_condvar_broadcast(SubjectiveCCondVar *cv);
 
 // Wartet bis signal/broadcast oder timeout_ms abgelaufen.
 // UINT32_MAX = unendlich. Returniert true bei Signal, false bei Timeout.
-bool tiny_condvar_wait(TinyCondVar *cv, TinyMutex *m, uint32_t timeout_ms);
+bool subjective_c_condvar_wait(SubjectiveCCondVar *cv, SubjectiveCMutex *m, uint32_t timeout_ms);
 
 #endif
 ```
@@ -239,49 +238,49 @@ bool tiny_condvar_wait(TinyCondVar *cv, TinyMutex *m, uint32_t timeout_ms);
 ### Posix-Backend (Skizze)
 
 ```c
-// tiny_thread_posix.c
-struct TinyThread {
+// thread.c (host branch)
+struct SubjectiveCThread {
     pthread_t handle;
     void (*fn)(void *);
     void *arg;
     bool joined;
 };
 
-struct TinyMutex {
+struct SubjectiveCMutex {
     pthread_mutex_t handle;
 };
 
-struct TinyCondVar {
+struct SubjectiveCCondVar {
     pthread_cond_t handle;
 };
 ```
 
-Direkte 1:1-Abbildung auf pthreads. `tiny_condvar_wait` mit
+Direkte 1:1-Abbildung auf pthreads. `subjective_c_condvar_wait` mit
 `pthread_cond_timedwait` + Deadline-Berechnung.
 
 ### FreeRTOS-Backend (Skizze)
 
 ```c
-// tiny_thread_freertos.c
-struct TinyThread {
+// thread.c (esp32 branch)
+struct SubjectiveCThread {
     TaskHandle_t handle;
     void (*fn)(void *);
     void *arg;
     SemaphoreHandle_t done_sem;  // signalisiert Thread-Ende fuer join
 };
 
-struct TinyMutex {
+struct SubjectiveCMutex {
     SemaphoreHandle_t handle;    // xSemaphoreCreateMutex()
 };
 
-struct TinyCondVar {
+struct SubjectiveCCondVar {
     SemaphoreHandle_t handle;    // xSemaphoreCreateBinary()
 };
 ```
 
-`tiny_thread_join`: wartet auf `done_sem`.
-`tiny_condvar_wait`: `xSemaphoreTake(cv->handle, pdMS_TO_TICKS(timeout_ms))`.
-`tiny_condvar_signal`: `xSemaphoreGive(cv->handle)`.
+`subjective_c_thread_join`: wartet auf `done_sem`.
+`subjective_c_condvar_wait`: `xSemaphoreTake(cv->handle, pdMS_TO_TICKS(timeout_ms))`.
+`subjective_c_condvar_signal`: `xSemaphoreGive(cv->handle)`.
 
 **Design-Entscheidung:** Heap-Allokation (`CLJ_MALLOC`) fuer die opaken Structs.
 Alternativ: Inline-Structs mit `#ifdef`. Heap ist einfacher und die Objekte
@@ -313,30 +312,30 @@ typedef struct {
 ```c
 typedef struct {
     // ...
-    TinyMutex *mutex;
-    TinyCondVar *cond;
+    SubjectiveCMutex *mutex;
+    SubjectiveCCondVar *cond;
 } VgSlotChangeTracker;
 ```
 
 - `#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD` entfaellt komplett
 - `#include <pthread.h>` in `scene.h` entfaellt
-- `vg_slot_change_tracker_init()` ruft `tiny_mutex_create()` + `tiny_condvar_create()`
+- `vg_slot_change_tracker_init()` ruft `subjective_c_mutex_create()` + `subjective_c_condvar_create()`
 - `vg_slot_change_tracker_wait_for_changes()` wird zu einer einzigen Implementierung:
 
 ```c
 uint32_t vg_slot_change_tracker_wait_for_changes(...) {
-    tiny_mutex_lock(tracker->mutex);
+    subjective_c_mutex_lock(tracker->mutex);
     uint32_t changed = snapshot_mask(...);
     if (changed == 0u && timeout_ms > 0u) {
-        (void)tiny_condvar_wait(tracker->cond, tracker->mutex, timeout_ms);
+        (void)subjective_c_condvar_wait(tracker->cond, tracker->mutex, timeout_ms);
         changed = snapshot_mask(...);
     }
-    tiny_mutex_unlock(tracker->mutex);
+    subjective_c_mutex_unlock(tracker->mutex);
     return changed;
 }
 ```
 
-**Kein busy-poll-Fallback mehr.** Auf ESP32 nutzt `tiny_condvar_wait` native
+**Kein busy-poll-Fallback mehr.** Auf ESP32 nutzt `subjective_c_condvar_wait` native
 FreeRTOS-Semaphoren mit echtem Blocking.
 
 **Akzeptanzkriterium:**
@@ -392,7 +391,7 @@ TEST(test_render_driver_start_stop_cycle)
 #include "panel.h"
 #include "vector_scene_graph.h"
 #include "scene.h"
-#include "tiny_thread.h"
+#include "thread.h"
 
 typedef struct {
     // Konfiguration (vom Caller gesetzt vor start)
@@ -410,7 +409,7 @@ typedef struct {
     VgRenderSlotState *slot_states;
     uint32_t *seen_generations;
     uint32_t animated_slots_mask;
-    TinyThread *thread;
+    SubjectiveCThread *thread;
     volatile bool running;
 } VgRenderDriver;
 
@@ -426,7 +425,7 @@ int vg_render_driver_step(VgRenderDriver *driver,
                           VgSlotChangeTracker *tracker,
                           const ID *scene_snapshots);
 
-// Thread starten/stoppen (nutzt tiny_thread intern).
+// Thread starten/stoppen (nutzt subjective-c/thread intern).
 bool vg_render_driver_start(VgRenderDriver *driver);
 bool vg_render_driver_stop(VgRenderDriver *driver);
 
@@ -446,12 +445,12 @@ static void render_driver_thread_main(void *arg) {
 bool vg_render_driver_start(VgRenderDriver *driver) {
     if (!driver || driver->thread) return false;
     driver->running = true;
-    TinyThreadConfig cfg = {
+    SubjectiveCThreadConfig cfg = {
         .name = driver->thread_name,
         .stack_bytes = driver->thread_stack_bytes,
         .priority = driver->thread_priority,
     };
-    driver->thread = tiny_thread_create(render_driver_thread_main, driver, &cfg);
+    driver->thread = subjective_c_thread_create(render_driver_thread_main, driver, &cfg);
     return driver->thread != NULL;
 }
 
@@ -460,8 +459,8 @@ bool vg_render_driver_stop(VgRenderDriver *driver) {
     driver->running = false;
     // Slot-Tracker wecken, damit der Thread aufwacht
     // ...
-    tiny_thread_join(driver->thread);
-    tiny_thread_destroy(driver->thread);
+    subjective_c_thread_join(driver->thread);
+    subjective_c_thread_destroy(driver->thread);
     driver->thread = NULL;
     return true;
 }
@@ -486,8 +485,8 @@ TEST(test_panel_esp32_architecture_run_registers_renderer_lifecycle)
 TEST(test_panel_esp32_architecture_display_configures_orientation)
   → tinyclj_idf_display.c enthaelt "vg_panel_set_orientation"
 
-TEST(test_panel_esp32_architecture_slot_tracker_uses_tiny_thread)
-  → scene.h enthaelt "tiny_thread.h" oder "TinyMutex"
+TEST(test_panel_esp32_architecture_slot_tracker_uses_subjective_c_thread)
+  → scene.h enthaelt "thread.h" oder "SubjectiveCMutex"
   → scene.h enthaelt NICHT "pthread_mutex_t"
 ```
 
@@ -571,7 +570,7 @@ set(TINY_FX_SOURCES
 )
 
 # Thread-Abstraktion (immer, nicht nur FX)
-list(APPEND TINYCLJ_SOURCES src/tiny_thread_posix.c)
+list(APPEND TINYCLJ_SOURCES "${TINYCLJ_SUBJECTIVE_C_SOURCE_DIR}/src/thread.c")
 ```
 
 ### ESP32-IDF Component (`esp32-idf/components/tinyclj/CMakeLists.txt`)
@@ -583,7 +582,7 @@ set(TINYCLJ_FX_SRCS
 )
 
 # Thread-Abstraktion
-list(APPEND TINYCLJ_CORE_SRCS "${TINYCLJ_SRC_DIR}/tiny_thread_freertos.c")
+list(APPEND TINYCLJ_CORE_SRCS "${TINYCLJ_SUBJECTIVE_C_SOURCE_DIR}/src/thread.c")
 ```
 
 ### ESP32-IDF Main (`esp32-idf/main/CMakeLists.txt`)
@@ -657,7 +656,7 @@ TEST(test_boot_screen_covers_full_display)
 |---|---|---|
 | `subjective-c/src/subjective-c/thread.h` | NEU (Thread-API) | ja |
 | `subjective-c/src/thread.c` | NEU (host+esp32 backend) | ja |
-| `src/tests/test_tiny_thread.c` | NEU | ja |
+| `src/tests/test_subjective_c_thread.c` | NEU | ja |
 | `src/render_driver.h` | NEU | ja |
 | `src/render_driver.c` | NEU | ja |
 | `src/tests/test_render_driver.c` | NEU | ja |

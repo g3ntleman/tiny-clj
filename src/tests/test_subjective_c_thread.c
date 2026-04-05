@@ -9,10 +9,10 @@ typedef struct {
     bool trylock_result;
     bool entered_wait;
     bool woke;
-} TinyThreadTestContext;
+} SubjectiveCThreadTestContext;
 
-static void tiny_thread_mark_ran(void *arg) {
-    TinyThreadTestContext *ctx = (TinyThreadTestContext *)arg;
+static void subjective_c_thread_test_mark_ran(void *arg) {
+    SubjectiveCThreadTestContext *ctx = (SubjectiveCThreadTestContext *)arg;
     if (!ctx || !ctx->mutex) {
         return;
     }
@@ -21,8 +21,8 @@ static void tiny_thread_mark_ran(void *arg) {
     subjective_c_mutex_unlock(ctx->mutex);
 }
 
-static void tiny_thread_trylock_once(void *arg) {
-    TinyThreadTestContext *ctx = (TinyThreadTestContext *)arg;
+static void subjective_c_thread_test_trylock_once(void *arg) {
+    SubjectiveCThreadTestContext *ctx = (SubjectiveCThreadTestContext *)arg;
     if (!ctx || !ctx->mutex) {
         return;
     }
@@ -32,8 +32,8 @@ static void tiny_thread_trylock_once(void *arg) {
     }
 }
 
-static void tiny_thread_wait_for_signal(void *arg) {
-    TinyThreadTestContext *ctx = (TinyThreadTestContext *)arg;
+static void subjective_c_thread_test_wait_for_signal(void *arg) {
+    SubjectiveCThreadTestContext *ctx = (SubjectiveCThreadTestContext *)arg;
     if (!ctx || !ctx->mutex || !ctx->condvar) {
         return;
     }
@@ -44,20 +44,20 @@ static void tiny_thread_wait_for_signal(void *arg) {
     subjective_c_mutex_unlock(ctx->mutex);
 }
 
-static void tiny_thread_sleep_briefly(void *arg) {
+static void subjective_c_thread_test_sleep_briefly(void *arg) {
     (void)arg;
     subjective_c_thread_sleep_ms(20u);
 }
 
-TEST(test_tiny_thread_create_join) {
+TEST(test_subjective_c_thread_create_join) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     TEST_ASSERT_NOT_NULL(mutex);
 
-    TinyThreadTestContext ctx = {
+    SubjectiveCThreadTestContext ctx = {
         .mutex = mutex,
     };
 
-    SubjectiveCThread *thread = subjective_c_thread_create(tiny_thread_mark_ran,
+    SubjectiveCThread *thread = subjective_c_thread_create(subjective_c_thread_test_mark_ran,
                                                             &ctx,
                                                             NULL);
     TEST_ASSERT_NOT_NULL(thread);
@@ -72,20 +72,20 @@ TEST(test_tiny_thread_create_join) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_thread_create_with_name) {
+TEST(test_subjective_c_thread_create_with_name) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     TEST_ASSERT_NOT_NULL(mutex);
 
-    TinyThreadTestContext ctx = {
+    SubjectiveCThreadTestContext ctx = {
         .mutex = mutex,
     };
     SubjectiveCThreadConfig config = {
-        .name = "tiny-thread-test",
+        .name = "subjective-c-thread-test",
         .stack_bytes = 0u,
         .priority = 0,
     };
 
-    SubjectiveCThread *thread = subjective_c_thread_create(tiny_thread_mark_ran,
+    SubjectiveCThread *thread = subjective_c_thread_create(subjective_c_thread_test_mark_ran,
                                                             &ctx,
                                                             &config);
     TEST_ASSERT_NOT_NULL(thread);
@@ -100,7 +100,7 @@ TEST(test_tiny_thread_create_with_name) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_mutex_lock_unlock) {
+TEST(test_subjective_c_mutex_lock_unlock) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     TEST_ASSERT_NOT_NULL(mutex);
 
@@ -110,7 +110,7 @@ TEST(test_tiny_mutex_lock_unlock) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_mutex_trylock_succeeds_when_free) {
+TEST(test_subjective_c_mutex_trylock_succeeds_when_free) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     TEST_ASSERT_NOT_NULL(mutex);
 
@@ -120,16 +120,16 @@ TEST(test_tiny_mutex_trylock_succeeds_when_free) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_mutex_trylock_fails_when_held) {
+TEST(test_subjective_c_mutex_trylock_fails_when_held) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     TEST_ASSERT_NOT_NULL(mutex);
 
-    TinyThreadTestContext ctx = {
+    SubjectiveCThreadTestContext ctx = {
         .mutex = mutex,
     };
 
     subjective_c_mutex_lock(mutex);
-    SubjectiveCThread *thread = subjective_c_thread_create(tiny_thread_trylock_once,
+    SubjectiveCThread *thread = subjective_c_thread_create(subjective_c_thread_test_trylock_once,
                                                             &ctx,
                                                             NULL);
     TEST_ASSERT_NOT_NULL(thread);
@@ -142,18 +142,18 @@ TEST(test_tiny_mutex_trylock_fails_when_held) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_condvar_signal_wakes_waiter) {
+TEST(test_subjective_c_condvar_signal_wakes_waiter) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     SubjectiveCCondVar *condvar = subjective_c_condvar_create();
     TEST_ASSERT_NOT_NULL(mutex);
     TEST_ASSERT_NOT_NULL(condvar);
 
-    TinyThreadTestContext ctx = {
+    SubjectiveCThreadTestContext ctx = {
         .mutex = mutex,
         .condvar = condvar,
     };
 
-    SubjectiveCThread *thread = subjective_c_thread_create(tiny_thread_wait_for_signal,
+    SubjectiveCThread *thread = subjective_c_thread_create(subjective_c_thread_test_wait_for_signal,
                                                             &ctx,
                                                             NULL);
     TEST_ASSERT_NOT_NULL(thread);
@@ -175,7 +175,7 @@ TEST(test_tiny_condvar_signal_wakes_waiter) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_condvar_wait_timeout) {
+TEST(test_subjective_c_condvar_wait_timeout) {
     SubjectiveCMutex *mutex = subjective_c_mutex_create();
     SubjectiveCCondVar *condvar = subjective_c_condvar_create();
     TEST_ASSERT_NOT_NULL(mutex);
@@ -190,12 +190,12 @@ TEST(test_tiny_condvar_wait_timeout) {
     subjective_c_mutex_destroy(mutex);
 }
 
-TEST(test_tiny_thread_stack_high_water_mark_null_is_zero) {
+TEST(test_subjective_c_thread_stack_high_water_mark_null_is_zero) {
     TEST_ASSERT_EQUAL_UINT64(0u, (uint64_t)subjective_c_thread_stack_high_water_mark_bytes(NULL));
 }
 
-TEST(test_tiny_thread_stack_high_water_mark_reports_platform_value) {
-    SubjectiveCThread *thread = subjective_c_thread_create(tiny_thread_sleep_briefly, NULL, NULL);
+TEST(test_subjective_c_thread_stack_high_water_mark_reports_platform_value) {
+    SubjectiveCThread *thread = subjective_c_thread_create(subjective_c_thread_test_sleep_briefly, NULL, NULL);
     TEST_ASSERT_NOT_NULL(thread);
 
     subjective_c_thread_sleep_ms(1u);
