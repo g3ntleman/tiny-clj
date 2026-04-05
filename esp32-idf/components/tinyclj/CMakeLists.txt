@@ -86,6 +86,7 @@ set(TINYCLJ_FX_SRCS
   "${TINYCLJ_SRC_DIR}/tiny_fx_gfx.c"
   "${TINYCLJ_SRC_DIR}/vector_scene_graph.c"
   "${TINYCLJ_SRC_DIR}/renderer_lifecycle.c"
+  "${TINYCLJ_SRC_DIR}/render_driver.c"
   "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
 )
 

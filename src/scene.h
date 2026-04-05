@@ -5,14 +5,8 @@
 #include <stdint.h>
 
 #include "object.h"
+#include "thread.h"
 #include "vector_scene_graph.h"
-
-#if defined(__APPLE__) || defined(__linux__)
-#include <pthread.h>
-#define VG_SLOT_CHANGE_TRACKER_USE_PTHREAD 1
-#else
-#define VG_SLOT_CHANGE_TRACKER_USE_PTHREAD 0
-#endif
 
 #define VG_SLOT_CHANGE_TRACKER_MAX_SLOTS 32u
 
@@ -21,10 +15,8 @@ typedef struct {
     uint8_t _pad[3];
     uint64_t sequence;
     uint32_t generations[VG_SLOT_CHANGE_TRACKER_MAX_SLOTS];
-#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-#endif
+    SubjectiveCMutex *mutex;
+    SubjectiveCCondVar *cond;
 } VgSlotChangeTracker;
 
 typedef struct {

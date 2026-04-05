@@ -108,6 +108,7 @@ bool tinyclj_idf_display_init(TinycljIdfDisplay *display) {
     vg_esp_lcd_panel_init_handle(&display->panel, panel_handle);
     if (!vg_panel_reset(&display->panel.panel) ||
         !vg_panel_init(&display->panel.panel) ||
+        !vg_panel_set_orientation(&display->panel.panel, false, false, true) ||
         !vg_panel_set_display_enabled(&display->panel.panel, true)) {
         return false;
     }

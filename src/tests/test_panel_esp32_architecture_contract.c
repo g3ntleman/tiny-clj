@@ -83,6 +83,54 @@ static char *read_tinyclj_idf_compile_flags_source(size_t *out_len) {
     return NULL;
 }
 
+static char *read_tinyclj_idf_renderer_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/main/tinyclj_idf_renderer.c",
+        "../esp32-idf/main/tinyclj_idf_renderer.c",
+        "../../esp32-idf/main/tinyclj_idf_renderer.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/main/tinyclj_idf_renderer.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_tinyclj_idf_run_source(size_t *out_len) {
+    const char *candidates[] = {
+        "esp32-idf/main/tinyclj_idf_run.c",
+        "../esp32-idf/main/tinyclj_idf_run.c",
+        "../../esp32-idf/main/tinyclj_idf_run.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate esp32-idf/main/tinyclj_idf_run.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_scene_header_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/scene.h",
+        "../src/scene.h",
+        "../../src/scene.h"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/scene.h (tried cwd-relative candidates)");
+    return NULL;
+}
+
 TEST(test_panel_esp32_architecture_uses_board_profile_and_panel_adapter) {
     size_t len = 0;
     char *src = read_tinyclj_idf_display_source(&len);
@@ -187,6 +235,79 @@ TEST(test_panel_esp32_architecture_enables_sound_for_tiny_clj_product_builds) {
                                  "expected product compile flags to keep sound enabled");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "idf_build_set_property(COMPILE_DEFINITIONS \"TINYCLJ_SOUND_ENABLED=1\" APPEND)"),
                                  "expected compile definitions to export TINYCLJ_SOUND_ENABLED=1");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_renderer_uses_shared_render_driver) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_renderer_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"render_driver.h\""),
+                                 "expected ESP renderer wiring to include shared render driver API");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "vg_render_driver_start"),
+                                 "expected renderer lifecycle start callback to call vg_render_driver_start");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "tiny_renderer_lifecycle_set_callbacks"),
+                                 "expected renderer module to register lifecycle callbacks");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_renderer_exposes_tuning_baselines) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_renderer_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#define TINYCLJ_RENDER_STRIPE_ROWS 30"),
+                                 "expected ESP renderer to default stripe rows to calibrated baseline (30)");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "TINYCLJ_RENDER_THREAD_STACK_BYTES"),
+                                 "expected ESP renderer to expose a configurable render-task stack size");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "TINYCLJ_RENDER_THREAD_PRIORITY"),
+                                 "expected ESP renderer to expose a configurable render-task priority");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "__attribute__((aligned(4)))"),
+                                 "expected stripe pixel buffer to stay DMA-aligned");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "stack_high_water_mark_bytes"),
+                                 "expected stop callback to report render-task stack high-water mark");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_run_registers_renderer_lifecycle) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_run_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"tinyclj_idf_renderer.h\""),
+                                 "expected run entry to include the renderer wiring header");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "tinyclj_idf_renderer_init"),
+                                 "expected run entry to initialize renderer wiring before REPL loop");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_display_configures_orientation) {
+    size_t len = 0;
+    char *src = read_tinyclj_idf_display_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "vg_panel_set_orientation"),
+                                 "expected display bootstrap to configure panel orientation");
+
+    CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_slot_tracker_uses_subjective_c_thread_primitives) {
+    size_t len = 0;
+    char *src = read_scene_header_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "#include \"thread.h\""),
+                                 "expected slot tracker to include subjective-c threading API");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCMutex *"),
+                                 "expected slot tracker to store SubjectiveCMutex");
+    TEST_ASSERT_NULL_MESSAGE(strstr(src, "pthread_mutex_t"),
+                             "slot tracker should no longer expose pthread mutexes");
 
     CLJ_FREE(src);
 }

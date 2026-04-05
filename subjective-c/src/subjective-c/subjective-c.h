@@ -14,6 +14,7 @@
 #include <subjective-c/hashset.h>
 #include <subjective-c/byte_array.h>
 #include <subjective-c/kv_macros.h>
+#include <subjective-c/thread.h>
 #include <subjective-c/thread_local.h>
 
 int subjective_c_placeholder(void);

@@ -27,6 +27,7 @@ set(SUBJECTIVE_C_SOURCES
     src/vector.c
     src/mini_format.c
     src/exception.c
+    src/thread.c
     src/map.c
     src/record.c
     src/byte_array.c

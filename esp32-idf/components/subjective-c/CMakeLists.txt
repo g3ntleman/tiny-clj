@@ -10,6 +10,7 @@ idf_component_register(
     "../../../subjective-c/src/mini_format.c"
     "../../../subjective-c/src/vector.c"
     "../../../subjective-c/src/exception.c"
+    "../../../subjective-c/src/thread.c"
     "../../../subjective-c/src/map.c"
     "../../../subjective-c/src/record.c"
     "../../../subjective-c/src/byte_array.c"

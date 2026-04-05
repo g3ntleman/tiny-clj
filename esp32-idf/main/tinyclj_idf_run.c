@@ -15,6 +15,7 @@
 #include "tiny_clj.h"
 #if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
 #include "tinyclj_idf_display.h"
+#include "tinyclj_idf_renderer.h"
 #include "panel.h"
 #endif
 
@@ -167,6 +168,13 @@ void tinyclj_idf_start(void) {
         return;
     }
     subjective_c_register_interpreter_thread();
+
+#if defined(TINY_FX_ENABLED) && TINY_FX_ENABLED
+    TinycljIdfDisplay *display = tinyclj_idf_display_get();
+    if (display && tinyclj_idf_renderer_init(display)) {
+        (void)tinyclj_idf_renderer_show_boot_screen();
+    }
+#endif
 
     bool boot_root_loaded = true;
     bool boot_root_present = (resolve_path_to_bytes("/boot/root.edn") != NULL);

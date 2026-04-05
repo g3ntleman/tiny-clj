@@ -267,6 +267,7 @@ list(APPEND SOURCES
     src/vector_scene_graph.c
     src/scene.c
     src/renderer_lifecycle.c
+    src/render_driver.c
     src/rendered_state_snapshot.c
     src/fx_collision.c
     src/fx_spatial_scene_bridge.c
@@ -633,6 +634,7 @@ add_executable(unit-tests
     src/tests/test_macros.c
     src/tests/test_macro_expander_debug.c
     src/tests/test_threading_macros.c
+    src/tests/test_tiny_thread.c
     src/tests/test_predicates.c
     src/tests/test_require.c
     src/tests/test_require_perf.c
@@ -692,6 +694,7 @@ add_executable(unit-tests
     src/tests/test_main_entry.c
     src/tests/test_panel_api.c
     src/tests/test_panel_esp32_architecture_contract.c
+    src/tests/test_render_driver.c
     src/tests/test_records.c
     src/tests/test_runner_patterns.c
     src/tests/test_vector_scene_graph.c

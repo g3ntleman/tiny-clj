@@ -5,6 +5,7 @@ idf_component_register(
     "tinyclj_idf_main.c"
     "tinyclj_idf_run.c"
     "tinyclj_idf_display.c"
+    "tinyclj_idf_renderer.c"
   INCLUDE_DIRS
     "."
   REQUIRES
