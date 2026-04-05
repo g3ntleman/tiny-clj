@@ -1,4 +1,10 @@
-#include "tests_common.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../memory.h"
+#include "unity/src/unity.h"
+#include "test_registry.h"
 
 static char *read_text_file(const char *path, size_t *out_len) {
     if (out_len) *out_len = 0;
@@ -160,6 +166,38 @@ static char *read_sound_backend_host_source(size_t *out_len) {
         return read_text_file(candidates[i], out_len);
     }
     TEST_FAIL_MESSAGE("failed to locate src/sound_backend_host.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_fx_spatial_dispatch_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/fx_spatial_dispatch.c",
+        "../src/fx_spatial_dispatch.c",
+        "../../src/fx_spatial_dispatch.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/fx_spatial_dispatch.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
+static char *read_fx_spatial_scene_bridge_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/fx_spatial_scene_bridge.c",
+        "../src/fx_spatial_scene_bridge.c",
+        "../../src/fx_spatial_scene_bridge.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/fx_spatial_scene_bridge.c (tried cwd-relative candidates)");
     return NULL;
 }
 
@@ -329,7 +367,7 @@ TEST(test_panel_esp32_architecture_display_configures_orientation) {
     CLJ_FREE(src);
 }
 
-TEST(test_panel_esp32_architecture_slot_tracker_uses_subjective_c_thread_primitives) {
+TEST(test_panel_esp32_architecture_slot_tracker_uses_tread_primitives) {
     size_t len = 0;
     char *src = read_scene_header_source(&len);
     TEST_ASSERT_TRUE(len > 0);
@@ -344,7 +382,7 @@ TEST(test_panel_esp32_architecture_slot_tracker_uses_subjective_c_thread_primiti
     CLJ_FREE(src);
 }
 
-TEST(test_panel_esp32_architecture_host_render_thread_uses_subjective_c_thread_primitives) {
+TEST(test_panel_esp32_architecture_host_render_thread_uses_tread_primitives) {
     size_t len = 0;
     char *src = read_fx_host_app_source(&len);
     TEST_ASSERT_TRUE(len > 0);
@@ -355,8 +393,8 @@ TEST(test_panel_esp32_architecture_host_render_thread_uses_subjective_c_thread_p
                                  "expected host renderer to store SubjectiveCThread");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "SubjectiveCMutex *mutex;"),
                                  "expected host renderer publish lock to use SubjectiveCMutex");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "subjective_c_thread_create"),
-                                 "expected host renderer to start via subjective_c_thread_create");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "tread_create"),
+                                 "expected host renderer to start via tread_create");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "subjective_c_pthread_create_named"),
                              "host renderer should no longer create pthreads directly");
     TEST_ASSERT_NULL_MESSAGE(strstr(src, "pthread_mutex_t"),
@@ -365,7 +403,7 @@ TEST(test_panel_esp32_architecture_host_render_thread_uses_subjective_c_thread_p
     CLJ_FREE(src);
 }
 
-TEST(test_panel_esp32_architecture_host_sound_backend_uses_subjective_c_thread_primitives) {
+TEST(test_panel_esp32_architecture_host_sound_backend_uses_tread_primitives) {
     size_t len = 0;
     char *src = read_sound_backend_host_source(&len);
     TEST_ASSERT_TRUE(len > 0);
@@ -384,4 +422,30 @@ TEST(test_panel_esp32_architecture_host_sound_backend_uses_subjective_c_thread_p
                              "host sound backend should no longer expose raw pthread condvars");
 
     CLJ_FREE(src);
+}
+
+TEST(test_panel_esp32_architecture_collision_helpers_use_subjective_c_once) {
+    size_t len_dispatch = 0;
+    size_t len_scene = 0;
+    char *dispatch_src = read_fx_spatial_dispatch_source(&len_dispatch);
+    char *scene_src = read_fx_spatial_scene_bridge_source(&len_scene);
+    TEST_ASSERT_TRUE(len_dispatch > 0);
+    TEST_ASSERT_TRUE(len_scene > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(dispatch_src, "SubjectiveCOnce"),
+                                 "expected fx_spatial_dispatch to use SubjectiveCOnce");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(dispatch_src, "subjective_c_once_run"),
+                                 "expected fx_spatial_dispatch to initialize symbols via subjective_c_once_run");
+    TEST_ASSERT_NULL_MESSAGE(strstr(dispatch_src, "pthread_once"),
+                             "fx_spatial_dispatch should no longer use pthread_once directly");
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(scene_src, "SubjectiveCOnce"),
+                                 "expected fx_spatial_scene_bridge to use SubjectiveCOnce");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(scene_src, "subjective_c_once_run"),
+                                 "expected fx_spatial_scene_bridge to initialize symbols via subjective_c_once_run");
+    TEST_ASSERT_NULL_MESSAGE(strstr(scene_src, "pthread_once"),
+                             "fx_spatial_scene_bridge should no longer use pthread_once directly");
+
+    CLJ_FREE(dispatch_src);
+    CLJ_FREE(scene_src);
 }

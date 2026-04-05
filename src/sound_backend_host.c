@@ -722,7 +722,7 @@ void sound_backend_init(int voice_count) {
         .stack_bytes = 0u,
         .priority = 0,
     };
-    g_tick_thread = subjective_c_thread_create(host_tick_thread_main, NULL, &cfg);
+    g_tick_thread = tread_create(host_tick_thread_main, NULL, &cfg);
     if (!g_tick_thread) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
@@ -746,9 +746,9 @@ void sound_backend_shutdown(void) {
         subjective_c_mutex_lock(g_tick_wait_mutex);
         subjective_c_condvar_broadcast(g_tick_wait_cond);
         subjective_c_mutex_unlock(g_tick_wait_mutex);
-        (void)subjective_c_thread_join(g_tick_thread);
+        (void)tread_join(g_tick_thread);
     }
-    subjective_c_thread_destroy(g_tick_thread);
+    tread_destroy(g_tick_thread);
     subjective_c_condvar_destroy(g_tick_wait_cond);
     subjective_c_mutex_destroy(g_tick_wait_mutex);
     g_tick_thread = NULL;

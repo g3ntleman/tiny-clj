@@ -41,7 +41,7 @@ static IdSymbolCacheEntry g_fx_collision_dispatch_symbols[] = {
 };
 #define VC_DISPATCH_SYM_COUNT (sizeof(g_fx_collision_dispatch_symbols) / sizeof(g_fx_collision_dispatch_symbols[0]))
 
-static pthread_once_t g_fx_collision_dispatch_symbols_once = PTHREAD_ONCE_INIT;
+static SubjectiveCOnce g_fx_collision_dispatch_symbols_once = SUBJECTIVE_C_ONCE_INIT;
 
 static bool fx_collision_event_budget_available(void);
 
@@ -60,8 +60,8 @@ static void fx_collision_dispatch_symbols_init_once(void) {
 }
 
 static bool fx_collision_dispatch_symbols_ready(void) {
-    (void)pthread_once(&g_fx_collision_dispatch_symbols_once,
-                       fx_collision_dispatch_symbols_init_once);
+    subjective_c_once_run(&g_fx_collision_dispatch_symbols_once,
+                          fx_collision_dispatch_symbols_init_once);
     for (size_t i = 0; i < VC_DISPATCH_SYM_COUNT; i++) {
         if (!*g_fx_collision_dispatch_symbols[i].slot) {
             return false;

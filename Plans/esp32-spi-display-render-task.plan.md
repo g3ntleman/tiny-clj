@@ -60,7 +60,7 @@ isProject: false
 - Threading ist konsolidiert in `subjective-c`:
   `subjective-c/src/subjective-c/thread.h`, `subjective-c/src/thread.c`.
 - Thread-API wurde um Stack-Messung erweitert:
-  `subjective_c_thread_stack_high_water_mark_bytes(...)`.
+  `tread_stack_high_water_mark_bytes(...)`.
 - Slot-Tracker nutzt `SubjectiveCMutex *` / `SubjectiveCCondVar *` in `src/scene.h/.c`.
 - Shared Render-Driver ist umgesetzt: `src/render_driver.h/.c`.
 - ESP32-Wiring ist umgesetzt:
@@ -78,13 +78,16 @@ isProject: false
   `fx_host_runloop.c`, `event_loop.c` und `atom.c` nutzen jetzt
   ebenfalls `subjective-c/thread`-Primitiven statt direkter `pthread`
   Mutex/Cond/Thread-Handles.
+- Collision-Helfer nutzen jetzt ebenfalls die shared Abstraktion:
+  `fx_spatial_dispatch.c` und `fx_spatial_scene_bridge.c` verwenden
+  `SubjectiveCOnce`/`subjective_c_once_run` statt `pthread_once`.
 - CMake-Wiring aktualisiert:
   `CMakeLists.txt`, `esp32-idf/components/tinyclj/CMakeLists.txt`,
   `subjective-c/CMakeLists.txt`, `esp32-idf/components/subjective-c/CMakeLists.txt`,
   `esp32-idf/main/CMakeLists.txt`.
 - Architektur-Contract-Tests wurden erweitert, neue Unit-Tests hinzugefuegt:
   `src/tests/test_subjective_c_thread.c`, `src/tests/test_render_driver.c`.
-- Verifiziert: `./build/unit-tests --quiet` → `2149 Tests, 0 Failures, 8 Ignored`.
+- Verifiziert: `./build/unit-tests --quiet` → `2153 Tests, 0 Failures, 8 Ignored`.
 
 ### Schicht-Modell
 
@@ -147,10 +150,10 @@ FreeRTOS-Semaphoren statt busy-poll. Das allein rechtfertigt die Abstraktion.
 ### Thread-Tests
 
 ```
-TEST(test_subjective_c_thread_create_join)
+TEST(test_tread_create_join)
   Thread erstellen, Funktion setzt Flag, join → Flag gesetzt
 
-TEST(test_subjective_c_thread_create_with_name)
+TEST(test_tread_create_with_name)
   Thread mit Name erstellen → kein Crash (Name ist best-effort)
 ```
 
@@ -211,10 +214,10 @@ typedef struct {
     int priority;               // plattform-spezifisch; 0 = default
 } SubjectiveCThreadConfig;
 
-SubjectiveCThread *subjective_c_thread_create(void (*fn)(void *arg), void *arg,
+SubjectiveCThread *tread_create(void (*fn)(void *arg), void *arg,
                                const SubjectiveCThreadConfig *config);
-bool subjective_c_thread_join(SubjectiveCThread *t);    // blockiert bis Thread endet
-void subjective_c_thread_destroy(SubjectiveCThread *t); // nach join: Ressourcen freigeben
+bool tread_join(SubjectiveCThread *t);    // blockiert bis Thread endet
+void tread_destroy(SubjectiveCThread *t); // nach join: Ressourcen freigeben
 
 /* --- Mutex --- */
 
@@ -285,7 +288,7 @@ struct SubjectiveCCondVar {
 };
 ```
 
-`subjective_c_thread_join`: wartet auf `done_sem`.
+`tread_join`: wartet auf `done_sem`.
 `subjective_c_condvar_wait`: `xSemaphoreTake(cv->handle, pdMS_TO_TICKS(timeout_ms))`.
 `subjective_c_condvar_signal`: `xSemaphoreGive(cv->handle)`.
 
@@ -457,7 +460,7 @@ bool vg_render_driver_start(VgRenderDriver *driver) {
         .stack_bytes = driver->thread_stack_bytes,
         .priority = driver->thread_priority,
     };
-    driver->thread = subjective_c_thread_create(render_driver_thread_main, driver, &cfg);
+    driver->thread = tread_create(render_driver_thread_main, driver, &cfg);
     return driver->thread != NULL;
 }
 
@@ -466,8 +469,8 @@ bool vg_render_driver_stop(VgRenderDriver *driver) {
     driver->running = false;
     // Slot-Tracker wecken, damit der Thread aufwacht
     // ...
-    subjective_c_thread_join(driver->thread);
-    subjective_c_thread_destroy(driver->thread);
+    tread_join(driver->thread);
+    tread_destroy(driver->thread);
     driver->thread = NULL;
     return true;
 }
@@ -639,7 +642,7 @@ TEST(test_boot_screen_covers_full_display)
 ### ESP32-Optimierung
 - [x] Stripe-Hoehe kalibriert (default `TINYCLJ_RENDER_STRIPE_ROWS = 30`)
 - [x] DMA-Alignment des Stripe-Buffers (`__attribute__((aligned(4)))`)
-- [x] Task-Stack-Messung integriert (`subjective_c_thread_stack_high_water_mark_bytes`,
+- [x] Task-Stack-Messung integriert (`tread_stack_high_water_mark_bytes`,
       Report beim Renderer-Stop)
 - [x] Task-Prioritaet baselineisiert (`TINYCLJ_RENDER_THREAD_PRIORITY`, default `5`)
 - [x] Task-Stack baselineisiert (`TINYCLJ_RENDER_THREAD_STACK_BYTES`, default `4096`)
@@ -651,12 +654,13 @@ TEST(test_boot_screen_covers_full_display)
 - [x] `fx_host_runloop.c` auf `subjective-c/thread` umstellen
 - [x] `event_loop.c` Wait/Wake auf `SubjectiveCMutex`/`SubjectiveCCondVar` umstellen
 - [x] `atom.c` Lock auf `SubjectiveCMutex` umstellen
+- [x] `fx_spatial_dispatch.c`/`fx_spatial_scene_bridge.c` auf `SubjectiveCOnce` umstellen
 
 ### Test-Suite
 ```
 ./build/unit-tests --quiet
 ```
-`2149 Tests, 0 Failures, 8 Ignored`.
+`2153 Tests, 0 Failures, 8 Ignored`.
 
 ---
 

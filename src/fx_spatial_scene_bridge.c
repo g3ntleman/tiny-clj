@@ -1,6 +1,5 @@
 #include "fx_spatial_bridge.h"
 
-#include <pthread.h>
 #include <string.h>
 
 #include "memory.h"
@@ -49,7 +48,7 @@ static CljRecordDescriptor *g_fx_collision_desc_aabb = NULL;
 static CljRecordDescriptor *g_fx_collision_desc_spatial_event = NULL;
 static uint32_t g_fx_collision_desc_activation_id = 0u;
 
-static pthread_once_t g_fx_collision_scene_symbols_once = PTHREAD_ONCE_INIT;
+static SubjectiveCOnce g_fx_collision_scene_symbols_once = SUBJECTIVE_C_ONCE_INIT;
 
 static void fx_collision_scene_symbols_init_once(void) {
     for (size_t i = 0; i < VC_SCENE_SYM_COUNT; i++) {
@@ -59,8 +58,8 @@ static void fx_collision_scene_symbols_init_once(void) {
 }
 
 static bool fx_collision_scene_symbols_ready(void) {
-    (void)pthread_once(&g_fx_collision_scene_symbols_once,
-                       fx_collision_scene_symbols_init_once);
+    subjective_c_once_run(&g_fx_collision_scene_symbols_once,
+                          fx_collision_scene_symbols_init_once);
     for (size_t i = 0; i < VC_SCENE_SYM_COUNT; i++) {
         if (!*g_fx_collision_scene_symbols[i].slot) {
             return false;

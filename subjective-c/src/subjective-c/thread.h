@@ -3,11 +3,19 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 typedef struct SubjectiveCThread SubjectiveCThread;
 typedef struct SubjectiveCMutex SubjectiveCMutex;
 typedef struct SubjectiveCCondVar SubjectiveCCondVar;
+typedef void (*SubjectiveCOnceFn)(void);
+
+typedef struct {
+    atomic_uint_fast8_t state;
+} SubjectiveCOnce;
+
+#define SUBJECTIVE_C_ONCE_INIT { ATOMIC_VAR_INIT(0u) }
 
 typedef void (*SubjectiveCThreadFn)(void *arg);
 
@@ -17,15 +25,15 @@ typedef struct {
     int priority;
 } SubjectiveCThreadConfig;
 
-SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
+SubjectiveCThread *tread_create(SubjectiveCThreadFn fn,
                                               void *arg,
                                               const SubjectiveCThreadConfig *config);
-bool subjective_c_thread_join(SubjectiveCThread *thread);
-void subjective_c_thread_destroy(SubjectiveCThread *thread);
-size_t subjective_c_thread_stack_high_water_mark_bytes(const SubjectiveCThread *thread);
+bool tread_join(SubjectiveCThread *thread);
+void tread_destroy(SubjectiveCThread *thread);
+size_t tread_stack_high_water_mark_bytes(const SubjectiveCThread *thread);
 
-void subjective_c_thread_sleep_ms(uint32_t sleep_ms);
-void subjective_c_thread_yield(void);
+void tread_sleep_ms(uint32_t sleep_ms);
+void tread_yield(void);
 
 SubjectiveCMutex *subjective_c_mutex_create(void);
 void subjective_c_mutex_destroy(SubjectiveCMutex *mutex);
@@ -40,5 +48,7 @@ void subjective_c_condvar_broadcast(SubjectiveCCondVar *condvar);
 bool subjective_c_condvar_wait(SubjectiveCCondVar *condvar,
                                SubjectiveCMutex *mutex,
                                uint32_t timeout_ms);
+
+void subjective_c_once_run(SubjectiveCOnce *once, SubjectiveCOnceFn fn);
 
 #endif /* SUBJECTIVE_C_THREAD_H */

@@ -132,7 +132,7 @@ bool start_runloop_thread(EvalState *st) {
         .stack_bytes = FX_RUNLOOP_STACK_SIZE,
         .priority = 0,
     };
-    g_runloop_thread.thread = subjective_c_thread_create(fx_runloop_thread_main, st, &cfg);
+    g_runloop_thread.thread = tread_create(fx_runloop_thread_main, st, &cfg);
     if (!g_runloop_thread.thread) {
         atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
         g_runloop_thread.eval_state = NULL;
@@ -150,8 +150,8 @@ void stop_runloop_thread(void) {
     }
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
     event_loop_wake();
-    (void)subjective_c_thread_join(g_runloop_thread.thread);
-    subjective_c_thread_destroy(g_runloop_thread.thread);
+    (void)tread_join(g_runloop_thread.thread);
+    tread_destroy(g_runloop_thread.thread);
     g_runloop_thread.thread = NULL;
     subjective_c_clear_interpreter_thread();
     g_runloop_thread.started = false;

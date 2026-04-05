@@ -195,7 +195,7 @@ int vg_render_driver_step(VgRenderDriver *driver,
         !driver->scene_snapshots ||
         driver->slot_count == 0u ||
         driver->slot_count > VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
-        subjective_c_thread_sleep_ms(1u);
+        tread_sleep_ms(1u);
         return 0;
     }
     if (!render_driver_ensure_slot_buffers(driver)) {
@@ -265,7 +265,7 @@ static void render_driver_thread_main(void *arg) {
         return;
     }
     while (driver->running) {
-        size_t stack_hwm = subjective_c_thread_stack_high_water_mark_bytes(driver->thread);
+        size_t stack_hwm = tread_stack_high_water_mark_bytes(driver->thread);
         if (stack_hwm > 0u &&
             (driver->stack_high_water_mark_bytes == 0u ||
              stack_hwm < driver->stack_high_water_mark_bytes)) {
@@ -291,7 +291,7 @@ bool vg_render_driver_start(VgRenderDriver *driver) {
 
     driver->stack_high_water_mark_bytes = 0u;
     driver->running = true;
-    driver->thread = subjective_c_thread_create(render_driver_thread_main,
+    driver->thread = tread_create(render_driver_thread_main,
                                                 driver,
                                                 &config);
     if (!driver->thread) {
@@ -319,8 +319,8 @@ bool vg_render_driver_stop(VgRenderDriver *driver) {
         (void)vg_slot_change_tracker_publish(driver->tracker, 0u, NULL);
     }
 
-    bool joined = subjective_c_thread_join(driver->thread);
-    subjective_c_thread_destroy(driver->thread);
+    bool joined = tread_join(driver->thread);
+    tread_destroy(driver->thread);
     driver->thread = NULL;
 
     render_driver_release_slot_buffers(driver);

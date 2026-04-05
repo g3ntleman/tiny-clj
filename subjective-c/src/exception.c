@@ -191,7 +191,7 @@ static SubjectiveCThreadState subjective_c_interpreter_thread_storage = {0};
 const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_main_thread_storage;
 const SubjectiveCThreadState *const subjective_c_interpreter_thread = &subjective_c_interpreter_thread_storage;
 
-static bool subjective_c_thread_state_matches_current(const SubjectiveCThreadState *state) {
+static bool tread_state_matches_current(const SubjectiveCThreadState *state) {
     if (!state || !state->initialized) {
         return false;
     }
@@ -269,11 +269,11 @@ bool subjective_c_has_interpreter_thread(void) {
 }
 
 bool subjective_c_is_main_thread(void) {
-    return subjective_c_thread_state_matches_current(&subjective_c_main_thread_storage);
+    return tread_state_matches_current(&subjective_c_main_thread_storage);
 }
 
 bool subjective_c_is_interpreter_thread(void) {
-    return subjective_c_thread_state_matches_current(&subjective_c_interpreter_thread_storage);
+    return tread_state_matches_current(&subjective_c_interpreter_thread_storage);
 }
 
 // ============================================================================

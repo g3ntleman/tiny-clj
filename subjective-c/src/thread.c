@@ -55,7 +55,7 @@ static UBaseType_t thread_stack_words_from_bytes(size_t stack_bytes) {
     return (UBaseType_t)words;
 }
 
-static void subjective_c_thread_entry(void *raw_args) {
+static void tread_entry(void *raw_args) {
     SubjectiveCThreadStartArgs args = *(SubjectiveCThreadStartArgs *)raw_args;
     CLJ_FREE(raw_args);
 
@@ -75,9 +75,9 @@ static void subjective_c_thread_entry(void *raw_args) {
  * @brief Creates one OS thread/task using Subjective-C's cross-platform API.
  *
  * The returned handle is heap-owned by the caller and must be released with
- * subjective_c_thread_destroy after subjective_c_thread_join succeeds.
+ * tread_destroy after tread_join succeeds.
  */
-SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
+SubjectiveCThread *tread_create(SubjectiveCThreadFn fn,
                                               void *arg,
                                               const SubjectiveCThreadConfig *config) {
     if (!fn) {
@@ -119,7 +119,7 @@ SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
                                ? (UBaseType_t)config->priority
                                : (tskIDLE_PRIORITY + 1u);
 
-    BaseType_t rc = xTaskCreate(subjective_c_thread_entry,
+    BaseType_t rc = xTaskCreate(tread_entry,
                                 args->name,
                                 stack_words,
                                 args,
@@ -140,7 +140,7 @@ SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
  *
  * This blocks until the thread function returns.
  */
-bool subjective_c_thread_join(SubjectiveCThread *thread) {
+bool tread_join(SubjectiveCThread *thread) {
     if (!thread) {
         return false;
     }
@@ -160,12 +160,12 @@ bool subjective_c_thread_join(SubjectiveCThread *thread) {
 /**
  * @brief Destroys one thread handle and its synchronization resources.
  */
-void subjective_c_thread_destroy(SubjectiveCThread *thread) {
+void tread_destroy(SubjectiveCThread *thread) {
     if (!thread) {
         return;
     }
     if (!thread->joined) {
-        (void)subjective_c_thread_join(thread);
+        (void)tread_join(thread);
     }
     if (thread->done_sem) {
         vSemaphoreDelete(thread->done_sem);
@@ -173,7 +173,7 @@ void subjective_c_thread_destroy(SubjectiveCThread *thread) {
     CLJ_FREE(thread);
 }
 
-size_t subjective_c_thread_stack_high_water_mark_bytes(const SubjectiveCThread *thread) {
+size_t tread_stack_high_water_mark_bytes(const SubjectiveCThread *thread) {
     if (!thread || !thread->handle) {
         return 0u;
     }
@@ -184,7 +184,7 @@ size_t subjective_c_thread_stack_high_water_mark_bytes(const SubjectiveCThread *
     return (size_t)words * sizeof(StackType_t);
 }
 
-void subjective_c_thread_sleep_ms(uint32_t sleep_ms) {
+void tread_sleep_ms(uint32_t sleep_ms) {
     if (sleep_ms == 0u) {
         taskYIELD();
         return;
@@ -196,7 +196,7 @@ void subjective_c_thread_sleep_ms(uint32_t sleep_ms) {
     vTaskDelay(ticks);
 }
 
-void subjective_c_thread_yield(void) {
+void tread_yield(void) {
     taskYIELD();
 }
 
@@ -346,7 +346,7 @@ static void condvar_deadline_from_now(uint32_t timeout_ms, struct timespec *out_
     out_deadline->tv_nsec = nsec;
 }
 
-static void *subjective_c_thread_entry(void *raw_args) {
+static void *tread_entry(void *raw_args) {
     SubjectiveCThreadStartArgs args = *(SubjectiveCThreadStartArgs *)raw_args;
     CLJ_FREE(raw_args);
     if (args.fn) {
@@ -359,9 +359,9 @@ static void *subjective_c_thread_entry(void *raw_args) {
  * @brief Creates one OS thread/task using Subjective-C's cross-platform API.
  *
  * The returned handle is heap-owned by the caller and must be released with
- * subjective_c_thread_destroy after subjective_c_thread_join succeeds.
+ * tread_destroy after tread_join succeeds.
  */
-SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
+SubjectiveCThread *tread_create(SubjectiveCThreadFn fn,
                                               void *arg,
                                               const SubjectiveCThreadConfig *config) {
     if (!fn) {
@@ -396,7 +396,7 @@ SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
 
     int rc = subjective_c_pthread_create_named(&thread->handle,
                                                attr_ptr,
-                                               subjective_c_thread_entry,
+                                               tread_entry,
                                                args,
                                                config ? config->name : NULL);
 
@@ -417,7 +417,7 @@ SubjectiveCThread *subjective_c_thread_create(SubjectiveCThreadFn fn,
  *
  * This blocks until the thread function returns.
  */
-bool subjective_c_thread_join(SubjectiveCThread *thread) {
+bool tread_join(SubjectiveCThread *thread) {
     if (!thread) {
         return false;
     }
@@ -434,22 +434,22 @@ bool subjective_c_thread_join(SubjectiveCThread *thread) {
 /**
  * @brief Destroys one thread handle and its synchronization resources.
  */
-void subjective_c_thread_destroy(SubjectiveCThread *thread) {
+void tread_destroy(SubjectiveCThread *thread) {
     if (!thread) {
         return;
     }
     if (!thread->joined) {
-        (void)subjective_c_thread_join(thread);
+        (void)tread_join(thread);
     }
     CLJ_FREE(thread);
 }
 
-size_t subjective_c_thread_stack_high_water_mark_bytes(const SubjectiveCThread *thread) {
+size_t tread_stack_high_water_mark_bytes(const SubjectiveCThread *thread) {
     (void)thread;
     return 0u;
 }
 
-void subjective_c_thread_sleep_ms(uint32_t sleep_ms) {
+void tread_sleep_ms(uint32_t sleep_ms) {
     if (sleep_ms == 0u) {
         (void)sched_yield();
         return;
@@ -461,7 +461,7 @@ void subjective_c_thread_sleep_ms(uint32_t sleep_ms) {
     (void)nanosleep(&ts, NULL);
 }
 
-void subjective_c_thread_yield(void) {
+void tread_yield(void) {
     (void)sched_yield();
 }
 
@@ -576,3 +576,42 @@ bool subjective_c_condvar_wait(SubjectiveCCondVar *condvar,
 }
 
 #endif
+
+enum {
+    SUBJECTIVE_C_ONCE_UNINITIALIZED = 0u,
+    SUBJECTIVE_C_ONCE_INITIALIZING = 1u,
+    SUBJECTIVE_C_ONCE_DONE = 2u,
+};
+
+void subjective_c_once_run(SubjectiveCOnce *once, SubjectiveCOnceFn fn) {
+    if (!once || !fn) {
+        return;
+    }
+
+    for (;;) {
+        uint_fast8_t state = atomic_load_explicit(&once->state, memory_order_acquire);
+        if (state == SUBJECTIVE_C_ONCE_DONE) {
+            return;
+        }
+
+        uint_fast8_t expected = SUBJECTIVE_C_ONCE_UNINITIALIZED;
+        if (atomic_compare_exchange_strong_explicit(&once->state,
+                                                    &expected,
+                                                    SUBJECTIVE_C_ONCE_INITIALIZING,
+                                                    memory_order_acq_rel,
+                                                    memory_order_acquire)) {
+            TRY {
+                fn();
+                atomic_store_explicit(&once->state, SUBJECTIVE_C_ONCE_DONE, memory_order_release);
+            } CATCH(ex) {
+                atomic_store_explicit(&once->state,
+                                      SUBJECTIVE_C_ONCE_UNINITIALIZED,
+                                      memory_order_release);
+                THROW(ex);
+            } END_TRY
+            return;
+        }
+
+        tread_yield();
+    }
+}

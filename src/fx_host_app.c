@@ -963,7 +963,7 @@ static void fx_render_thread_main(void *arg) {
              * Keep render progress independent from interpreter/main-thread
              * publish work. If the publish lock is busy, skip this cycle.
              */
-            subjective_c_thread_yield();
+            tread_yield();
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
@@ -1197,7 +1197,7 @@ static bool start_render_thread(VgFrameBuffer *fb) {
         .stack_bytes = 0u,
         .priority = 0,
     };
-    g_render_thread.thread = subjective_c_thread_create(fx_render_thread_main, fb, &cfg);
+    g_render_thread.thread = tread_create(fx_render_thread_main, fb, &cfg);
     if (!g_render_thread.thread) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
         subjective_c_mutex_destroy(g_render_thread.transfer_rects_mutex);
@@ -1219,8 +1219,8 @@ static void stop_render_thread(void) {
     atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
     /* Wake blocked render wait to allow clean shutdown. */
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
-    (void)subjective_c_thread_join(g_render_thread.thread);
-    subjective_c_thread_destroy(g_render_thread.thread);
+    (void)tread_join(g_render_thread.thread);
+    tread_destroy(g_render_thread.thread);
     g_render_thread.thread = NULL;
     fx_timeline_ingress_shutdown();
     subjective_c_mutex_destroy(g_render_thread.transfer_rects_mutex);
