@@ -421,6 +421,9 @@ static INLINE bool is_builtin_function(CljSymbol *symbol);
 // Forward declarations for loop evaluation
 ID eval_body_with_env(ID body, CljPersistentMap *env, EvalState *st);
 
+// tiny-clj intentionally does not bind JVM-only numeric coercions such as `long`; using
+// them as call targets fails here like any other unresolved symbol (fixnums use native ops).
+
 // Helper function to throw unresolved symbol exception (DRY principle)
 static INLINE bool should_suggest_require_for_ns(const char *ns_name) {
   // Keep the hint focused on real namespaces, not aliases like "str".

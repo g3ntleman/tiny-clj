@@ -6,10 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Feature switches (positive naming)
-#ifndef MEMORY_PROFILER_ENABLED
-#define MEMORY_PROFILER_ENABLED 1
-#endif
+// Feature switches (positive naming); CMake option MEMORY_PROFILING_ENABLED sets the default.
 #ifndef MEMORY_PROFILING_ENABLED
 #define MEMORY_PROFILING_ENABLED 0
 #endif

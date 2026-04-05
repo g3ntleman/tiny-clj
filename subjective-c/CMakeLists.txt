@@ -13,6 +13,17 @@ endif()
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# When built standalone (not as subdirectory of tiny-clj), parent does not set these.
+if(NOT DEFINED MEMORY_PROFILING_ENABLED_VALUE)
+    set(MEMORY_PROFILING_ENABLED_VALUE 0)
+endif()
+if(NOT DEFINED META_ENABLED_VALUE)
+    set(META_ENABLED_VALUE 1)
+endif()
+if(NOT DEFINED ZOMBIE_ENABLED_VALUE)
+    set(ZOMBIE_ENABLED_VALUE 0)
+endif()
+
 # -----------------------------------------------------------------------------
 # Subjective-C static library
 # -----------------------------------------------------------------------------
@@ -78,7 +89,7 @@ else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 endif()
 
-if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
+if(ZOMBIE_ENABLED_VALUE EQUAL 1)
     target_compile_definitions(subjective-c PUBLIC ZOMBIE_ENABLED)
     message(STATUS "subjective-c: ZOMBIE_ENABLED")
 else()
@@ -88,8 +99,10 @@ endif()
 # Unity compatibility: flush stdout for error messages
 target_compile_definitions(subjective-c PUBLIC UNITY_USE_FLUSH_STDOUT)
 
-# Size-focused embedded builds: avoid pulling in printf-style formatting code.
-# Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
+# Size-focused embedded builds: STRING_FORMATTING_ENABLED=0 skips vararg formatting
+# (%-substitutions) in exception/parser paths so the binary stays small; call sites
+# keep their API but messages are degraded (e.g. format string as literal). When
+# enabled, exceptions use subjective-c mini_format (mini_vsnprintf); see exception.c.
 if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
     target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
     message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
@@ -145,11 +158,11 @@ target_compile_definitions(subjective-c-tests PRIVATE
     DEBUG
     UNITY_TESTS
     UNITY_USE_COMMAND_LINE_ARGS
-    MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
-    META_ENABLED=${TINYCLJ_META_ENABLED_VALUE}
+    MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE}
+    META_ENABLED=${META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
 )
-if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
+if(ZOMBIE_ENABLED_VALUE EQUAL 1)
     target_compile_definitions(subjective-c-tests PRIVATE ZOMBIE_ENABLED)
 endif()
 # Force Debug compiler flags for all build types

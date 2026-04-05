@@ -155,17 +155,18 @@ This helps identify which build configuration is currently active and how it was
 
 ## Feature Flags
 
-Feature flags are compile-time defines. All feature toggles are **positive** `*_ENABLED` macros (use `0`/`1`). `DEBUG` is separate.
+Compile-time toggles are mostly **positive** `*_ENABLED` macros (`0`/`1`). Root **CMake options** (see `CMakeLists.txt`) set the defaults; each executable may override `target_compile_definitions` (e.g. ESP32 vs desktop REPL). `DEBUG` and `PROFILING_ENABLED` are separate from the `*_ENABLED` pattern.
 
-Common flags:
-- `META_ENABLED` (metadata support)
-- `MEMORY_PROFILER_ENABLED` (compile the memory-profiler implementation)
-- `MEMORY_PROFILING_ENABLED` (activate profiling hooks/macros)
-- `LINE_EDITING_ENABLED` (REPL line editor)
-- `STRING_FORMATTING_ENABLED` (formatted exceptions via `vsnprintf`)
-- `ERROR_MESSAGES_ENABLED` (full error message strings)
-- `COMPLEX_PARSING_ENABLED` (vector/map parsing helpers)
-- `REPL_ENABLED` (REPL features; embedded builds typically set `0`)
+**CMake options** (names match the preprocessor macros they drive, except `ASAN_ENABLED`, which enables AddressSanitizer for the `unit-tests` target):
+
+- `META_ENABLED` — preprocessor `META_ENABLED` for shared libs and tests (default ON).
+- `MEMORY_PROFILING_ENABLED` — preprocessor `MEMORY_PROFILING_ENABLED` (default OFF).
+- `ZOMBIE_ENABLED` — when ON, defines `ZOMBIE_ENABLED` (default OFF).
+- `TINY_FX_ENABLED` — global `TINY_FX_ENABLED` (default ON).
+- `MINIFB_METAL_ENABLED` — MiniFB uses the Metal backend on macOS (default OFF).
+- `ASAN_ENABLED` — AddressSanitizer for the `unit-tests` target (default OFF).
+
+**Preprocessor macros** set per target include: `META_ENABLED`, `MEMORY_PROFILING_ENABLED`, `LINE_EDITING_ENABLED`, `REPL_ENABLED`, `STRING_FORMATTING_ENABLED`, `ERROR_MESSAGES_ENABLED`, `DEBUG_SYMBOLS_ENABLED`, `COMPLEX_PARSING_ENABLED`, `ESP32_BUILD`, and `PROFILING_ENABLED` (profiling executable). `memory_profiler.h` gates the `MEMORY_PROFILER_*` tracking macros on `MEMORY_PROFILING_ENABLED`.
 
 Note: `ZOMBIE_ENABLED` is a debug aid for lifetime bugs (does not reflect real freeing).
 
@@ -174,6 +175,8 @@ Note: `ZOMBIE_ENABLED` is a debug aid for lifetime bugs (does not reflect real f
 Tiny-CLJ aims to follow Clojure closely, but there are some intentional differences:
 
 - **Compile-time macroexpansion argument cap:** during compile-time macroexpansion, Tiny-CLJ currently passes at most **20** arguments to the macro function; additional arguments are ignored. Clojure does not impose such a cap.
+
+- **`long` and JVM numeric coercions:** Tiny-CLJ does not bind JVM-only helpers such as `long` (or the wider `clojure.lang.Numbers`-style coercion surface). Arithmetic uses fixnums; treating `long` as a callable var fails with an unresolved-symbol error like any other unbound name. This is intentional and not planned to match the JVM here.
 
 ## Documentation
 See `docs/` directory for detailed documentation:
