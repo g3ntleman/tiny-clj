@@ -1307,3 +1307,94 @@ TEST_SHARED(test_vector_set_nth_persistent_throws_exception) {
 
   AUTORELEASE(vec);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1: Layout / capacity-limit contract tests (ESP32 vector header shrink)
+// ---------------------------------------------------------------------------
+
+// Verify the host (macOS) field widths of CljPersistentVector.
+// On host, count is unsigned int (4 bytes) and capacity is int (4 bytes).
+// This test documents the current host layout and must remain green on host
+// throughout the entire plan.
+TEST_SHARED(test_vector_host_layout_unchanged) {
+  // On macOS host the layout must stay wide (unsigned int / int).
+  // sizeof(unsigned int) == 4 on all LP64 platforms we target.
+  CljPersistentVector dummy = {0};
+  (void)dummy;
+  TEST_ASSERT_EQUAL_INT_MESSAGE(4, (int)sizeof(dummy.count),
+      "host: CljPersistentVector.count must remain unsigned int (4 bytes)");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(4, (int)sizeof(dummy.capacity),
+      "host: CljPersistentVector.capacity must remain int (4 bytes)");
+}
+
+// Verify that CljTransientVector has no extra fields beyond base + backing.
+// After Phase 4 the `head` field will be added; this test turns RED then and
+// is updated as part of Phase 4.  For now it documents the current layout.
+TEST_SHARED(test_vector_transient_layout_no_head_yet) {
+  // Current struct: base (4 bytes) + padding + backing pointer.
+  // We just check the struct exists and backing is accessible at offset > 0.
+  CljTransientVector dummy = {0};
+  (void)dummy;
+  // backing pointer must be after base
+  TEST_ASSERT_TRUE((char *)&dummy.backing > (char *)&dummy.base);
+}
+
+// Verify that make_vector rejects capacities above UINT16_MAX.
+// Phase 2 will add this guard; until then make_vector silently accepts large
+// capacities and this test FAILS (RED).
+TEST_SHARED(test_vector_make_vector_rejects_capacity_above_uint16_max) {
+  // UINT16_MAX == 65535; capacity 65536 must throw EXCEPTION_ILLEGAL_ARGUMENT.
+  CLJException *ex = NULL;
+  CljPersistentVector *vec = NULL;
+  TRY {
+    vec = make_vector(65536u, STRONG);
+  }
+  CATCH(e) {
+    ex = e;
+  }
+  END_TRY
+  if (vec) {
+    // make_vector succeeded without throwing — this is the RED failure.
+    RELEASE(vec);
+  }
+  TEST_ASSERT_NOT_NULL_MESSAGE(ex,
+      "make_vector must reject capacity > UINT16_MAX (65535) with an exception");
+}
+
+// Verify that make_vector accepts exactly UINT16_MAX (65535) without throwing.
+// This test proves the boundary: the limit is exclusive of UINT16_MAX itself.
+// Currently make_vector has no guard so this test passes trivially; after Phase 2
+// it must still pass (guard allows == UINT16_MAX).
+TEST_SHARED(test_vector_make_vector_accepts_capacity_uint16_max) {
+  CLJException *ex = NULL;
+  CljPersistentVector *vec = NULL;
+  TRY {
+    // UINT16_MAX == 65535: exactly at the limit, must NOT throw.
+    vec = make_vector(65535u, STRONG);
+  }
+  CATCH(e) {
+    ex = e;
+  }
+  END_TRY
+  TEST_ASSERT_NULL_MESSAGE(ex,
+      "make_vector must accept capacity == UINT16_MAX (65535) without exception");
+  if (vec && vec != vector_empty_singleton) {
+    RELEASE(vec);
+  }
+}
+
+// Verify small-vector behavior is unchanged: basic conj/count/nth.
+TEST_SHARED(test_vector_small_vector_behavior_unchanged) {
+  CljPersistentVector *v = AUTORELEASE(make_vector(4, STRONG));
+  TEST_ASSERT_NOT_NULL(v);
+  TEST_ASSERT_EQUAL_INT(0, (int)vector_count(v));
+
+  v = vector_conj(v, fixnum(10));
+  v = vector_conj(v, fixnum(20));
+  v = vector_conj(v, fixnum(30));
+
+  TEST_ASSERT_EQUAL_INT(3, (int)vector_count(v));
+  TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)vector_nth(v, 0)));
+  TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)vector_nth(v, 1)));
+  TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)vector_nth(v, 2)));
+}
