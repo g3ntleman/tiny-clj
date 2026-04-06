@@ -17,6 +17,11 @@ typedef struct {
 
 #define SUBJECTIVE_C_ONCE_INIT { ATOMIC_VAR_INIT(0u) }
 
+// Maximum length (including NUL) of a thread name used in diagnostic output.
+#ifndef THREAD_NAME_MAX
+#define THREAD_NAME_MAX 32
+#endif
+
 typedef void (*SubjectiveCThreadFn)(void *arg);
 
 typedef struct {

@@ -16,6 +16,7 @@
 #include "strings.h"
 #include "vector.h"
 #include "symbol.h"  /* CljSymbol->cname for stacktrace formatting */
+#include "thread.h"  /* THREAD_NAME_MAX */
 #if defined(ESP_PLATFORM)
 #include "esp_debug_helpers.h"
 #include "freertos/FreeRTOS.h"
@@ -171,7 +172,6 @@ struct CljString *clj_stacktrace_build(void) {
 }
 #endif
 
-#define THREAD_NAME_MAX 32
 static THREAD_LOCAL char g_thread_name[THREAD_NAME_MAX] = {0};
 
 void subjective_c_set_thread_name(const char *name) {
