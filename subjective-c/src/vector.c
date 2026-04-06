@@ -522,6 +522,7 @@ CljTransientVector *make_vector_transient(CljPersistentVector *vec) {
 
   CljTransientVector *tvec = (CljTransientVector *)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_TRANSIENT);
   tvec->base.type = CLJ_VECTOR_TRANSIENT;
+  tvec->head = 0;
   tvec->backing = RETAIN(vec);
   return tvec;
 }

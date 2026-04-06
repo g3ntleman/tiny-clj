@@ -15,7 +15,7 @@ todos:
     status: done
   - id: phase-3-red-transient-ringbuffer-contract-tests
     content: "RED: Add tests for transient-vector ringbuffer semantics, including FIFO-style front removal, wrap-around, persistent snapshot correctness, and unchanged public vector behavior"
-    status: pending
+    status: done
   - id: phase-4-green-transient-ringbuffer
     content: "GREEN: Implement option 2 by adding an offset/head field to transient vectors and making transient mutation paths ringbuffer-backed"
     status: pending

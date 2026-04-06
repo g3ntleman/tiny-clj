@@ -1309,6 +1309,172 @@ TEST_SHARED(test_vector_set_nth_persistent_throws_exception) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 3: Transient ringbuffer contract tests
+// ---------------------------------------------------------------------------
+// All tests in this section verify ringbuffer semantics on CljTransientVector.
+// They are RED until Phase 4 implements the head/offset mutation paths.
+
+// After vector_remove_at(tvec, 0), head must be incremented to 1.
+// Currently remove_at shifts elements and leaves head==0, so this test FAILS.
+TEST_SHARED(test_transient_ringbuffer_remove_front_increments_head) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *vec = make_vector(4, STRONG);
+    vec = vector_conj(vec, fixnum(10));
+    vec = vector_conj(vec, fixnum(20));
+    vec = vector_conj(vec, fixnum(30));
+    CljTransientVector *tvec = make_vector_transient(vec);
+    RELEASE(vec);
+
+    TEST_ASSERT_EQUAL_INT(0, (int)tvec->head);
+
+    // Remove from front: head should become 1
+    vector_remove_at(tvec, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)tvec->head,
+        "remove_at(0) must increment head to 1 (ringbuffer O(1) front removal)");
+
+    // Count must reflect the removal
+    TEST_ASSERT_EQUAL_INT(2, (int)vector_count(vector_persistent(tvec)));
+
+    RELEASE(tvec);
+  });
+}
+
+// FIFO: push N items, then repeatedly remove from front; values must come out
+// in push order (10, 20, 30).  This test is structurally equivalent to today's
+// behavior, but it also checks tvec->head advances each time.
+TEST_SHARED(test_transient_ringbuffer_fifo_order) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *vec = make_vector(8, STRONG);
+    CljTransientVector *tvec = make_vector_transient(vec);
+    RELEASE(vec);
+
+    vector_push(tvec, fixnum(10));
+    vector_push(tvec, fixnum(20));
+    vector_push(tvec, fixnum(30));
+
+    // Dequeue three times and verify FIFO order + head advance
+    CljPersistentVector *snap;
+
+    snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(snap, 0)));
+    vector_remove_at(tvec, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)tvec->head,
+        "head must be 1 after first front removal");
+
+    snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(snap, 0)));
+    vector_remove_at(tvec, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)tvec->head,
+        "head must be 2 after second front removal");
+
+    snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(snap, 0)));
+    vector_remove_at(tvec, 0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)tvec->head,
+        "head must be 3 after third front removal");
+
+    TEST_ASSERT_EQUAL_INT(0, (int)vector_count(vector_persistent(tvec)));
+
+    RELEASE(tvec);
+  });
+}
+
+// vector_persistent with head != 0 must return elements in logical order
+// (i.e., element 0 is the first live element, not data[0]).
+// Without ringbuffer logic this test fails if head > 0 because the backing's
+// physical data[0] slot is stale.
+TEST_SHARED(test_transient_ringbuffer_persistent_logical_order) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *vec = make_vector(8, STRONG);
+    CljTransientVector *tvec = make_vector_transient(vec);
+    RELEASE(vec);
+
+    vector_push(tvec, fixnum(1));
+    vector_push(tvec, fixnum(2));
+    vector_push(tvec, fixnum(3));
+
+    // Remove front (head advances to 1); then add a new element at tail
+    vector_remove_at(tvec, 0);  // head==1, live = [2, 3]
+    vector_push(tvec, fixnum(4)); // live = [2, 3, 4]
+
+    CljPersistentVector *snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)vector_count(snap),
+        "persistent snapshot must report 3 live elements");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, as_fixnum(vector_nth(snap, 0)),
+        "logical element 0 must be 2 (first live element after head advance)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, as_fixnum(vector_nth(snap, 1)),
+        "logical element 1 must be 3");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, as_fixnum(vector_nth(snap, 2)),
+        "logical element 2 must be 4");
+
+    RELEASE(tvec);
+  });
+}
+
+// vector_set_nth_transient must address logical indices, not raw storage slots.
+// With head > 0 the physical slot for logical index 0 is data[head], not
+// data[0].  Without ringbuffer mapping this test fails.
+TEST_SHARED(test_transient_ringbuffer_set_nth_uses_logical_index) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *vec = make_vector(8, STRONG);
+    CljTransientVector *tvec = make_vector_transient(vec);
+    RELEASE(vec);
+
+    vector_push(tvec, fixnum(10));
+    vector_push(tvec, fixnum(20));
+    vector_push(tvec, fixnum(30));
+
+    // Advance head to 1
+    vector_remove_at(tvec, 0);  // head==1, live = [20, 30]
+
+    // Update logical index 0 (physical = data[head])
+    vector_set_nth_transient(tvec, 0, fixnum(99));
+
+    CljPersistentVector *snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(99, as_fixnum(vector_nth(snap, 0)),
+        "set_nth at logical 0 must update data[head], not data[0]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(30, as_fixnum(vector_nth(snap, 1)),
+        "logical index 1 must be unchanged (30)");
+
+    RELEASE(tvec);
+  });
+}
+
+// After backing growth (capacity doubling), head must reset to 0 and
+// elements must be in logical order in the new backing.
+TEST_SHARED(test_transient_ringbuffer_growth_resets_head) {
+  WITH_AUTORELEASE_POOL({
+    // Start with capacity 4
+    CljPersistentVector *vec = make_vector(4, STRONG);
+    CljTransientVector *tvec = make_vector_transient(vec);
+    RELEASE(vec);
+
+    // Fill to capacity and pop front twice to advance head
+    vector_push(tvec, fixnum(1));
+    vector_push(tvec, fixnum(2));
+    vector_push(tvec, fixnum(3));
+    vector_push(tvec, fixnum(4));
+    vector_remove_at(tvec, 0);  // head==1, live=[2,3,4]
+    vector_remove_at(tvec, 0);  // head==2, live=[3,4]
+
+    // Now push two more items: capacity is full again (count==4 after two pushes),
+    // triggering a growth; growth must reset head to 0.
+    vector_push(tvec, fixnum(5));  // live=[3,4,5], head==2
+    vector_push(tvec, fixnum(6));  // live=[3,4,5,6], capacity full
+    vector_push(tvec, fixnum(7));  // triggers growth; head must reset to 0
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)tvec->head,
+        "head must be reset to 0 after backing growth");
+    CljPersistentVector *snap = vector_persistent(tvec);
+    TEST_ASSERT_EQUAL_INT(5, (int)vector_count(snap));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(snap, 0)));
+    TEST_ASSERT_EQUAL_INT(7, as_fixnum(vector_nth(snap, 4)));
+
+    RELEASE(tvec);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1: Layout / capacity-limit contract tests (ESP32 vector header shrink)
 // ---------------------------------------------------------------------------
 

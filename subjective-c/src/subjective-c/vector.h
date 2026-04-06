@@ -33,10 +33,24 @@ typedef struct CljPersistentVector {
 } CljPersistentVector;
 #endif
 
+// Transient vector with ringbuffer head/offset.
+// `head` is the logical index of the first live element inside `backing->data`.
+// Physical index = (head + logical_index) % backing->capacity.
+// On ESP32 head is uint16_t (matches the narrowed capacity field); on host it
+// uses unsigned int so sizeof(CljTransientVector) stays naturally aligned.
+#if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
 typedef struct CljTransientVector {
     CljObject base;                 // type == CLJ_VECTOR_TRANSIENT
+    uint16_t  head;                 // ringbuffer start offset (0 initially)
     CljPersistentVector *backing;   // always TAG CLJ_VECTOR_PERSISTENT (never WEAK)
 } CljTransientVector;
+#else
+typedef struct CljTransientVector {
+    CljObject base;                 // type == CLJ_VECTOR_TRANSIENT
+    unsigned int head;              // ringbuffer start offset (0 initially)
+    CljPersistentVector *backing;   // always TAG CLJ_VECTOR_PERSISTENT (never WEAK)
+} CljTransientVector;
+#endif
 
 static inline bool is_persistent_vector(ID obj) {
     if (!obj) return false;
