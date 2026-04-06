@@ -571,3 +571,104 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
     RELEASE(fn);
     // fn is autoreleased from eval_string; TEST() pool handles cleanup.
 }
+
+// =============================================================================
+// Phase 5: Event-Loop Queue Regression Tests
+// =============================================================================
+// Verify FIFO order, no task skip/duplicate, and correct wrap-around behavior
+// of the transient ringbuffer task queue.
+
+// --- 5a: FIFO order of task queue ---
+TEST(test_task_queue_fifo_order) {
+    event_loop_clear();
+
+    CljTransientVector *tvec = g_runtime.task_queue;
+    TEST_ASSERT_NOT_NULL(tvec);
+
+    const int N = 6;
+    for (int i = 0; i < N; i++) {
+        vector_push(tvec, fixnum(i + 1));
+    }
+
+    for (int i = 0; i < N; i++) {
+        CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+        TEST_ASSERT_EQUAL_UINT((unsigned)(N - i), vector_count(pv));
+        ID front = vector_nth(pv, 0);
+        TEST_ASSERT_TRUE_MESSAGE(clj_equal(front, fixnum(i + 1)),
+                                 "Task queue must deliver tasks in FIFO order");
+        vector_remove_at(tvec, 0);
+    }
+
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+}
+
+// --- 5b: No skip or duplicate after repeated enqueue/dequeue ---
+TEST(test_task_queue_no_skip_or_duplicate) {
+    event_loop_clear();
+
+    CljTransientVector *tvec = g_runtime.task_queue;
+    TEST_ASSERT_NOT_NULL(tvec);
+
+    vector_push(tvec, fixnum(10));
+    vector_push(tvec, fixnum(20));
+    vector_push(tvec, fixnum(30));
+
+    // Dequeue first
+    {
+        CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(pv, 0)));
+        vector_remove_at(tvec, 0);
+    }
+
+    // Enqueue two more
+    vector_push(tvec, fixnum(40));
+    vector_push(tvec, fixnum(50));
+
+    // Should now have [20, 30, 40, 50]
+    CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+    TEST_ASSERT_EQUAL_UINT(4u, vector_count(pv));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(pv, 0)));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(pv, 1)));
+    TEST_ASSERT_EQUAL_INT(40, as_fixnum(vector_nth(pv, 2)));
+    TEST_ASSERT_EQUAL_INT(50, as_fixnum(vector_nth(pv, 3)));
+
+    for (int i = 0; i < 4; i++) {
+        vector_remove_at(tvec, 0);
+    }
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+}
+
+// --- 5c: Wrap-around over initial backing capacity ---
+TEST(test_task_queue_wraparound) {
+    event_loop_clear();
+
+    CljTransientVector *tvec = g_runtime.task_queue;
+    TEST_ASSERT_NOT_NULL(tvec);
+
+    // Fill initial backing (capacity = 8), remove first 4, add 4 more (causes wrap).
+    const int INITIAL_CAP = 8;
+    for (int i = 0; i < INITIAL_CAP; i++) {
+        vector_push(tvec, fixnum(i + 1));
+    }
+    for (int i = 0; i < 4; i++) {
+        vector_remove_at(tvec, 0);
+    }
+    for (int i = 0; i < 4; i++) {
+        vector_push(tvec, fixnum(100 + i));
+    }
+
+    // Expected logical order: [5, 6, 7, 8, 100, 101, 102, 103]
+    CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+    TEST_ASSERT_EQUAL_UINT(8u, vector_count(pv));
+    for (int i = 0; i < 4; i++) {
+        TEST_ASSERT_EQUAL_INT(5 + i, as_fixnum(vector_nth(pv, (unsigned)i)));
+    }
+    for (int i = 0; i < 4; i++) {
+        TEST_ASSERT_EQUAL_INT(100 + i, as_fixnum(vector_nth(pv, (unsigned)(4 + i))));
+    }
+
+    for (int i = 0; i < 8; i++) {
+        vector_remove_at(tvec, 0);
+    }
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+}
