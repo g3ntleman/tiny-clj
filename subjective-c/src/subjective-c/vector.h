@@ -9,12 +9,29 @@
 // - CljTransientVector: wrapper (TAG CLJ_VECTOR_TRANSIENT) with `backing` (always persistent tag).
 //   Transient mutation API: vector_push, vector_pop, vector_set_nth_transient, vector_remove_at, vector_insert_at.
 
+// Maximum number of elements a persistent vector can hold.
+// On ESP32 targets the count/capacity fields are 16-bit, so the hard limit
+// is UINT16_MAX.  The same limit is enforced on all platforms so that code
+// built and tested on the host accurately reflects ESP32 constraints.
+#define CLJ_VECTOR_CAPACITY_MAX 65535u
+
+#if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
+// ESP32: shrink count/capacity to 16-bit to reduce header size.
+typedef struct CljPersistentVector {
+    CljObject base;
+    uint16_t count;
+    uint16_t capacity;
+    ID data[];  // flexible array (capacity entries)
+} CljPersistentVector;
+#else
+// Host (macOS / Linux): keep wide fields for ABI compatibility.
 typedef struct CljPersistentVector {
     CljObject base;
     unsigned int count;
     int capacity;
     ID data[];  // flexible array (capacity entries)
 } CljPersistentVector;
+#endif
 
 typedef struct CljTransientVector {
     CljObject base;                 // type == CLJ_VECTOR_TRANSIENT

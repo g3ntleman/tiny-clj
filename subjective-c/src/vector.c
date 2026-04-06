@@ -14,6 +14,17 @@
 
 // Empty-vector singleton: CLJ_VECTOR_PERSISTENT with rc=SINGLETON_RC, statically initialized.
 // Note: Flexible array member cannot be initialized, so we use a struct with no data array.
+// The field widths must match CljPersistentVector exactly (conditional on platform).
+#if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
+static struct {
+  CljObject base;
+  uint16_t count;
+  uint16_t capacity;
+} clj_empty_vector_singleton_data = {
+    .base = {.type = CLJ_VECTOR_PERSISTENT, .rc = SINGLETON_RC},
+    .count = 0,
+    .capacity = 0};
+#else
 static struct {
   CljObject base;
   unsigned int count;
@@ -22,6 +33,7 @@ static struct {
     .base = {.type = CLJ_VECTOR_PERSISTENT, .rc = SINGLETON_RC},
     .count = 0,
     .capacity = 0};
+#endif
 
 static CljPersistentVector *clj_empty_vector_singleton = (CljPersistentVector *)&clj_empty_vector_singleton_data;
 CljPersistentVector *vector_empty_singleton = (CljPersistentVector *)&clj_empty_vector_singleton_data;
@@ -256,6 +268,12 @@ size_t vector_requested_allocation_size(unsigned int capacity) {
 
 CljPersistentVector *make_vector(unsigned int capacity, ElementRetention retention) {
   bool weakElements = (retention == WEAK);
+  if (capacity > CLJ_VECTOR_CAPACITY_MAX) {
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                              "make_vector: capacity %u exceeds maximum allowed (%u)",
+                              capacity, CLJ_VECTOR_CAPACITY_MAX);
+    return NULL;
+  }
   if (capacity == 0 && !weakElements) {
     return clj_empty_vector_singleton;
   }

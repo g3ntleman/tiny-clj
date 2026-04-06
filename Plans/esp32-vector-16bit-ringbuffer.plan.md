@@ -9,10 +9,10 @@ overview: >
 todos:
   - id: phase-1-red-layout-and-limit-tests
     content: "RED: Add focused tests for ESP32-only 16-bit vector count/capacity layout, explicit max-capacity guards, and unchanged macOS host behavior"
-    status: pending
+    status: done
   - id: phase-2-green-esp32-header-shrink
     content: "GREEN: Reduce vector count/capacity to 16-bit on ESP32 only, keep host layout unchanged, and make all allocation/growth code respect the new capacity limit"
-    status: pending
+    status: done
   - id: phase-3-red-transient-ringbuffer-contract-tests
     content: "RED: Add tests for transient-vector ringbuffer semantics, including FIFO-style front removal, wrap-around, persistent snapshot correctness, and unchanged public vector behavior"
     status: pending
@@ -48,6 +48,32 @@ The target end state is:
 - transient vectors gain a ringbuffer head/offset field and can remove from the
   front without repeated full-array shifting
 - public vector behavior remains Clojure-compatible and unchanged for callers
+
+## Current workspace status
+
+Status at the time of this plan update:
+
+- Planning is refined, but the implementation has **not** landed yet in the
+  current workspace state.
+- `CljPersistentVector` still uses the current wide fields:
+  - `unsigned int count`
+  - `int capacity`
+- `CljTransientVector` still contains only:
+  - `CljObject base`
+  - `CljPersistentVector *backing`
+- `vector_persistent()` still returns the borrowed backing directly; no
+  ringbuffer-aware snapshot logic exists yet.
+- `event_loop_run_next()` still dequeues via:
+  - `vector_nth(task_vec->backing, 0)`
+  - `vector_remove_at(task_vec, 0)`
+- The current `src/tests/test_vector.c` does **not** yet contain the new Phase 1
+  layout/limit tests in the active file content.
+
+Practical consequence:
+
+- No implementation phase can be marked completed yet.
+- All execution todos below remain pending until the corresponding code and
+  tests are present in the active workspace state and verified.
 
 ## Why this change is justified
 
