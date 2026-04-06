@@ -366,7 +366,6 @@ static CljPersistentVector *vector_assoc_core(CljPersistentVector *vec, unsigned
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_assoc: vector is NULL");
     return NULL;
-    return NULL;
   }
 
   bool is_weak = has_weak_elements((const CljObject *)vec);
@@ -383,7 +382,6 @@ static CljPersistentVector *vector_assoc_core(CljPersistentVector *vec, unsigned
   if (is_singleton((CljObject *)vec)) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_assoc: cannot modify empty vector singleton");
-    return NULL;
     return NULL;
   }
 
@@ -533,11 +531,10 @@ CljPersistentVector *vector_persistent(CljTransientVector *tvec) {
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CljPersistentVector *b = tvec->backing;
   if (tvec->head == 0) {
-    // Fast path: elements are in logical order already; return borrowed backing.
+  // Fast path: elements are already in logical order.
     return b;
   }
-  // Ringbuffer wrap-around: allocate a normalised persistent copy in logical order.
-  // Returned as AUTORELEASE so callers don't need to change (still borrowed-style).
+  // Ringbuffer wrap-around: build a normalised persistent copy in logical order.
   unsigned int cnt = b->count;
   unsigned int cap = (unsigned int)b->capacity;
   bool is_weak = has_weak_elements((const CljObject *)b);
@@ -553,13 +550,22 @@ CljPersistentVector *vector_persistent(CljTransientVector *tvec) {
   return AUTORELEASE(copy);
 }
 
+void vector_clear_transient(CljTransientVector *tvec) {
+  if (!tvec) {
+    return;
+  }
+  CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
+  CLJ_ASSERT(tvec->backing != NULL);
+  vector_clear(tvec->backing);
+  tvec->head = 0;
+}
+
 static void transient_vector_set_backing(CljTransientVector *tvec, CljPersistentVector *new_backing) {
   if (!tvec)
     return;
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(new_backing != NULL);
-  // Use ASSIGN to keep RC semantics consistent. Caller provides an *owned* new_backing,
-  // so we must RELEASE it after ASSIGN's RETAIN to avoid leaking a ref.
+  // Use ASSIGN so replacing the backing stays consistent with the standard memory policy.
   CljPersistentVector *old_backing = tvec->backing;
   ASSIGN(tvec->backing, new_backing);
   if (new_backing != old_backing) {

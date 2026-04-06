@@ -697,8 +697,6 @@ TEST(test_event_loop_task_queue_fifo_order_survives_front_removals) {
             "three tasks must be queued before dispatch");
 
         // Run one: head advances; remaining tasks must stay accessible.
-        // vector_persistent() returns borrowed (head==0) or AUTORELEASE'd copy
-        // (head>0) — do not wrap in AUTORELEASE to avoid double-free.
         TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
         TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)vector_count(vector_persistent(tq)),
             "after first dispatch, 2 tasks must remain");
@@ -735,7 +733,7 @@ TEST(test_event_loop_clear_resets_ringbuffer_head) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)vector_count(vector_persistent(tq)),
             "queue must be empty after clear");
 
-        // Enqueue a fresh task; head is 0 so vector_persistent returns borrowed backing.
+        // Enqueue a fresh task after clear.
         event_loop_enqueue(fn, NULL);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)vector_count(vector_persistent(tq)),
             "enqueue after clear must add exactly one task");

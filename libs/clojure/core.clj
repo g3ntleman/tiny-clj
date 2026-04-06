@@ -524,22 +524,11 @@
 ; ============================================================================
 ; Transient Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns a new, transient version of the collection, in constant time.
-  Transient vectors use an internal ringbuffer (head offset) so that
-  removing from the front via (vector-remove-at! tv 0) is O(1) instead
-  of O(n). The public Clojure semantics of the vector are unchanged."}
+^#^{:doc "Returns a new, transient version of the collection, in constant time."}
 (defn transient [coll] :native)
-^#^{:doc "Returns a new, persistent version of the transient collection, in
-  constant time when the internal head offset is 0 (no allocation). When
-  the head offset is non-zero (elements were removed from the front), a
-  normalised copy in logical order is allocated. The transient collection
-  cannot be used after this call; any such use will throw an exception."}
+^#^{:doc "Returns a new, persistent version of the transient collection, in constant time. The transient collection cannot be used after this call, any such use will throw an exception."}
 (defn persistent! [tcoll] :native)
-^#^{:doc "Adds val to the transient collection, and return coll. The 'addition'
-  may happen at different 'places' depending on the concrete type.
-  For transient vectors: appends at the logical tail — O(1) unless the
-  backing buffer must grow, in which case elements are normalised
-  (head reset to 0) and capacity is doubled."}
+^#^{:doc "Adds val to the transient collection, and return coll. The 'addition' may happen at different 'places' depending on the concrete type."}
 (defn conj! [tcoll val] :native)
 
 ; ============================================================================

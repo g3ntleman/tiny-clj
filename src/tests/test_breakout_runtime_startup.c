@@ -457,6 +457,25 @@ TEST(test_breakout_runtime_startup_tolerates_host_sound_init_failure_during_audi
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should still load when host audio init fails");
 }
 
+TEST(test_breakout_runtime_startup_does_not_autoload_sound_demos_namespace) {
+    BreakoutViewerTestContext ctx = {0};
+
+    TEST_ASSERT_TRUE(breakout_fx_test_context_init(&ctx));
+    TEST_ASSERT_NULL_MESSAGE(ns_find("tiny-fx.sound-demos"),
+                             "loading breakout runtime config must not autoload tiny-fx.sound-demos");
+
+    ID ok = eval_string(
+        "(do "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  true)",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+    TEST_ASSERT_NULL_MESSAGE(ns_find("tiny-fx.sound-demos"),
+                             "start-runtime! must use tiny-breakout.audio directly, not tiny-fx.sound-demos");
+
+    breakout_fx_test_context_destroy(&ctx);
+}
+
 TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
     const char *env_name = "TINYCLJ_HOST_DEMO";
     const char *saved_env = getenv(env_name);

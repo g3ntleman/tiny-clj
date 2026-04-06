@@ -4,8 +4,7 @@
             [tiny-breakout.scene :as scene]
             [tiny-clj.event :as event]
             [tiny-clj.runtime :as runtime]
-            [tiny-fx.gfx-collision :as gfx-collision]
-            [tiny-fx.sound-demos :as sound-demos]))
+            [tiny-fx.gfx-collision :as gfx-collision]))
 
 (def state* (atom nil))
 (def scene* (atom nil))
@@ -609,7 +608,7 @@
   "Starts breakout runtime watchers, startup audio, and overlay animation."
   [& _args]
   (ensure-audio-prewarmed!)
-  (sound-demos/play-startup-entertainer!)
+  (audio/play-startup-entertainer!)
   (configure-input-watchers!)
   (restart-overlay-animation!)
   nil)

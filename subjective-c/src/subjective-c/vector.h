@@ -55,13 +55,9 @@ typedef struct CljPersistentVector {
  * logical order into the new allocation and `head` is reset to 0.  This keeps
  * the physical layout contiguous after every resize.
  *
- * vector_persistent(tvec) contract:
- *   head == 0  →  returns borrowed pointer to backing (no allocation).
- *                 Valid as long as tvec is alive and unmutated; do NOT
- *                 AUTORELEASE the result.
- *   head != 0  →  allocates a normalised copy in logical order and returns
- *                 it AUTORELEASE'd.  The pool owns the copy; do NOT wrap in
- *                 an additional AUTORELEASE.
+ * vector_persistent(tvec) behavior:
+ *   head == 0  →  returns the backing directly
+ *   head != 0  →  returns a normalised vector in logical order
  */
 #if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
 typedef struct CljTransientVector {
@@ -102,13 +98,11 @@ static inline CljPersistentVector* as_persistent_vector(ID obj) {
 
 /** @brief Return a persistent view of a transient vector.
  *
- * When head == 0 the backing is returned directly (borrowed, no allocation).
- * When head != 0 a normalised copy in logical order is allocated and returned
- * AUTORELEASE'd.  In both cases the caller must NOT wrap the result in another
- * AUTORELEASE — see the CljTransientVector doc-comment above for details.
+ * When `head == 0` the backing is returned directly. When `head != 0` a
+ * normalised vector in logical order is returned.
  *
  * @param tvec Transient vector to snapshot
- * @return Persistent vector snapshot (see ownership note above)
+ * @return Persistent vector snapshot
  */
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 
@@ -183,21 +177,21 @@ CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retenti
 /** @brief Create persistent vector from contiguous item storage
  * @param items Pointer to contiguous items (can be NULL only when count is 0)
  * @param count Number of items to copy
- * @return New persistent vector (owned, rc=1) or empty-vector singleton when count is 0
+ * @return New persistent vector or empty-vector singleton when count is 0
  */
 CljPersistentVector* make_vector_from_stack(ID *items, unsigned int count);
 
 /** @brief Append item to vector (persistent, returns new vector)
  * @param vec Source vector
  * @param item Item to append
- * @return New vector with item appended (AUTORELEASE'd)
+ * @return New vector with item appended
  */
 CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item);
 
-/** @brief Append item to vector, returns owned reference
+/** @brief Append item to vector for internal callers that need the raw result
  * @param vec Source vector
  * @param item Item to append
- * @return New vector (owned, no AUTORELEASE)
+ * @return Updated vector
  */
 CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item);
 
@@ -205,7 +199,7 @@ CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item);
  * @param vec Source vector
  * @param index Index to update
  * @param value New value
- * @return New vector with updated element (AUTORELEASE'd)
+ * @return New vector with updated element
  */
 CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, ID value);
 
@@ -213,7 +207,7 @@ CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, 
  * @param vec Source vector
  * @param index Index to update
  * @param value New value
- * @return New vector with updated element (AUTORELEASE'd)
+ * @return New vector with updated element
  */
 CljPersistentVector* vector_set_nth(CljPersistentVector* vec, unsigned int index, ID value);
 
@@ -226,13 +220,13 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacit
 
 /** @brief Remove last element (persistent, returns new vector)
  * @param vec Source vector
- * @return New vector without last element (AUTORELEASE'd)
+ * @return New vector without last element
  */
 CljPersistentVector* vector_popped(CljPersistentVector* vec);
 
-/** @brief Remove last element, returns owned reference
+/** @brief Remove last element for internal callers that need the raw result
  * @param vec Source vector
- * @return New vector (owned, no AUTORELEASE)
+ * @return Updated vector
  */
 CljPersistentVector* vector_popped_owned(CljPersistentVector* vec);
 
@@ -240,14 +234,14 @@ CljPersistentVector* vector_popped_owned(CljPersistentVector* vec);
  * @param vec Source vector
  * @param index Index to insert at
  * @param item Item to insert
- * @return New vector with item inserted (AUTORELEASE'd)
+ * @return New vector with item inserted
  */
 CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item);
 
 /** @brief Remove element at index (persistent, returns new vector)
  * @param vec Source vector
  * @param index Index to remove
- * @return New vector with element removed (AUTORELEASE'd)
+ * @return New vector with element removed
  */
 CljPersistentVector* vector_by_removing_at(CljPersistentVector* vec, unsigned int index);
 
@@ -265,19 +259,30 @@ void vector_truncate(CljPersistentVector *vec, unsigned int n);
 // Transient wrapper API (wrapper pointer remains stable; `backing` may be replaced/grown).
 /** @brief Create a transient wrapper around a persistent vector.
  * @param vec Source persistent vector to wrap
- * @return New transient vector with rc=1; caller owns the wrapper and must
- *         balance it with `RELEASE()` or `AUTORELEASE()`
- *
- * The wrapper retains `vec` as its backing store. This is an owned constructor,
- * not a borrowed/view helper, so the `make_` prefix is intentional.
+ * @return New transient vector wrapper
  */
 CljTransientVector* make_vector_transient(CljPersistentVector *vec);
-/** @brief Convert transient to persistent snapshot.
- * NOTE: The returned backing is borrowed from the transient; it remains valid
- * only until the transient is mutated or released. RETAIN it if you need to
- * keep it beyond further transient operations or pool drains. */
-CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 // (internal) backing replacement helper is intentionally not part of the public API.
+
+/** @brief Return the first logical element of a transient vector.
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @return First logical element or NULL when the transient vector is empty
+ */
+static inline ID vector_front_transient(CljTransientVector *tvec) {
+    if (!tvec || !tvec->backing || tvec->backing->count == 0) {
+        return NULL;
+    }
+    unsigned int cap = (unsigned int)tvec->backing->capacity;
+    if (cap == 0u) {
+        return NULL;
+    }
+    return tvec->backing->data[tvec->head % cap];
+}
+
+/** @brief Clear a transient vector and reset its ringbuffer head.
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ */
+void vector_clear_transient(CljTransientVector *tvec);
 
 /** Push item to end of transient vector (in-place mutation).
  * Only works on transient vectors. Throws exception if called on persistent vector.

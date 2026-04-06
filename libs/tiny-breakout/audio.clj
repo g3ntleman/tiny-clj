@@ -26,6 +26,12 @@
 (def wall-hit-track-bytes
   (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 140 176 148 2 20 16 176 184 1 20 18 32]))
 
+(def ^:private startup-entertainer-track-id
+  :startup/the-entertainer)
+
+(def ^:private startup-entertainer-track-path
+  "/assets/tiny-fx/sound-demos/the-entertainer.trk1")
+
 (def cue-specs
   {:sfx/paddle-hit
    {:track-id :tiny-breakout/paddle-hit
@@ -88,6 +94,19 @@
     (sound/sound-stop-all!)
     (catch RuntimeException _ nil)
     (catch Exception _ nil))
+  nil)
+
+(defn play-startup-entertainer!
+  "Plays the bundled startup music once without depending on tiny-fx.sound-demos."
+  []
+  (let [track-bytes (try
+                      (slurp-bytes startup-entertainer-track-path)
+                      (catch Exception _ nil))]
+    (when track-bytes
+      (try
+        (sound/sound-play-music! startup-entertainer-track-id track-bytes 1)
+        (catch RuntimeException _ nil)
+        (catch Exception _ nil))))
   nil)
 
 (defn play-cues!

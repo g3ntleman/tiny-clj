@@ -8,7 +8,9 @@ overview: >
   Breakout-specific callback logic inside `tiny-breakout.audio`. Supported bus
   semantics should follow a small, explicit Clojure/JVM-aligned subset, event maps
   should already be in their final public delivery shape, and the hot path must stay
-  lightweight enough for ESP targets.
+  lightweight enough for ESP targets. The legacy partial `clojure.core.async`
+  implementation must be disabled as part of this migration so the repo does not
+  keep two competing async/pub-sub models alive.
 todos:
   - id: phase-1-red-generic-event-bus-contract
     content: "RED: Add focused tests for the supported generic event-bus subset (Clojure/JVM-aligned subscribe, unsubscribe, source/id routing, final event shape, drain timing) using audio finished as the first end-to-end driver"
@@ -63,6 +65,8 @@ The result should support:
 - reuse by Breakout and future apps without new app-specific callback plumbing
 - final public event maps that can later serve directly as channel content for a
   larger `core.async`-style subset
+- explicit disabling of the current legacy `clojure.core.async` subset so the
+  generic event bus becomes the only supported pub/sub path
 
 ## Hard constraint
 
@@ -90,18 +94,24 @@ composition, and it does not solve the broader architecture issue:
 - multiple song-specific listeners are awkward
 - `tiny-clj.event` currently hardcodes source-specific routing instead of being a
   generic bus
+- `libs/clojure/core/async.clj` provides an older partial async/channel model
+  that would overlap conceptually with the planned generic bus and should not
+  remain enabled as a second in-repo direction
 
 ## Scope
 
 In scope:
 
 - `libs/tiny-clj/event.clj`
+- `libs/clojure/core/async.clj`
 - `libs/tiny-fx.sound.clj` only if a small API adjustment is needed
 - sound-engine callback routing on the C side and/or shared Clojure event layer
 - a generic event-bus core and source-registration/routing model
 - a small explicit supported subset whose semantics match Clojure/JVM as closely
   as feasible
 - migration of existing sources onto that generic model
+- disabling the legacy `clojure.core.async` subset so it fails clearly instead of
+  continuing to expose a second partial async model
 - tests in `src/tests/test_sound_engine.c`, `src/tests/test_breakout_runtime_startup.c`,
   nearby event-related tests, and any nearby existing test groups
 - migration of Breakout startup-song cleanup to the shared event API
@@ -115,6 +125,8 @@ Out of scope:
 - cross-cutting refactors outside event delivery and its direct app integrations
 - pretending to support broader `core.async` surface area than is actually
   implemented
+- keeping the old partial `clojure.core.async` implementation alive beside the
+  generic bus
 
 ## Target Architecture
 
@@ -151,10 +163,14 @@ The first supported subset should stay intentionally small and explicit:
 - source/id-based event matching
 - deterministic remove-before-drain behavior
 - event delivery on the existing push-based execution model
+- one clear supported direction for pub/sub: the generic event bus, not the
+  current legacy `clojure.core.async` subset
 
 This plan does not require a full `core.async` implementation. The goal is
 compatible semantics for the supported pub/sub-like cases, not channel,
-buffering, go-block, or alts semantics.
+buffering, go-block, or alts semantics. The existing partial
+`clojure.core.async` namespace should therefore be disabled so unsupported
+semantics fail clearly instead of coexisting with the bus.
 
 ### Event model
 
@@ -255,6 +271,8 @@ Add failing tests first.
 5. Two subscriptions for different songs only fire for their own song.
 6. Unsubscribing before event-loop drain prevents callback execution.
 7. Manual `sound-stop-track!` still does not dispatch a finished event.
+8. Requiring or calling the legacy `clojure.core.async` subset fails clearly
+   after the migration instead of exposing stale partial semantics.
 
 Prefer extending existing sound-engine tests rather than adding a new test file.
 
@@ -275,6 +293,8 @@ Design constraints:
 - keep the steady-state hot path lightweight enough for ESP event timing
 - prefer reusing the existing event-loop transport unless tests prove that clean
   semantics require replacing it
+- disable the legacy `clojure.core.async` implementation rather than leaving it
+  as a parallel partial solution
 
 Likely implementation shape:
 
@@ -285,10 +305,14 @@ Likely implementation shape:
 4. keep dispatch on the existing event loop so callback timing matches current
    tests, unless a targeted replacement is required by the supported semantics
 5. make watcher removal deterministic and safe before drain
+6. replace the current `clojure.core.async` entry points with clear unsupported
+   failures or equivalent explicit disable behavior, so there is no dual-path
+   async API in the repo
 
 Exit criterion:
 
 - phase-1 generic-bus tests turn green without touching Breakout-specific logic yet
+- the old `clojure.core.async` path is no longer an active supported runtime path
 
 ### Phase 3 - GREEN: Audio source adapter on the generic bus
 
@@ -344,12 +368,15 @@ Steps:
 2. keep public `tiny-clj.event` semantics stable
 3. make each source publish final public event maps directly into the shared bus
 4. remove redundant source-specific routing logic where the generic path replaces it
+5. remove or disable any remaining old async/pub-sub entry points that would
+   duplicate the new bus direction
 
 Constraints:
 
 - preserve public behavior unless a red test explicitly changes it
 - no fallback dual-path architecture left behind
 - no source-specific compatibility wrappers that outlive the migration
+- no still-enabled legacy `clojure.core.async` path left behind
 
 Exit criterion:
 
@@ -404,6 +431,7 @@ After behavior is green:
 4. re-run sound-demo and heap-sensitive groups that could regress indirectly
 5. run full unit tests
 6. compare namespace-load and startup-heap baselines before/after
+7. verify legacy `clojure.core.async` calls now fail clearly and predictably
 
 Acceptance checks:
 
@@ -411,12 +439,14 @@ Acceptance checks:
 - no increased ignored-test count
 - no regression in event-loop delivery semantics
 - no new mandatory dependency from Breakout runtime to `tiny-fx.sound-demos`
+- no still-enabled legacy `clojure.core.async` runtime path
 
 ## File Plan
 
 Likely files to touch:
 
 - `libs/tiny-clj/event.clj`
+- `libs/clojure/core/async.clj`
 - `libs/tiny-breakout/audio.clj`
 - `libs/tiny-breakout/runtime.clj`
 - `libs/tiny-fx/sound.clj` only if public API docs need updates
@@ -465,6 +495,8 @@ Possible additional nearby files, only if required by the final design:
    - document the supported subset explicitly
    - add red tests only for supported semantics
    - make unsupported cases fail clearly
+   - disable the current legacy `clojure.core.async` subset during migration so
+     there is only one supported direction
 
 ## Acceptance Criteria
 
@@ -476,13 +508,15 @@ Possible additional nearby files, only if required by the final design:
    bus.
 4. Event payloads are already in their final public shape and can later serve as
    direct channel content for an expanded `core.async`-style subset.
-5. Any app can subscribe to a song-finished event through `tiny-clj.event`.
-6. Subscriptions are per song (`track-id`), not one global app-level callback.
-7. Natural completion dispatches exactly one callback for matching subscribers.
-8. Manual stop keeps current non-finished behavior unless explicitly changed by
+5. The legacy partial `clojure.core.async` implementation is disabled and fails
+   clearly instead of remaining as a competing runtime path.
+6. Any app can subscribe to a song-finished event through `tiny-clj.event`.
+7. Subscriptions are per song (`track-id`), not one global app-level callback.
+8. Natural completion dispatches exactly one callback for matching subscribers.
+9. Manual stop keeps current non-finished behavior unless explicitly changed by
    failing tests and an approved design decision.
-9. Breakout startup-song cleanup uses the shared event API and does not depend on
+10. Breakout startup-song cleanup uses the shared event API and does not depend on
    `tiny-fx.sound-demos`.
-10. The chosen execution path stays push-based, avoids polling, and keeps the
+11. The chosen execution path stays push-based, avoids polling, and keeps the
     additional dispatch layer lightweight enough for ESP event timing.
-11. All relevant tests and the full suite are green.
+12. All relevant tests and the full suite are green.

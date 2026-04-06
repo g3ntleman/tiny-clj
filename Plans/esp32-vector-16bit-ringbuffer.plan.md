@@ -9,32 +9,67 @@ overview: >
 todos:
   - id: phase-1-red-layout-and-limit-tests
     content: "RED: Add focused tests for ESP32-only 16-bit vector count/capacity layout, explicit max-capacity guards, and unchanged macOS host behavior"
-    status: done
+    status: completed
   - id: phase-2-green-esp32-header-shrink
     content: "GREEN: Reduce vector count/capacity to 16-bit on ESP32 only, keep host layout unchanged, and make all allocation/growth code respect the new capacity limit"
-    status: done
+    status: completed
   - id: phase-3-red-transient-ringbuffer-contract-tests
     content: "RED: Add tests for transient-vector ringbuffer semantics, including FIFO-style front removal, wrap-around, persistent snapshot correctness, and unchanged public vector behavior"
-    status: done
+    status: completed
   - id: phase-4-green-transient-ringbuffer
     content: "GREEN: Implement option 2 by adding an offset/head field to transient vectors and making transient mutation paths ringbuffer-backed"
-    status: done
+    status: completed
   - id: phase-5-red-event-loop-queue-regressions
     content: "RED: Add or tighten event-loop queue tests proving FIFO order, front-removal correctness, and no behavioral regressions when task queues use transient ringbuffer operations"
-    status: done
+    status: completed
   - id: phase-6-green-hot-path-adoption
     content: "GREEN: Update event-loop queue usage to benefit from transient ringbuffer semantics without changing public contracts"
-    status: done
+    status: completed
   - id: phase-7-regression-and-budgets
     content: "REFACTOR: Re-run vector, event-loop, heap, and full-suite regressions; verify the ESP32 vector header shrink actually reduces heap usage and that host behavior stays unchanged"
-    status: pending
+    status: completed
   - id: cleanup
     content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
-    status: pending
+    status: completed
 isProject: false
 ---
 
 # ESP32 Vector Header Shrink and Transient Ringbuffer
+
+## Workspace status
+
+- Status: implementation completed; all plan TODOs are now marked `completed`.
+- Relevant execution commits:
+  - `c607ef8b` - RED Phase 1: layout/limit contract tests
+  - `8be5ad7e` - GREEN Phase 2: ESP32 16-bit vector fields and capacity guard
+  - `8e487286` - RED Phase 3: transient ringbuffer contract tests
+  - `88b648ea` - GREEN Phase 4+6: transient ringbuffer implementation and event-loop hot-path adoption
+  - `739b9abf` - RED Phase 5: event-loop queue regression tests
+  - `76d52027` - GREEN Phase 5+7 follow-up fixes and documentation
+
+## Current verification
+
+Focused regression runs on the current workspace:
+
+- `./build/unit-tests --test "test_vector/*"` -> `44 Tests 0 Failures 0 Ignored`
+- `./build/unit-tests --test "test_timer/*"` -> `20 Tests 0 Failures 0 Ignored`
+- `./build/unit-tests --test "test_go_blocks/*"` -> `16 Tests 0 Failures 0 Ignored`
+
+Full-suite verification on the current workspace:
+
+- `./build/unit-tests` -> `2170 Tests 1 Failures 8 Ignored`
+- Current failing test:
+  - `src/tests/test_embedded_sources.c:96:test_embedded_sources/embedded_sources_core_matches_libs_file_bytes`
+  - message: `Expected 52726 Was 53302`
+
+Interpretation:
+
+- The vector/ringbuffer plan scope is implemented in the workspace history above.
+- The current dirty workspace is not fully green because the full-suite run still
+  reports the embedded-sources mismatch listed above.
+- This plan is therefore closed from an implementation-history perspective, but
+  the current workspace cannot be reported as fully green until that remaining
+  suite failure is resolved separately.
 
 ## Goal
 
@@ -48,32 +83,6 @@ The target end state is:
 - transient vectors gain a ringbuffer head/offset field and can remove from the
   front without repeated full-array shifting
 - public vector behavior remains Clojure-compatible and unchanged for callers
-
-## Current workspace status
-
-Status at the time of this plan update:
-
-- Planning is refined, but the implementation has **not** landed yet in the
-  current workspace state.
-- `CljPersistentVector` still uses the current wide fields:
-  - `unsigned int count`
-  - `int capacity`
-- `CljTransientVector` still contains only:
-  - `CljObject base`
-  - `CljPersistentVector *backing`
-- `vector_persistent()` still returns the borrowed backing directly; no
-  ringbuffer-aware snapshot logic exists yet.
-- `event_loop_run_next()` still dequeues via:
-  - `vector_nth(task_vec->backing, 0)`
-  - `vector_remove_at(task_vec, 0)`
-- The current `src/tests/test_vector.c` does **not** yet contain the new Phase 1
-  layout/limit tests in the active file content.
-
-Practical consequence:
-
-- No implementation phase can be marked completed yet.
-- All execution todos below remain pending until the corresponding code and
-  tests are present in the active workspace state and verified.
 
 ## Why this change is justified
 

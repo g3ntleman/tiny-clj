@@ -120,10 +120,8 @@ static const char *source_resolver_bundle_root(void) {
 }
 #endif // !ESP32_BUILD (source_resolver_bundle_root)
 
+#if !defined(ESP32_BUILD)
 static const char *source_resolver_repo_root(void) {
-#if defined(ESP32_BUILD)
-    return NULL;
-#else
     static char repo_root[PATH_MAX] = {0};
     static bool did_probe = false;
 
@@ -150,8 +148,8 @@ static const char *source_resolver_repo_root(void) {
     memcpy(repo_root, __FILE__, repo_len);
     repo_root[repo_len] = '\0';
     return repo_root;
-#endif
 }
+#endif // !ESP32_BUILD (source_resolver_repo_root)
 
 static ID source_resolver_read_file_bytes(const char *fs_path) {
     if (!fs_path || !fs_path[0]) return NULL;
