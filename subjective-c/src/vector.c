@@ -531,9 +531,26 @@ CljPersistentVector *vector_persistent(CljTransientVector *tvec) {
   if (!tvec)
     return NULL;
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
-  // Hand out borrowed backing; remains valid until transient is mutated or released.
-  // Callers that need to hold onto it must RETAIN explicitly.
-  return tvec->backing;
+  CljPersistentVector *b = tvec->backing;
+  if (tvec->head == 0) {
+    // Fast path: elements are in logical order already; return borrowed backing.
+    return b;
+  }
+  // Ringbuffer wrap-around: allocate a normalised persistent copy in logical order.
+  // Returned as AUTORELEASE so callers don't need to change (still borrowed-style).
+  unsigned int cnt = b->count;
+  unsigned int cap = (unsigned int)b->capacity;
+  bool is_weak = has_weak_elements((const CljObject *)b);
+  CljPersistentVector *copy = make_vector(cnt, is_weak ? WEAK : STRONG);
+  if (!copy)
+    return b; // fallback: return stale backing rather than NULL
+  copy->count = cnt;
+  for (unsigned int i = 0; i < cnt; i++) {
+    unsigned int phys = (tvec->head + i) % cap;
+    ID src = b->data[phys];
+    copy->data[i] = is_weak ? src : RETAIN(src);
+  }
+  return AUTORELEASE(copy);
 }
 
 static void transient_vector_set_backing(CljTransientVector *tvec, CljPersistentVector *new_backing) {
@@ -555,14 +572,45 @@ void vector_push(CljTransientVector *tvec, ID item) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_push: vector is NULL");
     return;
-    return;
   }
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-  CljPersistentVector *new_backing = vector_conj_owned(backing, item); // owned
-  transient_vector_set_backing(tvec, new_backing);
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
+  unsigned int cap = (unsigned int)b->capacity;
+  bool is_weak = has_weak_elements((const CljObject *)b);
+
+  if (cnt < cap) {
+    // In-place write at the ringbuffer tail (O(1)).
+    unsigned int phys = (tvec->head + cnt) % cap;
+    b->data[phys] = is_weak ? item : RETAIN(item);
+    b->count++;
+    return;
+  }
+
+  // Backing is full: grow.  Copy elements in logical order → head resets to 0.
+  unsigned int new_cap = cap * 2;
+  if (new_cap < 4) new_cap = 4;
+  if (new_cap > CLJ_VECTOR_CAPACITY_MAX) {
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                              "vector_push: vector would exceed maximum capacity (%u)",
+                              CLJ_VECTOR_CAPACITY_MAX);
+    return;
+  }
+  CljPersistentVector *new_b = make_vector(new_cap, is_weak ? WEAK : STRONG);
+  if (!new_b) return;
+  new_b->count = cnt;
+  for (unsigned int i = 0; i < cnt; i++) {
+    unsigned int phys = (tvec->head + i) % cap;
+    ID src = b->data[phys];
+    new_b->data[i] = is_weak ? src : RETAIN(src);
+  }
+  // Append the new item at logical position cnt
+  new_b->data[cnt] = is_weak ? item : RETAIN(item);
+  new_b->count = cnt + 1;
+  tvec->head = 0;  // Growth invariant: head resets to 0
+  transient_vector_set_backing(tvec, new_b);
 }
 
 void vector_pop(CljTransientVector *tvec) {
@@ -570,21 +618,26 @@ void vector_pop(CljTransientVector *tvec) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_pop: vector is NULL");
     return;
-    return;
   }
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-  if (vector_count(backing) == 0) {
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
+  if (cnt == 0) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_pop: cannot pop from empty vector");
     return;
-    return;
   }
 
-  CljPersistentVector *new_backing = vector_popped_owned(backing); // owned
-  transient_vector_set_backing(tvec, new_backing);
+  // O(1) tail removal: release the last logical element.
+  unsigned int cap = (unsigned int)b->capacity;
+  unsigned int tail_phys = (tvec->head + cnt - 1) % cap;
+  if (!has_weak_elements((const CljObject *)b)) {
+    RELEASE(b->data[tail_phys]);
+    b->data[tail_phys] = NULL;
+  }
+  b->count--;
 }
 
 void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID value) {
@@ -592,24 +645,26 @@ void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID v
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_set_nth_transient: vector is NULL");
     return;
-    return;
   }
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-
-  unsigned int cnt = vector_count(backing);
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
   if (index >= cnt) {
     throw_index_out_of_bounds("vector_set_nth_transient", index, cnt, "vector");
+    return;
   }
 
-  // Use owned assoc core so we can safely replace backing (COW if necessary).
-  CljPersistentVector *new_backing = vector_assoc_owned(backing, index, value); // owned
-  if (!new_backing) {
-    return; // exception already thrown by vector_assoc_core
+  bool is_weak = has_weak_elements((const CljObject *)b);
+  unsigned int cap = (unsigned int)b->capacity;
+  unsigned int phys = (tvec->head + index) % cap;
+
+  if (!is_weak) {
+    ASSIGN(b->data[phys], value);
+  } else {
+    b->data[phys] = value;
   }
-  transient_vector_set_backing(tvec, new_backing);
 }
 
 void vector_remove_at(CljTransientVector *tvec, unsigned int index) {
@@ -617,20 +672,48 @@ void vector_remove_at(CljTransientVector *tvec, unsigned int index) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_remove_at: vector is NULL");
     return;
-    return;
   }
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-  unsigned int cnt = vector_count(backing);
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
   if (index >= cnt) {
     throw_index_out_of_bounds("vector_remove_at", index, cnt, "vector");
     return;
   }
 
-  CljPersistentVector *new_backing = vector_remove_at_owned(backing, index);
-  transient_vector_set_backing(tvec, new_backing);
+  unsigned int cap = (unsigned int)b->capacity;
+  bool is_weak = has_weak_elements((const CljObject *)b);
+
+  if (index == 0) {
+    // O(1) front removal: release element and advance head.
+    unsigned int phys = tvec->head % cap;
+    if (!is_weak) {
+      RELEASE(b->data[phys]);
+      b->data[phys] = NULL;
+    }
+    tvec->head = (tvec->head + 1) % cap;
+    b->count--;
+    return;
+  }
+
+  // Arbitrary index: O(n) wrap-aware shift.
+  // Release the element being removed first.
+  unsigned int phys_remove = (tvec->head + index) % cap;
+  if (!is_weak) {
+    RELEASE(b->data[phys_remove]);
+  }
+  // Shift elements logically after `index` one position toward the front.
+  for (unsigned int i = index; i < cnt - 1; i++) {
+    unsigned int dst = (tvec->head + i) % cap;
+    unsigned int src = (tvec->head + i + 1) % cap;
+    b->data[dst] = b->data[src];
+  }
+  // Clear the vacated tail slot.
+  unsigned int tail = (tvec->head + cnt - 1) % cap;
+  b->data[tail] = NULL;
+  b->count--;
 }
 
 void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item) {
@@ -638,19 +721,58 @@ void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_insert_at: vector is NULL");
     return;
-    return;
   }
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-  unsigned int cnt = vector_count(backing);
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
   if (index > cnt) {
     throw_index_out_of_bounds("vector_insert_at", index, cnt, "vector");
+    return;
   }
 
-  CljPersistentVector *new_backing = vector_insert_at_owned(backing, index, item);
-  transient_vector_set_backing(tvec, new_backing);
+  unsigned int cap = (unsigned int)b->capacity;
+  bool is_weak = has_weak_elements((const CljObject *)b);
+
+  if (cnt < cap) {
+    // In-place insert with wrap-aware shift (O(n), tail shifts right).
+    for (unsigned int i = cnt; i > index; i--) {
+      unsigned int dst = (tvec->head + i) % cap;
+      unsigned int src = (tvec->head + i - 1) % cap;
+      b->data[dst] = b->data[src];
+    }
+    unsigned int phys = (tvec->head + index) % cap;
+    b->data[phys] = is_weak ? item : RETAIN(item);
+    b->count++;
+    return;
+  }
+
+  // Need to grow: copy logical order into new backing, head resets to 0.
+  unsigned int new_cap = cap * 2;
+  if (new_cap < 4) new_cap = 4;
+  if (new_cap > CLJ_VECTOR_CAPACITY_MAX) {
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                              "vector_insert_at: vector would exceed maximum capacity (%u)",
+                              CLJ_VECTOR_CAPACITY_MAX);
+    return;
+  }
+  CljPersistentVector *new_b = make_vector(new_cap, is_weak ? WEAK : STRONG);
+  if (!new_b) return;
+  new_b->count = cnt + 1;
+  for (unsigned int i = 0; i < index; i++) {
+    unsigned int phys = (tvec->head + i) % cap;
+    ID src = b->data[phys];
+    new_b->data[i] = is_weak ? src : RETAIN(src);
+  }
+  new_b->data[index] = is_weak ? item : RETAIN(item);
+  for (unsigned int i = index; i < cnt; i++) {
+    unsigned int phys = (tvec->head + i) % cap;
+    ID src = b->data[phys];
+    new_b->data[i + 1] = is_weak ? src : RETAIN(src);
+  }
+  tvec->head = 0;
+  transient_vector_set_backing(tvec, new_b);
 }
 
 void vector_truncate_transient(CljTransientVector *tvec, unsigned int new_count) {
@@ -662,14 +784,23 @@ void vector_truncate_transient(CljTransientVector *tvec, unsigned int new_count)
   CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
   CLJ_ASSERT(tvec->backing != NULL);
 
-  CljPersistentVector *backing = tvec->backing;
-  unsigned int current_count = vector_count(backing);
+  CljPersistentVector *b = tvec->backing;
+  unsigned int cnt = b->count;
 
-  if (new_count >= current_count) {
-    // Nothing to truncate
+  if (new_count >= cnt) {
     return;
   }
 
-  // Truncate the backing vector in-place (since we have unique ownership)
-  vector_truncate(backing, new_count);
+  unsigned int cap = (unsigned int)b->capacity;
+  bool is_weak = has_weak_elements((const CljObject *)b);
+
+  // Release tail elements that are being truncated (wrap-aware).
+  if (!is_weak) {
+    for (unsigned int i = new_count; i < cnt; i++) {
+      unsigned int phys = (tvec->head + i) % cap;
+      RELEASE(b->data[phys]);
+      b->data[phys] = NULL;
+    }
+  }
+  b->count = new_count;
 }

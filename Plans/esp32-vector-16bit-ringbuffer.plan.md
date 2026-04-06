@@ -18,13 +18,13 @@ todos:
     status: done
   - id: phase-4-green-transient-ringbuffer
     content: "GREEN: Implement option 2 by adding an offset/head field to transient vectors and making transient mutation paths ringbuffer-backed"
-    status: pending
+    status: done
   - id: phase-5-red-event-loop-queue-regressions
     content: "RED: Add or tighten event-loop queue tests proving FIFO order, front-removal correctness, and no behavioral regressions when task queues use transient ringbuffer operations"
-    status: pending
+    status: done
   - id: phase-6-green-hot-path-adoption
     content: "GREEN: Update event-loop queue usage to benefit from transient ringbuffer semantics without changing public contracts"
-    status: pending
+    status: done
   - id: phase-7-regression-and-budgets
     content: "REFACTOR: Re-run vector, event-loop, heap, and full-suite regressions; verify the ESP32 vector header shrink actually reduces heap usage and that host behavior stays unchanged"
     status: pending

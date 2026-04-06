@@ -940,7 +940,10 @@ void event_loop_clear(void) {
     if (g_runtime.task_queue && (uintptr_t)g_runtime.task_queue >= 0x1000) {
         CljTransientVector *task_vec = task_queue_get();
         if (task_vec && task_vec->backing) {
+            // Clear the backing and reset the ringbuffer head so subsequent
+            // push operations write at data[0] again.
             vector_clear(task_vec->backing);
+            task_vec->head = 0;
         }
     } else {
         g_runtime.task_queue = NULL;
@@ -1234,8 +1237,10 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         return false;
     }
 
-    // Get first task (FIFO)
-    ID entry = vector_nth(task_vec->backing, 0);
+    // Get first task (FIFO).
+    // Access via the ringbuffer head so the physical slot is correct even after
+    // front removals have advanced head past data[0].
+    ID entry = task_vec->backing->data[task_vec->head % (unsigned int)task_vec->backing->capacity];
     WITH_MUTEX(event_loop_ingress_lock) {
         RETAIN(entry);
     }
