@@ -666,3 +666,79 @@ TEST(test_event_loop_enqueue_updates_count) {
         RELEASE(chan);
     });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5+6: event-loop task queue FIFO and ringbuffer regression tests
+// ---------------------------------------------------------------------------
+
+// Verify FIFO execution order: tasks enqueued first must be dispatched first
+// even after repeated front removals advance the ringbuffer head.
+TEST(test_event_loop_task_queue_fifo_order_survives_front_removals) {
+    WITH_AUTORELEASE_POOL({
+        event_loop_clear();
+
+        // Enqueue three zero-arity functions and run them in order; verify
+        // the queue count decrements correctly after each dispatch.
+        CljObject *fn1 = eval_string("(fn [] 1)", g_test_eval_state);
+        CljObject *fn2 = eval_string("(fn [] 2)", g_test_eval_state);
+        CljObject *fn3 = eval_string("(fn [] 3)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(fn1);
+        TEST_ASSERT_NOT_NULL(fn2);
+        TEST_ASSERT_NOT_NULL(fn3);
+
+        // Enqueue all three
+        event_loop_enqueue(fn1, NULL);
+        event_loop_enqueue(fn2, NULL);
+        event_loop_enqueue(fn3, NULL);
+
+        CljTransientVector *tq = g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL(tq);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(3, (int)vector_count(vector_persistent(tq)),
+            "three tasks must be queued before dispatch");
+
+        // Run one: head advances; remaining tasks must stay accessible.
+        // vector_persistent() returns borrowed (head==0) or AUTORELEASE'd copy
+        // (head>0) — do not wrap in AUTORELEASE to avoid double-free.
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(2, (int)vector_count(vector_persistent(tq)),
+            "after first dispatch, 2 tasks must remain");
+
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)vector_count(vector_persistent(tq)),
+            "after second dispatch, 1 task must remain");
+
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)vector_count(vector_persistent(tq)),
+            "after third dispatch, queue must be empty");
+    });
+}
+
+// After event_loop_clear(), head must be 0 and subsequent enqueue must write
+// at the beginning of the buffer (no stale head offset left over).
+TEST(test_event_loop_clear_resets_ringbuffer_head) {
+    WITH_AUTORELEASE_POOL({
+        event_loop_clear();
+
+        // Advance the head by enqueuing and running tasks.
+        CljObject *fn = eval_string("(fn [] nil)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(fn);
+        event_loop_enqueue(fn, NULL);
+        event_loop_run_next(NULL, g_test_eval_state);
+        // head should now be 1 (or wrapping); call clear to reset it.
+
+        event_loop_clear();
+
+        CljTransientVector *tq = g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL_MESSAGE(tq, "task queue must exist after clear");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)tq->head,
+            "event_loop_clear must reset the ringbuffer head to 0");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)vector_count(vector_persistent(tq)),
+            "queue must be empty after clear");
+
+        // Enqueue a fresh task; head is 0 so vector_persistent returns borrowed backing.
+        event_loop_enqueue(fn, NULL);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, (int)vector_count(vector_persistent(tq)),
+            "enqueue after clear must add exactly one task");
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    });
+}

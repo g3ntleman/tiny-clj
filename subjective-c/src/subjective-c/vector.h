@@ -33,11 +33,36 @@ typedef struct CljPersistentVector {
 } CljPersistentVector;
 #endif
 
-// Transient vector with ringbuffer head/offset.
-// `head` is the logical index of the first live element inside `backing->data`.
-// Physical index = (head + logical_index) % backing->capacity.
-// On ESP32 head is uint16_t (matches the narrowed capacity field); on host it
-// uses unsigned int so sizeof(CljTransientVector) stays naturally aligned.
+/**
+ * CljTransientVector — mutable wrapper over a CljPersistentVector backing.
+ *
+ * Ringbuffer semantics
+ * --------------------
+ * `head` is the physical index of the first live logical element inside
+ * `backing->data`.  All logical indices map to physical storage via:
+ *
+ *   physical = (head + logical_index) % backing->capacity
+ *
+ * Operation complexity:
+ *   vector_push(tvec, item)        O(1) — writes at (head+count) % cap
+ *   vector_pop(tvec)               O(1) — releases tail element
+ *   vector_remove_at(tvec, 0)      O(1) — increments head, decrements count
+ *   vector_remove_at(tvec, N)      O(n) — wrap-aware element shifting
+ *   vector_insert_at(tvec, N, v)   O(n) — wrap-aware element shifting
+ *   vector_set_nth_transient       O(1) — maps logical index through head
+ *
+ * Growth invariant: whenever the backing must grow, elements are copied in
+ * logical order into the new allocation and `head` is reset to 0.  This keeps
+ * the physical layout contiguous after every resize.
+ *
+ * vector_persistent(tvec) contract:
+ *   head == 0  →  returns borrowed pointer to backing (no allocation).
+ *                 Valid as long as tvec is alive and unmutated; do NOT
+ *                 AUTORELEASE the result.
+ *   head != 0  →  allocates a normalised copy in logical order and returns
+ *                 it AUTORELEASE'd.  The pool owns the copy; do NOT wrap in
+ *                 an additional AUTORELEASE.
+ */
 #if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
 typedef struct CljTransientVector {
     CljObject base;                 // type == CLJ_VECTOR_TRANSIENT
@@ -75,10 +100,15 @@ static inline CljPersistentVector* as_persistent_vector(ID obj) {
     return (CljPersistentVector*)obj;
 }
 
-// Forward declaration for compatibility helper.
-/** @brief Convert transient vector to persistent snapshot
- * @param tvec Transient vector to convert
- * @return Persistent vector (borrowed reference, RETAIN if keeping)
+/** @brief Return a persistent view of a transient vector.
+ *
+ * When head == 0 the backing is returned directly (borrowed, no allocation).
+ * When head != 0 a normalised copy in logical order is allocated and returned
+ * AUTORELEASE'd.  In both cases the caller must NOT wrap the result in another
+ * AUTORELEASE — see the CljTransientVector doc-comment above for details.
+ *
+ * @param tvec Transient vector to snapshot
+ * @return Persistent vector snapshot (see ownership note above)
  */
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 

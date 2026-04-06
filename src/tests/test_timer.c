@@ -591,7 +591,7 @@ TEST(test_task_queue_fifo_order) {
     }
 
     for (int i = 0; i < N; i++) {
-        CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+        CljPersistentVector *pv = vector_persistent(tvec);
         TEST_ASSERT_EQUAL_UINT((unsigned)(N - i), vector_count(pv));
         ID front = vector_nth(pv, 0);
         TEST_ASSERT_TRUE_MESSAGE(clj_equal(front, fixnum(i + 1)),
@@ -599,7 +599,7 @@ TEST(test_task_queue_fifo_order) {
         vector_remove_at(tvec, 0);
     }
 
-    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(vector_persistent(tvec)));
 }
 
 // --- 5b: No skip or duplicate after repeated enqueue/dequeue ---
@@ -615,7 +615,7 @@ TEST(test_task_queue_no_skip_or_duplicate) {
 
     // Dequeue first
     {
-        CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+        CljPersistentVector *pv = vector_persistent(tvec);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(pv, 0)));
         vector_remove_at(tvec, 0);
     }
@@ -625,7 +625,7 @@ TEST(test_task_queue_no_skip_or_duplicate) {
     vector_push(tvec, fixnum(50));
 
     // Should now have [20, 30, 40, 50]
-    CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+    CljPersistentVector *pv = vector_persistent(tvec);
     TEST_ASSERT_EQUAL_UINT(4u, vector_count(pv));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(pv, 0)));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(pv, 1)));
@@ -635,7 +635,7 @@ TEST(test_task_queue_no_skip_or_duplicate) {
     for (int i = 0; i < 4; i++) {
         vector_remove_at(tvec, 0);
     }
-    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(vector_persistent(tvec)));
 }
 
 // --- 5c: Wrap-around over initial backing capacity ---
@@ -658,7 +658,7 @@ TEST(test_task_queue_wraparound) {
     }
 
     // Expected logical order: [5, 6, 7, 8, 100, 101, 102, 103]
-    CljPersistentVector *pv = AUTORELEASE(vector_persistent(tvec));
+    CljPersistentVector *pv = vector_persistent(tvec);
     TEST_ASSERT_EQUAL_UINT(8u, vector_count(pv));
     for (int i = 0; i < 4; i++) {
         TEST_ASSERT_EQUAL_INT(5 + i, as_fixnum(vector_nth(pv, (unsigned)i)));
@@ -670,5 +670,5 @@ TEST(test_task_queue_wraparound) {
     for (int i = 0; i < 8; i++) {
         vector_remove_at(tvec, 0);
     }
-    TEST_ASSERT_EQUAL_UINT(0u, vector_count(AUTORELEASE(vector_persistent(tvec))));
+    TEST_ASSERT_EQUAL_UINT(0u, vector_count(vector_persistent(tvec)));
 }
