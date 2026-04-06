@@ -83,6 +83,7 @@ static const char* shorten_file_path(const char *file) {
     return file;
 }
 
+#if defined(DEBUG) && (defined(__APPLE__) || defined(__linux__))
 static const char *path_basename_const(const char *path) {
     if (!path || path[0] == '\0') {
         return "";
@@ -90,8 +91,6 @@ static const char *path_basename_const(const char *path) {
     const char *last_slash = strrchr(path, '/');
     return last_slash ? (last_slash + 1) : path;
 }
-
-#if defined(DEBUG) && (defined(__APPLE__) || defined(__linux__))
 static void exception_format_symbolized_frame(char *buf,
                                               size_t buf_size,
                                               int frame_index,

@@ -38,12 +38,14 @@ static const char *source_resolver_virtual_rel_path(const char *path) {
     return path[0] == '/' ? path + 1 : path;
 }
 
+#if !defined(ESP32_BUILD)
 static bool source_resolver_is_bundle_virtual_path(const char *path) {
     return source_resolver_has_prefix(path, "/libs/") ||
            source_resolver_has_prefix(path, "/assets/") ||
            source_resolver_has_prefix(path, "/boot/") ||
            source_resolver_has_suffix(path, ".clj");
 }
+#endif // !ESP32_BUILD
 
 static bool source_resolver_is_filesystem_fallback_path(const char *path) {
     return source_resolver_has_prefix(path, "/libs/") ||
@@ -51,6 +53,7 @@ static bool source_resolver_is_filesystem_fallback_path(const char *path) {
            source_resolver_has_suffix(path, ".clj");
 }
 
+#if !defined(ESP32_BUILD)
 static bool source_resolver_join_path(char *out, size_t out_size, const char *root, const char *rel) {
     if (!out || out_size == 0u || !root || !root[0] || !rel || !rel[0]) {
         return false;
@@ -59,6 +62,7 @@ static bool source_resolver_join_path(char *out, size_t out_size, const char *ro
     int written = snprintf(out, out_size, "%s/%s", root, rel);
     return written > 0 && (size_t)written < out_size;
 }
+#endif // !ESP32_BUILD
 
 void source_resolver_set_bundle_resource_root(const char *root_path) {
     g_source_resolver_bundle_root[0] = '\0';
@@ -80,6 +84,7 @@ void source_resolver_clear_bundle_resource_root(void) {
     g_source_resolver_bundle_root_override_active = false;
 }
 
+#if !defined(ESP32_BUILD)
 static const char *source_resolver_bundle_root(void) {
     if (g_source_resolver_bundle_root_override_active) {
         return g_source_resolver_bundle_root[0] ? g_source_resolver_bundle_root : NULL;
@@ -113,6 +118,7 @@ static const char *source_resolver_bundle_root(void) {
 
     return NULL;
 }
+#endif // !ESP32_BUILD (source_resolver_bundle_root)
 
 static const char *source_resolver_repo_root(void) {
 #if defined(ESP32_BUILD)
