@@ -1290,6 +1290,124 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
   sound_engine_shutdown();
 }
 
+TEST(test_sound_core_async_pub_sub_receives_finished_event) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  sound_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":core-async-audio-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  ID setup = eval_string(
+      "(do "
+      "  (require 'clojure.core.async) "
+      "  (require 'tiny-fx.sound) "
+      "  (def sound-core-async-source (clojure.core.async/chan 8)) "
+      "  (def sound-core-async-pub (clojure.core.async/pub sound-core-async-source :source)) "
+      "  (def sound-core-async-out (clojure.core.async/chan 2)) "
+      "  (clojure.core.async/sub sound-core-async-pub :audio sound-core-async-out) "
+      "  (tiny-fx.sound/sound-on-finished! "
+      "    (fn [event] "
+      "      (clojure.core.async/put! sound-core-async-source event) "
+      "      nil)) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+  sound_engine_tick();
+  TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string(
+      "(let [event (clojure.core.async/poll! sound-core-async-out)] "
+      "  (= [(:source event) (:kind event) (:track-id event)] "
+      "     [:audio :finished :core-async-audio-test]))",
+                        g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, done);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_core_async_unsub_before_drain_prevents_audio_delivery) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  sound_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":core-async-audio-remove-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  ID setup = eval_string(
+      "(do "
+      "  (require 'clojure.core.async) "
+      "  (require 'tiny-fx.sound) "
+      "  (def sound-core-async-source-remove (clojure.core.async/chan 8)) "
+      "  (def sound-core-async-pub-remove (clojure.core.async/pub sound-core-async-source-remove :source)) "
+      "  (def sound-core-async-out-remove (clojure.core.async/chan 2)) "
+      "  (clojure.core.async/sub sound-core-async-pub-remove :audio sound-core-async-out-remove) "
+      "  (tiny-fx.sound/sound-on-finished! "
+      "    (fn [event] "
+      "      (clojure.core.async/put! sound-core-async-source-remove event) "
+      "      nil)) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+  sound_engine_tick();
+  TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(),
+                           "finished event should be queued before unsubscribing audio topic");
+
+  ID removed = eval_string("(do (require 'clojure.core.async) "
+                           "    (clojure.core.async/unsub sound-core-async-pub-remove :audio sound-core-async-out-remove) "
+                           "    true)",
+                           g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, removed);
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string("(nil? (clojure.core.async/poll! sound-core-async-out-remove))", g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, done);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_audio_event_bus_pub_receives_finished_event) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  sound_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":audio-event-bus-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  ID setup = eval_string(
+      "(do "
+      "  (require 'clojure.core.async) "
+      "  (require 'tiny-clj.audio-event-bus) "
+      "  (def sound-bus-out (clojure.core.async/chan 2)) "
+      "  (clojure.core.async/sub (tiny-clj.audio-event-bus/audio-finished-pub!) "
+      "                          :audio sound-bus-out) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, ba, 1));
+  sound_engine_tick();
+  TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string(
+      "(let [event (clojure.core.async/poll! sound-bus-out)] "
+      "  (= [(:source event) (:kind event) (:track-id event)] "
+      "     [:audio :finished :audio-event-bus-test]))",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, done);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
 TEST(test_sound_finished_callback_uses_snapshot_when_handler_changes_before_drain) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

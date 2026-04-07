@@ -15,7 +15,6 @@
 #include "../list.h"
 #include "../vector.h"
 #include "map.h"
-#include "kv_macros.h"
 #include "../runtime.h"
 #include "../object.h"
 #include "../builtins.h"
@@ -210,7 +209,7 @@ TEST(test_defn_native_stub_registers_native_function) {
 TEST(test_native_function_lookup_trim) {
     CljSymbol *trim_sym = intern_symbol(SYM_CLOJURE_STRING, "trim");
     TEST_ASSERT_NOT_NULL(trim_sym);
-    BuiltinFn func = native_function_lookup(trim_sym);
+    BuiltinFn func = native_function_lookup(trim_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find trim");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(native_trim, func, "should return native_trim function");
 }
@@ -221,7 +220,7 @@ TEST(test_native_function_lookup_trim) {
 TEST(test_native_function_lookup_upper_case) {
     CljSymbol *upper_case_sym = intern_symbol(SYM_CLOJURE_STRING, "upper-case");
     TEST_ASSERT_NOT_NULL(upper_case_sym);
-    BuiltinFn func = native_function_lookup(upper_case_sym);
+    BuiltinFn func = native_function_lookup(upper_case_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find upper-case");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(native_upper_case, func, "should return native_upper_case function");
 }
@@ -232,7 +231,7 @@ TEST(test_native_function_lookup_upper_case) {
 TEST(test_native_function_lookup_nonexistent) {
     CljSymbol *nonexistent_sym = intern_symbol(SYM_CLOJURE_STRING, "nonexistent");
     TEST_ASSERT_NOT_NULL(nonexistent_sym);
-    BuiltinFn func = native_function_lookup(nonexistent_sym);
+    BuiltinFn func = native_function_lookup(nonexistent_sym, NULL);
     TEST_ASSERT_NULL_MESSAGE(func, "native_function_lookup should return NULL for nonexistent function");
 }
 
@@ -240,7 +239,7 @@ TEST(test_native_function_lookup_nonexistent) {
 // TEST: Native Funktion Lookup - NULL name
 // ============================================================================
 TEST(test_native_function_lookup_null_name) {
-    BuiltinFn func = native_function_lookup(NULL);
+    BuiltinFn func = native_function_lookup(NULL, NULL);
     TEST_ASSERT_NULL_MESSAGE(func, "native_function_lookup should return NULL for NULL name");
 }
 

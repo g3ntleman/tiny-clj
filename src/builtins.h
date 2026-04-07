@@ -32,9 +32,8 @@ void builtins_reset_cached_funcs(void);
 unsigned long *gensym_use_local(unsigned long *counter);
 
 // Native function lookup for stubs
-// Returns NULL if not found
-BuiltinFn native_function_lookup(CljSymbol *symbol);
-bool builtin_native_fn_needs_eval_state(BuiltinFn fn);
+// Returns NULL if not found. When non-NULL, out_flags receives CLJ_CFUNC_FLAG_* bits.
+BuiltinFn native_function_lookup(CljSymbol *symbol, uint8_t *out_flags);
 
 // Variadic functions (Phase 1)
 ID native_str(ID *args, unsigned int argc);

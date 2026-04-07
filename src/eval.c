@@ -1833,7 +1833,7 @@ static ID eval_function_call_from_vector(CljPersistentVector *args, CljPersisten
         return NULL;
       }
       if (is_builtin_function(sym)) {
-        BuiltinFn native_func = native_function_lookup(sym);
+        BuiltinFn native_func = native_function_lookup(sym, NULL);
         if (native_func) {
           ID argv[16];
           unsigned int argc = 0;
@@ -2359,7 +2359,9 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
 
   // Process :require clauses: (ns name (:require [ns :as alias]))
   // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-  bool require_needs_eval_state = builtin_native_fn_needs_eval_state(native_require);
+  uint8_t require_flags = 0u;
+  (void)native_function_lookup(intern_symbol_global("require"), &require_flags);
+  bool require_needs_eval_state = (require_flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE) != 0u;
   for (unsigned int i = 1; i < argc; i++) {
     CljObject *clause = (CljObject *)vector_nth(args, i);
     if (!clause)
@@ -2584,15 +2586,16 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
 
     // Lookup native function by name (try qualified first, then unqualified)
     BuiltinFn native_func = NULL;
+    uint8_t native_flags = 0u;
     CljSymbol *lookup_symbol = fn_name;
     if (st && st->current_ns && st->current_ns->name) {
       CljSymbol *qualified = intern_symbol(st->current_ns->name, fn_name->cname);
       if (qualified)
         lookup_symbol = qualified;
     }
-    native_func = native_function_lookup(lookup_symbol);
+    native_func = native_function_lookup(lookup_symbol, &native_flags);
     if (!native_func && lookup_symbol != fn_name) {
-      native_func = native_function_lookup(fn_name);
+      native_func = native_function_lookup(fn_name, &native_flags);
     }
     if (!native_func) {
       char error_msg[256];
@@ -2602,8 +2605,6 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
       format_append(error_msg, pos, sizeof(error_msg), fn_name->cname);
       throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
     }
-
-    uint8_t native_flags = builtin_native_fn_needs_eval_state(native_func) ? CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE : 0u;
 
     // Reuse an existing native binding in the current namespace when it already
     // points to the same C function. This keeps repeated `(require 'ns)` calls

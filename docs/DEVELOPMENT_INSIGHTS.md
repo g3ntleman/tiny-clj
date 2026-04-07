@@ -1523,7 +1523,7 @@ void test_memory_allocation(void) {
 ### CMake Integration
 
 ```cmake
-# Unity Test Framework (central runner with separate test files)
+# The runner is linked once; test files register themselves automatically.
 add_executable(unit-tests
     src/tests/unity_test_runner.c
     src/tests/memory_tests.c
@@ -1539,11 +1539,123 @@ target_include_directories(unit-tests PRIVATE external/unity/src)
 ### Debugging and Development
 
 #### Test Development Workflow
-1. **Write test** in appropriate `.c` file
-2. **Declare function** in `unity_test_runner.c`
-3. **Add to test group** in runner
-4. **Test individually**: `./unit-tests <suite>`
-5. **Verify integration**: `./unit-tests all`
+1. **Write or extend a test file** under `src/tests/`.
+2. **Include `tests_common.h`** and use `TEST(...)` or `TEST_SHARED(...)`.
+3. **Do not manually register the test in `unity_test_runner.c`.**
+   The macros expand to a small constructor function that adds the test to the
+   central registry automatically.
+4. **Build `unit-tests`** so the new translation unit is linked into the test binary.
+5. **Run a focused pattern first**, for example:
+   `./build/unit-tests -test 'test_sound_*'`
+6. **Then run broader coverage** as needed.
+
+The test group is derived automatically from the filename by the registry
+macros. `TEST_SHARED(...)` additionally prefixes the derived group with
+`shared_` so batched groups can reuse setup safely.
+
+#### How Automatic Test Registration Works
+
+`tests_common.h` re-exports the subjective-c test infrastructure. The key rule
+is simple: if you write a test with the project macros and the file is part of
+the `unit-tests` target, the test is registered automatically.
+
+```c
+#include "tests_common.h"
+
+TEST(test_example_feature) {
+    TEST_ASSERT_TRUE(true);
+}
+
+TEST_SHARED(test_example_read_only_behavior) {
+    TEST_ASSERT_TRUE(true);
+}
+```
+
+Why this works:
+
+- `TEST(...)` and `TEST_SHARED(...)` emit a hidden `register_<name>()`
+  function marked with `__attribute__((constructor, used))`.
+- That constructor calls the central registry before `main()` runs.
+- `unity_test_runner.c` does not need per-test declarations; it consumes the
+  registry entries.
+
+Only touch `unity_test_runner.c` when changing runner behavior, batching,
+filters, or global setup rules, not when adding ordinary tests.
+
+#### Implementing `:native` Builtins
+
+The implementation path for a native Clojure function in this repository is:
+
+1. **Add the public Clojure stub** in the owning namespace:
+
+```clojure
+(ns tiny-clj.example)
+
+(defn native-op
+  "Explains the supported behavior and arguments."
+  [x]
+  :native)
+```
+
+2. **Implement the C function** with the standard builtin signature:
+
+```c
+ID native_tinyclj_example_native_op(ID *args, unsigned int argc) {
+    /* validate argc, types, and implement behavior */
+}
+```
+
+3. **Register the builtin** in `native_function_table` in `src/builtins.c`.
+
+Prefer these registration styles:
+
+- `NATIVE_ENTRY(&sym_foo_data.sym, native_foo)` for symbol-backed entries
+- `NATIVE_ENTRY_BOOT(&sym_ns_name_qualified_data.sym, native_fn, "ns/name")`
+  when the entry also needs bootstrap registration
+- `NATIVE_ENTRY_BOOT_CNAME(native_fn, "ns/name")` only when a string-only entry
+  is sufficient
+
+4. **Require the namespace from Clojure** and let normal native lookup resolve
+   the `:native` stub.
+
+Practical rule: the Clojure `defn ... :native` stub is the public API surface;
+the C entry in `native_function_table` is the runtime binding; both are needed.
+
+#### Prefer Static Symbols for Native Namespaces
+
+When a namespace has native components, prefer static symbols in C whenever
+practical instead of relying on ad-hoc runtime interning or string-only lookup.
+
+There are two common patterns in this codebase:
+
+1. **Shared unqualified/static symbols** declared through `symbol.c` /
+   `symbol.h`, typically via helper macros such as `DEFINE_EXTERN_SYMBOL(...)`.
+2. **Qualified pseudo-symbols** local to `src/builtins.c`, for example:
+
+```c
+static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.fs/spit-bytes"}};
+```
+
+Then register with the symbol-backed entry:
+
+```c
+NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
+```
+
+Why static symbols are preferred:
+
+- **Faster lookup** through pointer comparisons on interned/static symbols
+- **Less runtime churn** than repeated dynamic symbol construction
+- **One source of truth** for the qualified native name
+- **Cleaner maintenance** when a namespace grows multiple native entry points
+
+Use string-only `*_CNAME(...)` entries sparingly for bootstrap-only helpers or
+one-off cases. For namespaces that clearly own native functionality, static
+symbol-backed entries should be the default design.
 
 #### Common Patterns
 ```c
@@ -1574,4 +1686,7 @@ void test_exception_example(void) {
 
 ### Conclusion
 
-Unity Test Framework provides a modern, flexible testing solution that enhances the project's testing capabilities while maintaining compatibility with existing memory management and embedded constraints. The command-line parameter support enables efficient test isolation and debugging, making it an ideal replacement for MinUnit while preserving the project's core testing features.
+The current tiny-clj workflow relies on automatic test registration, namespace
+backed `:native` stubs, and static symbol data for efficient native lookup.
+Following these patterns keeps tests low-friction, native APIs explicit, and
+lookup paths compact and predictable.

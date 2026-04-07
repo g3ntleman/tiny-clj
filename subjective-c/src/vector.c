@@ -48,27 +48,47 @@ unsigned int vector_capacity(CljPersistentVector *vec) {
   return vec ? (unsigned int)vec->capacity : 0u;
 }
 
-ID vector_nth(CljPersistentVector *vec, unsigned int index) {
-  if (!vec) {
+ID vector_nth(ID vec_obj, unsigned int index) {
+  if (!vec_obj) {
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "vector_nth: vector is NULL");
     return NULL;
   }
-  if (index < vec->count) {
+
+  if (TAG(vec_obj) == CLJ_VECTOR_TRANSIENT) {
+    CljTransientVector *tvec = as_transient_vector(vec_obj);
+    unsigned int count = vector_count(vec_obj);
+    CljPersistentVector *backing = tvec ? tvec->backing : NULL;
+    unsigned int cap = vector_capacity(backing);
+    if (index < count && cap != 0u) {
+      return backing->data[(tvec->head + index) % cap];
+    }
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                              "vector_nth: index %u is out of bounds for vector with %u elements",
+                              index, count);
+    return NULL;
+  }
+
+  CljPersistentVector *vec = as_persistent_vector(vec_obj);
+  if (index < vector_count(vec_obj)) {
     return vec->data[index];
   }
   throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                             "vector_nth: index %u is out of bounds for vector with %u elements",
-                            index, vec->count);
+                            index, vector_count(vec_obj));
   return NULL;
 }
 
-int vector_index_of(CljPersistentVector *vec, ID value) {
-  if (!vec)
+int vector_index_of(ID vec_obj, ID value) {
+  if (!vec_obj) {
     return INDEX_NOT_FOUND;
-  VECTOR_FOR_EACH(vec, elem) {
+  }
+
+  unsigned int count = vector_count(vec_obj);
+  for (unsigned int i = 0; i < count; i++) {
+    ID elem = vector_nth(vec_obj, i);
     if (clj_equal(elem, value)) {
-      return _i;
+      return (int)i;
     }
   }
   return INDEX_NOT_FOUND;

@@ -6,22 +6,20 @@ overview: >
   are the driving first use-case, but the target architecture is a shared bus for
   all event sources. The change must be incremental, test-first, and must not keep
   Breakout-specific callback logic inside `tiny-breakout.audio`. Supported bus
-  semantics should follow a small, explicit Clojure/JVM-aligned subset, event maps
-  should already be in their final public delivery shape, and the hot path must stay
-  lightweight enough for ESP targets. The current partial `clojure.core.async`
-  implementation is not the desired target shape; it should be moved to a backup
-  location and replaced by a new small, Clojure-compatible pub/sub subset inside
-  the `clojure.core.async` namespace itself.
+  semantics follow a small Clojure/JVM-aligned subset; the hot path (chan/put!/pub
+  routing) lives in C builtins; `sub` / `unsub` / `unsub-all` are interpreted against
+  publication state. Phases 1–3 (tests, pub/sub core, audio bridge) are implemented;
+  phases 4–8 (full source parity, Breakout migration, final regression) remain.
 todos:
   - id: phase-1-red-generic-event-bus-contract
     content: "RED: Add focused tests for the supported generic event-bus subset (Clojure/JVM-aligned subscribe, unsubscribe, source/id routing, final event shape, drain timing) using audio finished as the first end-to-end driver"
-    status: pending
+    status: completed
   - id: phase-2-green-bus-core
     content: "GREEN: Add the generic event-bus core with one clear lightweight dispatch path, reusing the existing event-loop transport unless replacement is required to preserve semantics cleanly"
-    status: pending
+    status: completed
   - id: phase-3-green-audio-adapter
     content: "GREEN: Migrate sound finished notifications onto the generic event bus as the first real source adapter, emitting final public event maps directly"
-    status: pending
+    status: completed
   - id: phase-4-red-existing-source-parity-tests
     content: "RED: Add or tighten tests proving existing event sources still behave correctly when routed through the generic event bus with the same public payload shape"
     status: pending
@@ -44,6 +42,18 @@ isProject: false
 ---
 
 # Generic Event Bus Plan
+
+## Implementation status (phases 1–3)
+
+Delivered in-tree:
+
+- **`clojure.core.async`**: Active namespace is a small compatible subset; `chan`, `put!`, `poll!`, `close!`, `closed?`, and **`pub`** are native (C). **`sub`**, **`unsub`**, **`unsub-all`** are Clojure, mutating the publication’s subscription atom. Unsupported macros (`go`, `<!`, …) fail clearly. The previous large experimental `core.async` file was replaced (history in git; no separate backup file required for runtime).
+- **Audio bridge**: `libs/tiny-clj/audio-event-bus.clj` (`tiny-clj.audio-event-bus`) wires `tiny-fx.sound/sound-on-finished!` → internal channel → `pub` with topic key **`:source`**; API **`audio-finished-pub!`**, **`audio-finished-source!`**. Finished maps keep **`{:source :audio :kind :finished :track-id …}`**.
+- **Eval / natives**: `NativeFunctionEntry` carries flags; **`native_function_lookup(sym, out_flags)`** replaces ad-hoc “needs eval state” dispatch.
+- **Vectors (subjective-c)**: `vector_count` / `vector_nth` / `vector_index_of` accept **`ID`** and support persistent + transient vectors for bus/helper code without poking struct internals.
+- **Tests**: e.g. `test_sound_engine.c` (pub/sub + audio finished), existing groups updated for `native_function_lookup` and vector behavior.
+
+Not started here (plan phases 4–8): migrate `tiny-clj.event` sources (button/sensor/spatial/timeline), Breakout startup-song via bus-only, full regression sign-off.
 
 ## Goal
 
@@ -85,25 +95,16 @@ The result should support:
 
 ## Current State
 
-Today the sound engine exposes one global callback hook, while `tiny-clj.event`
-still knows about individual source types and delegates to them explicitly.
+**Audio / core.async (after phases 1–3):** Apps can subscribe to finished sound
+events via **`tiny-clj.audio-event-bus`** + **`clojure.core.async/sub`** on the
+publication from **`audio-finished-pub!`**, topic **`:audio`** (from `:source` on
+each event). The sound engine still exposes one native callback; the bridge
+re-registers it when the pub API is used.
 
-On the audio side:
-
-- public Clojure API: `tiny-fx.sound/sound-on-finished!`
-- native storage: one retained function in `sound_engine.c`
-- event payload already exists and includes `:source`, `:kind`, and `:track-id`
-
-This is enough for one global observer, but not ideal for app-level
-composition, and it does not solve the broader architecture issue:
-
-- app code must coordinate a shared global callback
-- multiple song-specific listeners are awkward
-- `tiny-clj.event` currently hardcodes source-specific routing instead of being a
-  generic bus
-- `libs/clojure/core/async.clj` currently contains an older partial
-  channel/go-oriented experiment; the implemented parts are not the desired
-  final subset for this task
+**Still as before for the full bus vision:** `tiny-clj.event` continues to know
+about individual source types until phases 4–5. Public Clojure API for raw hook:
+`tiny-fx.sound/sound-on-finished!`; native storage in `sound_engine.c`; payloads
+include `:source`, `:kind`, `:track-id`.
 
 ## Scope
 
@@ -111,15 +112,15 @@ In scope:
 
 - `libs/tiny-clj/event.clj`
 - `libs/clojure/core/async.clj`
-- backup location for the old `clojure.core.async` implementation inside the repo
+- `libs/tiny-clj/audio-event-bus.clj`
 - `libs/tiny-fx.sound.clj` only if a small API adjustment is needed
 - sound-engine callback routing on the C side and/or shared Clojure event layer
 - a generic event-bus core and source-registration/routing model
 - a small explicit supported subset whose semantics match Clojure/JVM as closely
   as feasible
 - migration of existing sources onto that generic model
-- replacing the current `clojure.core.async` contents with a new compatible
-  pub/sub subset while keeping the old implementation only as backup
+- replacing the previous `clojure.core.async` contents with the new compatible
+  pub/sub subset (legacy revision recoverable from git)
 - tests in `src/tests/test_sound_engine.c`, `src/tests/test_breakout_runtime_startup.c`,
   nearby event-related tests, and any nearby existing test groups
 - migration of Breakout startup-song cleanup to the shared event API
@@ -469,8 +470,8 @@ Acceptance checks:
 Likely files to touch:
 
 - `libs/tiny-clj/event.clj`
-- `libs/clojure/core/async.clj`
-- backup path for legacy `core.async`
+- `libs/tiny-clj/audio-event-bus.clj` (audio finished → `clojure.core.async` pub bridge)
+- `libs/clojure/core/async.clj` (replaced; legacy revision in git history)
 - `libs/tiny-breakout/audio.clj`
 - `libs/tiny-breakout/runtime.clj`
 - `libs/tiny-fx/sound.clj` only if public API docs need updates

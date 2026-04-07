@@ -16,7 +16,7 @@ TEST(test_native_lookup_finds_button_watch_native) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.button/watch-native");
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_NOT_NULL(native_function_lookup(sym));
+        TEST_ASSERT_NOT_NULL(native_function_lookup(sym, NULL));
     });
 }
 
@@ -25,7 +25,7 @@ TEST(test_native_lookup_finds_sensor_watch_native) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.sensor/watch-native");
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_NOT_NULL(native_function_lookup(sym));
+        TEST_ASSERT_NOT_NULL(native_function_lookup(sym, NULL));
     });
 }
 

@@ -123,11 +123,17 @@ static inline CljTransientVector* as_transient_vector(ID obj) {
 }
 
 
-/** @brief Get number of elements in vector
- * @param vec Vector to count
+/** @brief Get number of elements in a persistent or transient vector
+ * @param vec_obj Vector-like object to count
  * @return Number of elements
  */
-static INLINE __attribute__((unused)) unsigned int vector_count(CljPersistentVector *vec) {
+static INLINE __attribute__((unused)) unsigned int vector_count(ID vec_obj) {
+    if (!vec_obj) return 0u;
+    if (TAG(vec_obj) == CLJ_VECTOR_TRANSIENT) {
+        CljTransientVector *tvec = as_transient_vector(vec_obj);
+        return (tvec && tvec->backing) ? tvec->backing->count : 0u;
+    }
+    CljPersistentVector *vec = as_persistent_vector(vec_obj);
     return vec ? vec->count : 0u;
 }
 
@@ -138,19 +144,19 @@ static INLINE __attribute__((unused)) unsigned int vector_count(CljPersistentVec
 unsigned int vector_capacity(CljPersistentVector *vec);
 
 
-/** @brief Get element at index
- * @param vec Vector to access
+/** @brief Get element at index from a persistent or transient vector
+ * @param vec_obj Vector-like object to access
  * @param index Index of element (must be < count)
  * @return Element at index
  */
-ID vector_nth(CljPersistentVector *vec, unsigned int index);
+ID vector_nth(ID vec_obj, unsigned int index);
 
-/** @brief Find index of value in vector
- * @param vec Vector to search
+/** @brief Find index of value in a persistent or transient vector.
+ * @param vec Vector-like object to search
  * @param value Value to find (uses clj_equal)
  * @return Index of first occurrence or -1 if not found
  */
-int vector_index_of(CljPersistentVector *vec, ID value);
+int vector_index_of(ID vec, ID value);
 
 /** @brief Get direct pointer to internal array
  * @param vec Vector to access

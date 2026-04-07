@@ -26,9 +26,9 @@ TEST(test_mdns_bindings_native_functions_exist)
     TEST_ASSERT_NOT_NULL(s_browse);
     TEST_ASSERT_NOT_NULL(s_close);
 
-    TEST_ASSERT_NOT_NULL(native_function_lookup(s_open));
-    TEST_ASSERT_NOT_NULL(native_function_lookup(s_on_event));
-    TEST_ASSERT_NOT_NULL(native_function_lookup(s_browse));
-    TEST_ASSERT_NOT_NULL(native_function_lookup(s_close));
+    TEST_ASSERT_NOT_NULL(native_function_lookup(s_open, NULL));
+    TEST_ASSERT_NOT_NULL(native_function_lookup(s_on_event, NULL));
+    TEST_ASSERT_NOT_NULL(native_function_lookup(s_browse, NULL));
+    TEST_ASSERT_NOT_NULL(native_function_lookup(s_close, NULL));
 }
 

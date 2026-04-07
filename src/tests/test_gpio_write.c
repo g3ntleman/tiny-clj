@@ -21,7 +21,7 @@ TEST(test_native_lookup_finds_gpio_write) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/write!");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/write! symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/write!");
     });
 }
@@ -31,7 +31,7 @@ TEST(test_native_lookup_finds_gpio_read) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/read");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/read symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/read");
     });
 }
@@ -41,7 +41,7 @@ TEST(test_native_lookup_finds_gpio_read_analog) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/read-analog");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/read-analog symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/read-analog");
     });
 }
@@ -51,7 +51,7 @@ TEST(test_native_lookup_finds_gpio_pwm) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/pwm!");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/pwm! symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/pwm!");
     });
 }
@@ -61,7 +61,7 @@ TEST(test_native_lookup_finds_gpio_pwm_stop) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/pwm-stop!");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/pwm-stop! symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/pwm-stop!");
     });
 }
@@ -71,7 +71,7 @@ TEST(test_native_lookup_finds_gpio_simulate_analog) {
         init_special_symbols();
         CljSymbol *sym = intern_symbol_global("tiny-clj.gpio/simulate-analog!");
         TEST_ASSERT_NOT_NULL_MESSAGE(sym, "tiny-clj.gpio/simulate-analog! symbol should exist");
-        BuiltinFn native_fn = native_function_lookup(sym);
+        BuiltinFn native_fn = native_function_lookup(sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_fn, "native_function_lookup should find tiny-clj.gpio/simulate-analog!");
     });
 }

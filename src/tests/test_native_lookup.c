@@ -25,7 +25,7 @@ TEST(test_native_lookup_finds_count) {
         TEST_ASSERT_NOT_NULL_MESSAGE(count_sym, "count symbol should exist");
         
         // Try to find native function
-        BuiltinFn native_count = native_function_lookup(count_sym);
+        BuiltinFn native_count = native_function_lookup(count_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_count, "native_function_lookup should find count");
     });
 }
@@ -46,7 +46,7 @@ TEST(test_native_lookup_finds_count_qualified) {
         TEST_ASSERT_NOT_NULL_MESSAGE(count_sym, "qualified count symbol should exist");
         
         // Try to find native function
-        BuiltinFn native_count = native_function_lookup(count_sym);
+        BuiltinFn native_count = native_function_lookup(count_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(native_count, "native_function_lookup should find qualified count");
     });
 }

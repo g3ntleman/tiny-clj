@@ -55,38 +55,34 @@ TEST(test_plan_trackA_core_async_go_unsupported_script) {
     assert_load_file_ok("libs/test/core_async/go_unsupported.clj");
 }
 
-TEST(test_plan_trackB_core_async_parking_script) {
+TEST(test_plan_trackB_core_async_pub_sub_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     require_readable_script_or_ignore("libs/test/core_async/parking.clj");
     assert_load_file_ok("libs/test/core_async/parking.clj");
 }
 
-TEST(test_plan_trackB_core_async_qualified_go_returns_channel_result) {
+TEST(test_plan_trackB_core_async_qualified_pub_sub_roundtrip) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID result = NULL;
     TRY {
         eval_string("(require 'clojure.core.async)", g_test_eval_state);
-        eval_string(
-            "(defn __drain_tasks_for_test__ [] "
-            "  (if (run-next-task) "
-            "    (__drain_tasks_for_test__) "
-            "    nil))",
-            g_test_eval_state);
         result = eval_string(
-            "(let [out (clojure.core.async/go (+ 1 2))] "
-            "  (__drain_tasks_for_test__) "
-            "  (clojure.core.async/poll! out))",
+            "(let [src (clojure.core.async/chan 4) "
+            "       p (clojure.core.async/pub src :source) "
+            "       out (clojure.core.async/chan 2)] "
+            "  (clojure.core.async/sub p :audio out) "
+            "  (clojure.core.async/put! src {:source :audio :kind :finished :track-id :qualified-test}) "
+            "  (= :qualified-test (:track-id (clojure.core.async/poll! out))))",
             g_test_eval_state);
     } CATCH(ex) {
         if (ex) {
             print_exception((CLJException*)ex);
         }
-        TEST_FAIL_MESSAGE("qualified clojure.core.async/go should evaluate without exception");
+        TEST_FAIL_MESSAGE("qualified clojure.core.async pub/sub roundtrip should evaluate without exception");
     } END_TRY
 
-    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "qualified clojure.core.async/go must yield fixnum result");
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+    TEST_ASSERT_EQUAL_PTR(clj_true, result);
 }
 
 TEST(test_plan_trackA_gpio_smoke_script) {

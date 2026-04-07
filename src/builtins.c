@@ -18,9 +18,7 @@
 #include "record.h"
 #include "hashset.h"
 #include "atom.h"
-#include "kv_macros.h"
 #include "numeric_utils.h"
-#include "format_utils.h"
 #include "runtime.h"
 #include "memory.h"
 #include "memory_profiler.h"
@@ -50,7 +48,6 @@
 #include "macro.h"
 #include "instant.h"
 #include "build_info.h"
-#include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
 #include "tiny_fx_gfx.h"
@@ -86,15 +83,13 @@ static ID make_thunk_body_ast_call(ID fn_obj) {
   return call ? call : NULL;
 }
 
-bool builtin_native_fn_needs_eval_state(BuiltinFn fn);
-
-static inline uint8_t native_cfunc_flags(BuiltinFn fn) {
-  return builtin_native_fn_needs_eval_state(fn) ? CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE : 0u;
+static inline uint8_t native_entry_cfunc_flags(unsigned int entry_flags) {
+  return (uint8_t)(entry_flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
 }
 
-static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) {
+static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, uint8_t flags, ID *slot) {
   if (!*slot) {
-    *slot = make_named_func_with_flags(fn, name_sym, native_cfunc_flags(fn));
+    *slot = make_named_func_with_flags(fn, name_sym, flags);
   }
   return *slot;
 }
@@ -298,6 +293,12 @@ ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
 ID native_swap_bang(ID *args, unsigned int argc);
+ID native_core_async_chan(ID *args, unsigned int argc);
+ID native_core_async_put_bang(ID *args, unsigned int argc);
+ID native_core_async_poll_bang(ID *args, unsigned int argc);
+ID native_core_async_close_bang(ID *args, unsigned int argc);
+ID native_core_async_closed_p(ID *args, unsigned int argc);
+ID native_core_async_pub(ID *args, unsigned int argc);
 ID native_instant_p(ID *args, unsigned int argc);
 ID native_instant_days(ID *args, unsigned int argc);
 ID native_instant_ms(ID *args, unsigned int argc);
@@ -1053,7 +1054,8 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
   map_assoc_inplace(&rest_state, SYM_CONCAT_X, next_x);
   RELEASE(x_seq);
   map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
-  ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, 0u,
+                                &g_concat_thunk_fn_obj);
   CljLazySeq *rest_lazy = make_lazy_seq(fn_obj);
   if (!rest_lazy) {
     RELEASE(rest_state);
@@ -1094,7 +1096,8 @@ ID native_concat(ID *args, unsigned int argc) {
   map_assoc_inplace(&state, SYM_CONCAT_X, x);
   map_assoc_inplace(&state, SYM_CONCAT_Y, y);
 
-  ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, 0u,
+                                &g_concat_thunk_fn_obj);
   CljLazySeq *lazy = make_lazy_seq(fn_obj);
   if (!lazy) {
     RELEASE(state);
@@ -1610,7 +1613,8 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
   }
   vector_conj_inplace(&rest_env_stack, rest_state);
   RELEASE(rest_state);
-  ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN,
+                                CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_map_thunk_fn_obj);
   ID thunk_body = make_thunk_body_ast_call(fn_obj);
   if (!thunk_body) {
     RELEASE(rest_env_stack);
@@ -1662,7 +1666,8 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
         map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
         map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
         RELEASE(inner_rest);
-        ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
+        ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN,
+                                      CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_mapcat_thunk_fn_obj);
         CljLazySeq *rest_lazy = make_lazy_seq(fn_obj);
         if (!rest_lazy) {
           RELEASE(v);
@@ -1763,7 +1768,8 @@ ID native_map(ID *args, unsigned int argc) {
   vector_conj_inplace(&env_stack, state);
   RELEASE(state);
 
-  ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN,
+                                CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_map_thunk_fn_obj);
   ID thunk_body = make_thunk_body_ast_call(fn_obj);
   if (!thunk_body) {
     RELEASE(env_stack);
@@ -1807,7 +1813,8 @@ ID native_mapcat(ID *args, unsigned int argc) {
   map_assoc_inplace(&state, SYM_MAPCAT_COLL, coll);
   map_assoc_inplace(&state, SYM_MAPCAT_INNER, NULL);
 
-  ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN,
+                                CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_mapcat_thunk_fn_obj);
   CljLazySeq *lazy = make_lazy_seq(fn_obj);
   if (!lazy) {
     RELEASE(state);
@@ -4213,11 +4220,20 @@ enum {
 #define NATIVE_ENTRY(sym, fn) \
   {(sym), (fn), NULL, 0u}
 
+#define NATIVE_ENTRY_FLAGS(sym, fn, flags) \
+  {(sym), (fn), NULL, (flags)}
+
 #define NATIVE_ENTRY_BOOT(sym, fn, cname) \
   {(sym), (fn), (cname), NATIVE_ENTRY_BOOTSTRAP}
 
+#define NATIVE_ENTRY_BOOT_FLAGS(sym, fn, cname, flags) \
+  {(sym), (fn), (cname), NATIVE_ENTRY_BOOTSTRAP | (flags)}
+
 #define NATIVE_ENTRY_BOOT_CNAME(fn, cname) \
   {NULL, (fn), (cname), NATIVE_ENTRY_BOOTSTRAP}
+
+#define NATIVE_ENTRY_BOOT_CNAME_FLAGS(fn, cname, flags) \
+  {NULL, (fn), (cname), NATIVE_ENTRY_BOOTSTRAP | (flags)}
 
 // Qualified-name entry for clojure.stacktrace/stacktrace-str.
 // We store it as an un-namespaced static symbol and rely on native_function_lookup's
@@ -4507,8 +4523,10 @@ static StaticSymbolData sym_record_get_index_qualified_data = {
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
     // clojure.repl functions
-    NATIVE_ENTRY_BOOT(&sym_source_data.sym, native_source, "clojure.repl/source"),
-    NATIVE_ENTRY_BOOT(&sym_dir_data.sym, native_repl_dir, "clojure.repl/dir"),
+    NATIVE_ENTRY_BOOT_FLAGS(&sym_source_data.sym, native_source, "clojure.repl/source",
+                            CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_FLAGS(&sym_dir_data.sym, native_repl_dir, "clojure.repl/dir",
+                            CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     // Must stay available in non-DEBUG/ESP32 builds because clojure.stacktrace
     // defines stacktrace-str as a :native stub and requires native lookup.
     NATIVE_ENTRY(&sym_stacktrace_str_qualified_data.sym, native_stacktrace_str),
@@ -4516,11 +4534,11 @@ static const NativeFunctionEntry native_function_table[] = {
 
     // Bootstrap-only native functions without static symbol entries.
     // Keep here as cname-only rows so lookup + bootstrap registration share one source.
-    NATIVE_ENTRY_BOOT_CNAME(native_eval, "eval"),
-    NATIVE_ENTRY_BOOT_CNAME(native_read_string, "read-string"),
-    NATIVE_ENTRY_BOOT_CNAME(native_require, "require"),
-    NATIVE_ENTRY_BOOT_CNAME(native_mark_private_bang, "mark-private!"),
-    NATIVE_ENTRY_BOOT_CNAME(native_load_file, "load-file"),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_eval, "eval", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_read_string, "read-string", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_require, "require", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_mark_private_bang, "mark-private!", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_load_file, "load-file", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY_BOOT_CNAME(native_regex_p, "regex?"),
     NATIVE_ENTRY_BOOT_CNAME(native_re_pattern, "re-pattern"),
     NATIVE_ENTRY_BOOT_CNAME(native_re_find, "re-find"),
@@ -4530,9 +4548,9 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_instant_p, "inst?"),
     NATIVE_ENTRY_BOOT_CNAME(native_instant_days, "instant-days"),
     NATIVE_ENTRY_BOOT_CNAME(native_instant_ms, "instant-ms"),
-    NATIVE_ENTRY_BOOT_CNAME(native_get_macro, "get-macro"),
-    NATIVE_ENTRY_BOOT_CNAME(native_macroexpand_1, "macroexpand-1"),
-    NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_get_macro, "get-macro", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_macroexpand_1, "macroexpand-1", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_apply, "apply", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
     NATIVE_ENTRY_BOOT_CNAME(native_run_next_task, "run-next-task-native"),
 
@@ -4545,9 +4563,10 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_clojure_pprint_pprint_str_qualified_data.sym, native_clojure_pprint_pprint_str),
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats, "tiny-clj.runtime/stats"),
 #ifdef DEBUG
-    NATIVE_ENTRY_BOOT(&sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data.sym,
-                      native_tinyfx_gfx_bench_vector_scene_bench,
-                      "tiny-fx.gfx-bench/vector-scene-bench"),
+    NATIVE_ENTRY_BOOT_FLAGS(&sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data.sym,
+                            native_tinyfx_gfx_bench_vector_scene_bench,
+                            "tiny-fx.gfx-bench/vector-scene-bench",
+                            CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
 #endif
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_start_renderer_qualified_data.sym,
                       native_tinyclj_runtime_start_renderer,
@@ -4607,17 +4626,18 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_tinyclj_net_mdns_close_bang_qualified_data.sym, native_tinyclj_net_mdns_close_bang),
 
     // clojure.core functions
-    NATIVE_ENTRY(&sym_get_thread_bindings_data.sym, native_get_thread_bindings),
-    NATIVE_ENTRY_BOOT(&sym_meta_data.sym, native_meta, "meta"),
+    NATIVE_ENTRY_FLAGS(&sym_get_thread_bindings_data.sym, native_get_thread_bindings,
+                       CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_FLAGS(&sym_meta_data.sym, native_meta, "meta", CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY_BOOT(&sym_with_meta_data.sym, native_with_meta, "with-meta"),
-    NATIVE_ENTRY(&sym_reduce_data.sym, native_reduce),
+    NATIVE_ENTRY_FLAGS(&sym_reduce_data.sym, native_reduce, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY_BOOT_CNAME(native_inc, "inc"),
     NATIVE_ENTRY_BOOT(&sym_list_data.sym, native_list, "list"),
     NATIVE_ENTRY(&sym_destructure_data.sym, native_destructure),
     NATIVE_ENTRY(&sym_map_data.sym, native_map),
     NATIVE_ENTRY(&sym_mapcat_data.sym, native_mapcat),
-    NATIVE_ENTRY(&sym_filter_data.sym, native_filter),
-    NATIVE_ENTRY(&sym_group_by_data.sym, native_group_by),
+    NATIVE_ENTRY_FLAGS(&sym_filter_data.sym, native_filter, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_FLAGS(&sym_group_by_data.sym, native_group_by, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY(&sym_last_data.sym, native_last),
     NATIVE_ENTRY(&sym_ns_unload_data.sym, native_ns_unload),
     NATIVE_ENTRY_BOOT(&sym_plus_data.sym, native_add_variadic, "+"),
@@ -4666,7 +4686,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_nthnext_data.sym, native_nthnext),
     NATIVE_ENTRY(&sym_gensym_data.sym, native_gensym),
     NATIVE_ENTRY(&sym_partition_data.sym, native_partition),
-    NATIVE_ENTRY(&sym_some_data.sym, native_some),
+    NATIVE_ENTRY_FLAGS(&sym_some_data.sym, native_some, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY_BOOT(&sym_cons_data.sym, native_cons, "cons"),
     NATIVE_ENTRY(&sym_count_data.sym, native_count),
     NATIVE_ENTRY_BOOT(&sym_nilp_data.sym, native_nilp, "nil?"),
@@ -4676,7 +4696,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_disj_data.sym, native_disj),
     NATIVE_ENTRY(&sym_merge_data.sym, native_merge),
     NATIVE_ENTRY(&sym_contains_p_data.sym, native_contains_p),
-    NATIVE_ENTRY(&sym_update_data.sym, native_update),
+    NATIVE_ENTRY_FLAGS(&sym_update_data.sym, native_update, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY(&sym_into_data.sym, native_into),
     NATIVE_ENTRY(&sym_select_keys_data.sym, native_select_keys),
     NATIVE_ENTRY(&sym_find_data.sym, native_find),
@@ -4709,7 +4729,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_float_p_data.sym, native_float_p),
     NATIVE_ENTRY(&sym_string_p_data.sym, native_string_p),
     NATIVE_ENTRY(&sym_keyword_p_data.sym, native_keyword_p),
-    NATIVE_ENTRY(&sym_keyword_data.sym, native_keyword),
+    NATIVE_ENTRY_FLAGS(&sym_keyword_data.sym, native_keyword, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
     NATIVE_ENTRY(&sym_name_data.sym, native_name),
     NATIVE_ENTRY(&sym_symbol_p_data.sym, native_symbol_p),
     NATIVE_ENTRY(&sym_fn_p_data.sym, native_fn_p),
@@ -4750,15 +4770,22 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
     NATIVE_ENTRY(&sym_sound_set_min_stable_duty_data.sym, native_sound_set_min_stable_duty),
     NATIVE_ENTRY(&sym_sound_min_stable_duty_status_data.sym, native_sound_min_stable_duty_status),
+    NATIVE_ENTRY_BOOT_CNAME(native_core_async_chan, "clojure.core.async/chan"),
+    NATIVE_ENTRY_BOOT_CNAME_FLAGS(native_core_async_put_bang, "clojure.core.async/put!",
+                                  CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE),
+    NATIVE_ENTRY_BOOT_CNAME(native_core_async_poll_bang, "clojure.core.async/poll!"),
+    NATIVE_ENTRY_BOOT_CNAME(native_core_async_close_bang, "clojure.core.async/close!"),
+    NATIVE_ENTRY_BOOT_CNAME(native_core_async_closed_p, "clojure.core.async/closed?"),
+    NATIVE_ENTRY_BOOT_CNAME(native_core_async_pub, "clojure.core.async/pub"),
     NATIVE_ENTRY_BOOT_CNAME(native_ast_string, "tiny-clj.runtime/ast-string"),
     NATIVE_ENTRY_BOOT_CNAME(native_bound_p, "bound?"),
     NATIVE_ENTRY(NULL, NULL) // Sentinel
 };
 
-// Lookup native function by Clojure symbol
+// Lookup native function table entry by Clojure symbol.
 // Fast path: pointer comparison (symbols are interned)
 // Fallback: string comparison for symbols created at runtime (not pre-interned)
-BuiltinFn native_function_lookup(CljSymbol *symbol) {
+static const NativeFunctionEntry *native_function_lookup_entry(CljSymbol *symbol) {
   if (!symbol)
     return NULL;
 
@@ -4788,7 +4815,7 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
 
     // Fast path: pointer equality (interned symbols)
     if (table_sym && table_sym == symbol) {
-      return entry->native_func;
+      return entry;
     }
 
     if (table_sym && cname && table_sym->cname) {
@@ -4798,19 +4825,19 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
       if (ns_name) {
         // Qualified lookup: match ns/name or pseudo-qualified cname
         if (table_ns && strcmp(table_ns, ns_name) == 0 && strcmp(table_sym->cname, cname) == 0) {
-          return entry->native_func;
+          return entry;
         }
         if (!table_ns && strcmp(table_sym->cname, qualified_name) == 0) {
-          return entry->native_func;
+          return entry;
         }
         // clojure.core special case: match unqualified entries
         if (!table_ns && strcmp(ns_name, "clojure.core") == 0 && strcmp(table_sym->cname, cname) == 0) {
-          return entry->native_func;
+          return entry;
         }
       } else {
         // Unqualified lookup: match by name only
         if (strcmp(table_sym->cname, cname) == 0) {
-          return entry->native_func;
+          return entry;
         }
       }
       continue;
@@ -4822,18 +4849,34 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
     }
     if (ns_name) {
       if (entry_name_is_qualified && strcmp(entry_cname, qualified_name) == 0) {
-        return entry->native_func;
+        return entry;
       }
       // clojure.core symbols can resolve to unqualified native cname entries.
       if (!entry_name_is_qualified && strcmp(ns_name, "clojure.core") == 0 &&
           strcmp(entry_cname, cname) == 0) {
-        return entry->native_func;
+        return entry;
       }
     } else {
       if (!entry_name_is_qualified && strcmp(entry_cname, cname) == 0) {
-        return entry->native_func;
+        return entry;
       }
     }
+  }
+
+  return NULL;
+}
+
+BuiltinFn native_function_lookup(CljSymbol *symbol, uint8_t *out_flags) {
+  if (out_flags) {
+    *out_flags = 0u;
+  }
+
+  const NativeFunctionEntry *entry = native_function_lookup_entry(symbol);
+  if (entry) {
+    if (out_flags) {
+      *out_flags = native_entry_cfunc_flags(entry->flags);
+    }
+    return entry->native_func;
   }
 
   // Split-out lookup tables
@@ -6567,7 +6610,8 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
   }
   vector_conj_inplace(&rest_env_stack, rest_state);
   RELEASE(rest_state);
-  ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
+  ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, 0u,
+                                &g_range_inf_thunk_fn_obj);
   ID thunk_body = make_thunk_body_ast_call(fn_obj);
   if (!thunk_body) {
     RELEASE(rest_env_stack);
@@ -6601,7 +6645,8 @@ ID native_range(ID *args, unsigned int argc) {
     }
     vector_conj_inplace(&env_stack, state);
     RELEASE(state);
-    ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
+    ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, 0u,
+                                  &g_range_inf_thunk_fn_obj);
     ID thunk_body = make_thunk_body_ast_call(fn_obj);
     if (!thunk_body) {
       RELEASE(env_stack);
@@ -6781,32 +6826,6 @@ ID native_math_sqrt(ID *args, unsigned int argc) {
 // Set current EvalState (called by eval_function_call before calling builtins)
 void builtin_set_eval_state(EvalState *st) {
   g_current_eval_state = st;
-}
-
-bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
-  return fn == native_map_thunk_executor ||
-         fn == native_mapcat_thunk_executor ||
-         fn == native_filter ||
-         fn == native_some ||
-         fn == native_reduce ||
-         fn == native_group_by ||
-         fn == native_update ||
-         fn == native_source ||
-         fn == native_repl_dir ||
-         fn == native_get_thread_bindings ||
-         fn == native_meta ||
-         fn == native_get_macro ||
-         fn == native_macroexpand_1 ||
-         fn == native_apply ||
-         fn == native_load_file ||
-         fn == native_require ||
-         fn == native_mark_private_bang ||
-         fn == native_eval ||
-         fn == native_read_string ||
-#ifdef DEBUG
-         fn == native_tinyfx_gfx_bench_vector_scene_bench ||
-#endif
-         fn == native_keyword;
 }
 
 ID native_eval(ID *args, unsigned int argc) {
@@ -7646,6 +7665,422 @@ ID native_swap_bang(ID *args, unsigned int argc) {
   return result; // atom_swap follows MEMORY_POLICY
 }
 
+// ============================================================================
+// CORE.ASYNC SUBSET
+// ============================================================================
+
+static ID g_core_async_kw_kind = NULL;
+static ID g_core_async_kw_cap = NULL;
+static ID g_core_async_kw_buf_type = NULL;
+static ID g_core_async_kw_closed = NULL;
+static ID g_core_async_kw_items = NULL;
+static ID g_core_async_kw_pubs = NULL;
+static ID g_core_async_kw_source = NULL;
+static ID g_core_async_kw_topic_fn = NULL;
+static ID g_core_async_kw_subs = NULL;
+static ID g_core_async_kw_subs_public = NULL;
+static ID g_core_async_kw_buffer_type = NULL;
+static ID g_core_async_kw_buffer_n = NULL;
+static ID g_core_async_kind_chan = NULL;
+static ID g_core_async_kind_pub = NULL;
+static ID g_core_async_kw_fixed = NULL;
+static ID g_core_async_kw_sliding = NULL;
+static ID g_core_async_kw_dropping = NULL;
+
+static bool core_async_symbols_ready(void) {
+  if (g_core_async_kw_kind) {
+    return true;
+  }
+
+  g_core_async_kw_kind = intern_symbol_global(":tiny-clj.core-async/kind");
+  g_core_async_kw_cap = intern_symbol_global(":tiny-clj.core-async/cap");
+  g_core_async_kw_buf_type = intern_symbol_global(":tiny-clj.core-async/buf-type");
+  g_core_async_kw_closed = intern_symbol_global(":closed");
+  g_core_async_kw_items = intern_symbol_global(":tiny-clj.core-async/items");
+  g_core_async_kw_pubs = intern_symbol_global(":tiny-clj.core-async/pubs");
+  g_core_async_kw_source = intern_symbol_global(":tiny-clj.core-async/source");
+  g_core_async_kw_topic_fn = intern_symbol_global(":tiny-clj.core-async/topic-fn");
+  g_core_async_kw_subs = intern_symbol_global(":tiny-clj.core-async/subs");
+  CljSymbol *core_async_ns = intern_symbol_global("tiny-clj.core-async");
+  g_core_async_kw_subs_public = core_async_ns ? intern_symbol(core_async_ns, ":subs") : NULL;
+  g_core_async_kw_buffer_type = intern_symbol_global(":tiny-clj.buffer/type");
+  g_core_async_kw_buffer_n = intern_symbol_global(":tiny-clj.buffer/n");
+  g_core_async_kind_chan = intern_symbol_global(":tiny-clj.core-async/chan");
+  g_core_async_kind_pub = intern_symbol_global(":tiny-clj.core-async/pub");
+  g_core_async_kw_fixed = intern_symbol_global(":fixed");
+  g_core_async_kw_sliding = intern_symbol_global(":sliding");
+  g_core_async_kw_dropping = intern_symbol_global(":dropping");
+
+  return g_core_async_kw_kind && g_core_async_kw_cap && g_core_async_kw_buf_type &&
+         g_core_async_kw_closed && g_core_async_kw_items && g_core_async_kw_pubs &&
+         g_core_async_kw_source && g_core_async_kw_topic_fn && g_core_async_kw_subs &&
+         g_core_async_kw_subs_public &&
+         g_core_async_kw_buffer_type && g_core_async_kw_buffer_n &&
+         g_core_async_kind_chan && g_core_async_kind_pub &&
+         g_core_async_kw_fixed && g_core_async_kw_sliding && g_core_async_kw_dropping;
+}
+
+static ID core_async_throw_unsupported(const char *feature, const char *detail) {
+  if (detail) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "core.async/unsupported: %s %s", feature, detail);
+  } else {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "core.async/unsupported: %s", feature);
+  }
+  return NULL;
+}
+
+static ID core_async_throw_illegal(const char *fmt, ...) {
+  char msg[192];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  va_end(ap);
+  throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, msg, __FILE__, __LINE__, 0);
+  return NULL;
+}
+
+static bool core_async_is_channel(ID obj) {
+  if (!obj || TAG(obj) != CLJ_ATOM || !core_async_symbols_ready()) {
+    return false;
+  }
+  ID state = atom_peek(as_atom(obj));
+  return is_persistent_map(state) &&
+         map_get_sentinel(state, g_core_async_kw_kind, NULL) == g_core_async_kind_chan;
+}
+
+static bool core_async_is_pub(ID obj) {
+  return obj && core_async_symbols_ready() && is_map(obj) &&
+         map_get_sentinel(obj, g_core_async_kw_kind, NULL) == g_core_async_kind_pub;
+}
+
+static bool core_async_is_callable_topic_fn(ID obj) {
+  return obj && (IS_KEYWORD(obj) || TAG(obj) == CLJ_FUNC || TAG(obj) == CLJ_CLOSURE ||
+                 TAG(obj) == CLJ_SYMBOL);
+}
+
+static bool core_async_parse_buffer(ID buf_or_n, unsigned int *cap_out, ID *buf_type_out) {
+  *cap_out = 0u;
+  *buf_type_out = g_core_async_kw_fixed;
+
+  if (!buf_or_n) {
+    return true;
+  }
+  if (TAG(buf_or_n) == CLJ_INT) {
+    int cap = AS_FIXNUM(buf_or_n);
+    if (cap < 0) {
+      core_async_throw_illegal("chan buffer size must be >= 0, got %d", cap);
+      return false;
+    }
+    *cap_out = (unsigned int)cap;
+    return true;
+  }
+  if (!is_map(buf_or_n)) {
+    core_async_throw_illegal("unsupported buffer argument to chan");
+    return false;
+  }
+
+  ID buf_type = map_get_sentinel(buf_or_n, g_core_async_kw_buffer_type, NOT_FOUND);
+  ID n = map_get_sentinel(buf_or_n, g_core_async_kw_buffer_n, NOT_FOUND);
+  if (buf_type == NOT_FOUND || n == NOT_FOUND || TAG(n) != CLJ_INT || AS_FIXNUM(n) < 0) {
+    core_async_throw_illegal("unsupported buffer argument to chan");
+    return false;
+  }
+  if (buf_type != g_core_async_kw_fixed &&
+      buf_type != g_core_async_kw_sliding &&
+      buf_type != g_core_async_kw_dropping) {
+    core_async_throw_illegal("unknown buffer type");
+    return false;
+  }
+
+  *cap_out = (unsigned int)AS_FIXNUM(n);
+  *buf_type_out = buf_type;
+  return true;
+}
+
+static ID core_async_invoke_fn1(ID fn, ID arg) {
+  if (!g_current_eval_state) {
+    throw_exception(EXCEPTION_RUNTIME, "core.async callback requires EvalState", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+  return eval_function_call(fn, &arg, 1, NULL, g_current_eval_state);
+}
+
+static ID core_async_resolve_topic(ID topic_fn, ID value) {
+  if (IS_KEYWORD(topic_fn)) {
+    return map_get_sentinel(value, topic_fn, NULL);
+  }
+  return core_async_invoke_fn1(topic_fn, value);
+}
+
+static bool core_async_channel_enqueue(ID channel, ID value);
+
+static void core_async_route_publications(CljTransientVector *pubs, ID value) {
+  unsigned int count = vector_count((ID)pubs);
+  for (unsigned int i = 0; i < count; i++) {
+    ID pub_obj = vector_nth((ID)pubs, i);
+    if (!core_async_is_pub(pub_obj)) {
+      continue;
+    }
+
+    ID topic_fn = map_get_sentinel(pub_obj, g_core_async_kw_topic_fn, NULL);
+    ID topic = core_async_resolve_topic(topic_fn, value);
+    if (!topic) {
+      continue;
+    }
+
+    ID subs_atom_id = map_get_sentinel(pub_obj, g_core_async_kw_subs, NULL);
+    if (!subs_atom_id || TAG(subs_atom_id) != CLJ_ATOM) {
+      continue;
+    }
+
+    ID subs_map = atom_peek(as_atom(subs_atom_id));
+    ID channels = map_get_sentinel(subs_map, topic, NULL);
+    if (!channels || TAG(channels) != CLJ_VECTOR_PERSISTENT) {
+      continue;
+    }
+
+    CljPersistentVector *outs = as_persistent_vector(channels);
+    unsigned int out_count = vector_count(outs);
+    for (unsigned int out_i = 0; out_i < out_count; out_i++) {
+      (void)core_async_channel_enqueue(vector_nth(outs, out_i), value);
+    }
+  }
+}
+
+static bool core_async_channel_enqueue(ID channel, ID value) {
+  if (!core_async_symbols_ready() || !core_async_is_channel(channel)) {
+    core_async_throw_illegal("put! requires a core.async channel");
+    return false;
+  }
+  if (!value) {
+    core_async_throw_illegal("nil is not a valid value for core.async channels");
+    return false;
+  }
+
+  CljAtom *chan_atom = as_atom(channel);
+  CljPersistentMap *state = (CljPersistentMap *)atom_deref_owned(chan_atom);
+  if (!state) {
+    return false;
+  }
+
+  if (map_get_sentinel(state, g_core_async_kw_closed, NULL) == clj_true) {
+    RELEASE(state);
+    return false;
+  }
+
+  ID cap_id = map_get_sentinel(state, g_core_async_kw_cap, NULL);
+  ID buf_type = map_get_sentinel(state, g_core_async_kw_buf_type, g_core_async_kw_fixed);
+  CljTransientVector *items =
+      as_transient_vector(map_get_sentinel(state, g_core_async_kw_items, NULL));
+  unsigned int cap = cap_id && TAG(cap_id) == CLJ_INT ? (unsigned int)AS_FIXNUM(cap_id) : 0u;
+  unsigned int item_count = vector_count((ID)items);
+  bool accepted = true;
+
+  if (cap == 0u) {
+    accepted = false;
+  } else if (item_count < cap) {
+    vector_push(items, value);
+  } else if (buf_type == g_core_async_kw_dropping) {
+    accepted = true;
+  } else if (buf_type == g_core_async_kw_sliding) {
+    if (item_count > 0u) {
+      vector_remove_at(items, 0u);
+    }
+    vector_push(items, value);
+  } else {
+    accepted = false;
+  }
+
+  if (!accepted) {
+    RELEASE(state);
+    return false;
+  }
+  ID pubs_id = map_get_sentinel(state, g_core_async_kw_pubs, NULL);
+  if (pubs_id && TAG(pubs_id) == CLJ_VECTOR_TRANSIENT &&
+      vector_count(pubs_id) > 0u) {
+    core_async_route_publications(as_transient_vector(pubs_id), value);
+  }
+  RELEASE(state);
+  return true;
+}
+
+ID native_core_async_chan(ID *args, unsigned int argc) {
+  if (!core_async_symbols_ready()) {
+    return NULL;
+  }
+  if (argc > 3u) {
+    return core_async_throw_illegal("chan arity %u not supported", argc);
+  }
+  if (argc >= 2u && args[1]) {
+    return core_async_throw_unsupported("chan", "xform");
+  }
+  if (argc >= 3u && args[2]) {
+    return core_async_throw_unsupported("chan", "ex-handler");
+  }
+
+  unsigned int cap = 0u;
+  ID buf_type = g_core_async_kw_fixed;
+  if (!core_async_parse_buffer(argc >= 1u ? args[0] : NULL, &cap, &buf_type)) {
+    return NULL;
+  }
+
+  CljPersistentVector *items_backing = make_vector(cap > 0u ? cap : 0u, STRONG);
+  if (!items_backing) {
+    return NULL;
+  }
+  CljTransientVector *items_queue = make_vector_transient(items_backing);
+  RELEASE(items_backing);
+  if (!items_queue) {
+    return NULL;
+  }
+
+  CljTransientVector *pubs = make_vector_transient(empty_vector());
+  if (!pubs) {
+    RELEASE(items_queue);
+    return NULL;
+  }
+
+  CljPersistentMap *state = make_map_from_kv(
+      6,
+      g_core_async_kw_kind, g_core_async_kind_chan,
+      g_core_async_kw_cap, fixnum((int32_t)cap),
+      g_core_async_kw_buf_type, buf_type,
+      g_core_async_kw_closed, clj_false,
+      g_core_async_kw_items, items_queue,
+      g_core_async_kw_pubs, pubs);
+  RELEASE(items_queue);
+  RELEASE(pubs);
+  if (!state) {
+    return NULL;
+  }
+
+  CljAtom *channel = make_atom(state);
+  RELEASE(state);
+  return channel ? AUTORELEASE(channel) : NULL;
+}
+
+ID native_core_async_put_bang(ID *args, unsigned int argc) {
+  if (argc < 2u || argc > 4u) {
+    return core_async_throw_illegal("put! arity %u not supported", argc);
+  }
+  if (argc == 4u && args[3] == clj_false) {
+    return core_async_throw_unsupported("put!", "on-caller?");
+  }
+
+  bool accepted = core_async_channel_enqueue(args[0], args[1]);
+  if (argc >= 3u && args[2]) {
+    (void)core_async_invoke_fn1(args[2], accepted ? clj_true : clj_false);
+  }
+  return accepted ? clj_true : clj_false;
+}
+
+ID native_core_async_poll_bang(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "poll!");
+  if (!core_async_symbols_ready() || !core_async_is_channel(args[0])) {
+    return core_async_throw_illegal("poll! requires a core.async channel");
+  }
+
+  CljAtom *chan_atom = as_atom(args[0]);
+  CljPersistentMap *state = (CljPersistentMap *)atom_deref_owned(chan_atom);
+  if (!state) {
+    return NULL;
+  }
+
+  CljTransientVector *items =
+      as_transient_vector(map_get_sentinel(state, g_core_async_kw_items, NULL));
+  unsigned int count = vector_count((ID)items);
+  if (count == 0u) {
+    RELEASE(state);
+    return NULL;
+  }
+
+  ID value = AUTORELEASE(RETAIN(vector_front_transient(items)));
+  vector_remove_at(items, 0u);
+  RELEASE(state);
+  return value;
+}
+
+ID native_core_async_close_bang(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "close!");
+  if (!core_async_symbols_ready() || !core_async_is_channel(args[0])) {
+    return core_async_throw_illegal("close! requires a core.async channel");
+  }
+
+  CljAtom *chan_atom = as_atom(args[0]);
+  CljPersistentMap *state = (CljPersistentMap *)atom_deref_owned(chan_atom);
+  if (!state) {
+    return NULL;
+  }
+  CljPersistentMap *next_state = state;
+  map_assoc_inplace(&next_state, g_core_async_kw_closed, clj_true);
+  atom_set(chan_atom, next_state);
+  RELEASE(next_state);
+  return NULL;
+}
+
+ID native_core_async_closed_p(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "closed?");
+  if (!core_async_symbols_ready() || !core_async_is_channel(args[0])) {
+    return core_async_throw_illegal("closed? requires a core.async channel");
+  }
+
+  ID state = atom_peek(as_atom(args[0]));
+  return map_get_sentinel(state, g_core_async_kw_closed, NULL) == clj_true ? clj_true : clj_false;
+}
+
+ID native_core_async_pub(ID *args, unsigned int argc) {
+  if (argc < 2u || argc > 3u) {
+    return core_async_throw_illegal("pub arity %u not supported", argc);
+  }
+  if (!core_async_symbols_ready() || !core_async_is_channel(args[0])) {
+    return core_async_throw_illegal("pub requires a core.async source channel");
+  }
+  if (!core_async_is_callable_topic_fn(args[1])) {
+    return core_async_throw_illegal("pub requires a keyword, symbol, or function topic-fn");
+  }
+  if (argc == 3u && args[2]) {
+    return core_async_throw_unsupported("pub", "buf-fn");
+  }
+
+  CljPersistentMap *empty_subs = make_map(0);
+  CljAtom *subs_atom = make_atom(empty_subs);
+  RELEASE(empty_subs);
+  if (!subs_atom) {
+    return NULL;
+  }
+
+  CljPersistentMap *pub_obj = make_map_from_kv(
+      5,
+      g_core_async_kw_kind, g_core_async_kind_pub,
+      g_core_async_kw_source, args[0],
+      g_core_async_kw_topic_fn, args[1],
+      g_core_async_kw_subs, subs_atom,
+      g_core_async_kw_subs_public, subs_atom);
+  RELEASE(subs_atom);
+  if (!pub_obj) {
+    return NULL;
+  }
+
+  CljAtom *source_atom = as_atom(args[0]);
+  CljPersistentMap *source_state = (CljPersistentMap *)atom_deref_owned(source_atom);
+  if (!source_state) {
+    RELEASE(pub_obj);
+    return NULL;
+  }
+  CljTransientVector *pubs =
+      as_transient_vector(map_get_sentinel(source_state, g_core_async_kw_pubs, NULL));
+  if (!pubs) {
+    RELEASE(source_state);
+    RELEASE(pub_obj);
+    return NULL;
+  }
+  vector_push(pubs, pub_obj);
+  RELEASE(source_state);
+  return AUTORELEASE(pub_obj);
+}
+
 // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments.
 // They are handled in eval_ast_call() via canonicalized AST_CALL forms.
 
@@ -8317,7 +8752,7 @@ static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len)
 // - Other qualified symbols (e.g. "tiny-clj.runtime/stats") → NOT registered here;
 //   they remain in native_function_table only and require explicit (require 'ns)
 //   followed by (defn ... :native) to become available (Clojure-compatible behavior).
-static void register_builtin(const char *cname, BuiltinFn func) {
+static void register_builtin(const char *cname, BuiltinFn func, uint8_t flags) {
   // Check if name is a qualified symbol (e.g., "clojure.repl/source")
   const char *slash = strchr(cname, '/');
   CljNamespace *target_ns;
@@ -8370,7 +8805,7 @@ static void register_builtin(const char *cname, BuiltinFn func) {
       return;
     }
   }
-  ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), native_cfunc_flags(func));
+  ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), flags);
   if (symbol && func_obj) {
     ns_define(target_ns, symbol, func_obj);
 
@@ -8428,15 +8863,18 @@ void register_builtins() {
       if (!bootstrap_register_cname_allowed(entry->register_cname)) {
         continue;
       }
-      register_builtin(entry->register_cname, entry->native_func);
+      register_builtin(entry->register_cname, entry->native_func, native_entry_cfunc_flags(entry->flags));
     }
 
     // Prime cached thunk functions during setup so tests/runtime do not pay
     // one-time cached_named_func allocations inside per-call heap assertions.
-    (void)cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
-    (void)cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
-    (void)cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
-    (void)cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
+    (void)cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, 0u, &g_concat_thunk_fn_obj);
+    (void)cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN,
+                            CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_map_thunk_fn_obj);
+    (void)cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN,
+                            CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE, &g_mapcat_thunk_fn_obj);
+    (void)cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, 0u,
+                            &g_range_inf_thunk_fn_obj);
 
     ns_end_resolve_cache_batch();
 

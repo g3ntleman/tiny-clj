@@ -982,6 +982,61 @@ TEST_SHARED(test_transient_vector_capacity_growth_keeps_pointer) {
   });
 }
 
+TEST_SHARED(test_vector_index_of_supports_persistent_and_transient_vectors) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *vec = make_vector(4, false);
+    TEST_ASSERT_NOT_NULL(vec);
+    vector_conj_inplace(&vec, fixnum(10));
+    vector_conj_inplace(&vec, fixnum(20));
+    vector_conj_inplace(&vec, fixnum(30));
+
+    TEST_ASSERT_EQUAL_INT(1, vector_index_of((ID)vec, fixnum(20)));
+    TEST_ASSERT_EQUAL_INT(INDEX_NOT_FOUND, vector_index_of((ID)vec, fixnum(99)));
+
+    CljPersistentVector *queue_backing = make_vector(4, false);
+    TEST_ASSERT_NOT_NULL(queue_backing);
+    CljTransientVector *queue = make_vector_transient(queue_backing);
+    RELEASE(queue_backing);
+    TEST_ASSERT_NOT_NULL(queue);
+
+    vector_push(queue, fixnum(1));
+    vector_push(queue, fixnum(2));
+    vector_push(queue, fixnum(3));
+    vector_remove_at(queue, 0);
+    vector_push(queue, fixnum(4));
+
+    TEST_ASSERT_EQUAL_INT(0, vector_index_of((ID)queue, fixnum(2)));
+    TEST_ASSERT_EQUAL_INT(2, vector_index_of((ID)queue, fixnum(4)));
+    TEST_ASSERT_EQUAL_INT(INDEX_NOT_FOUND, vector_index_of((ID)queue, fixnum(1)));
+
+    RELEASE(vec);
+    RELEASE(queue);
+  });
+}
+
+TEST_SHARED(test_vector_public_api_supports_transient_ringbuffer_access) {
+  WITH_AUTORELEASE_POOL({
+    CljPersistentVector *queue_backing = make_vector(4, false);
+    TEST_ASSERT_NOT_NULL(queue_backing);
+    CljTransientVector *queue = make_vector_transient(queue_backing);
+    RELEASE(queue_backing);
+    TEST_ASSERT_NOT_NULL(queue);
+
+    vector_push(queue, fixnum(1));
+    vector_push(queue, fixnum(2));
+    vector_push(queue, fixnum(3));
+    vector_remove_at(queue, 0);
+    vector_push(queue, fixnum(4));
+
+    TEST_ASSERT_EQUAL_UINT(3u, vector_count((ID)queue));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth((ID)queue, 0)));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth((ID)queue, 1)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth((ID)queue, 2)));
+
+    RELEASE(queue);
+  });
+}
+
 TEST_SHARED(test_equal_persistent_and_transient_vector) {
   // Test that (= persistent-vector transient-vector) returns false
   // This matches Clojure/JVM behavior where transient and persistent vectors
